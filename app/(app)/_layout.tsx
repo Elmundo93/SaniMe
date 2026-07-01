@@ -158,8 +158,12 @@ const styles = StyleSheet.create({
     fontWeight: D.font.semibold,
   },
   fabWrap: {
+    // Schwebt bewusst nur knapp über der Tab-Bar (statt weiter in die Scene hinein) —
+    // ein größerer negativer top-Wert ließ den runden Touch-Bereich des FABs bis in
+    // scrollbaren Content hineinreichen und konkurrierte dort mit Elementen wie dem
+    // "Details anzeigen"-Button auf dem Dashboard um Taps (siehe CLAUDE.md).
     position: 'absolute',
-    top: -38,
+    top: -16,
     left: '50%',
     marginLeft: -36,
     zIndex: 20,

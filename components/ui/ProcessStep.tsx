@@ -5,7 +5,6 @@ import Animated, {
   useAnimatedStyle,
   withRepeat,
   withSpring,
-  withDelay,
   FadeInDown,
 } from 'react-native-reanimated';
 import { D } from '../../constants/design';
@@ -31,6 +30,7 @@ export function ProcessStep({ label, status, isLast = false, index, datum }: Pro
         true,
       );
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
   const dotPulseStyle = useAnimatedStyle(() => ({

@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Dimensions,
   TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -21,8 +20,6 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import { D } from '../../constants/design';
 import { useOnboardingStore } from '../../store/onboardingStore';
-
-const { width } = Dimensions.get('window');
 
 // Einzelnes Partikel-Element
 function Particle({
@@ -96,6 +93,7 @@ export default function OnboardingScreen1() {
     // Logo erscheint ab 1200ms
     logoOpacity.value = withDelay(1200, withSpring(1, D.spring.gentle));
     logoScale.value = withDelay(1200, withSpring(1, D.spring.bouncy));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const docStyle = useAnimatedStyle(() => ({
@@ -185,6 +183,8 @@ export default function OnboardingScreen1() {
               router.push('/onboarding/leistungsuebersicht');
             }}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Weiter"
           >
             <LinearGradient
               colors={[D.color.gradientTop, D.color.gradientBottom]}

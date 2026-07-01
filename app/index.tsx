@@ -23,6 +23,7 @@ function SplashView() {
     logoScale.value = withSpring(1, D.spring.bouncy);
     logoOpacity.value = withTiming(1, { duration: 400 });
     taglineOpacity.value = withDelay(500, withTiming(1, { duration: 500 }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const logoStyle = useAnimatedStyle(() => ({

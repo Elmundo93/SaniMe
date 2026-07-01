@@ -21,6 +21,7 @@ import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { StepCounter } from '../../components/onboarding/StepCounter';
 import { simuliereRezeptOcr } from '../../lib/mockOcr';
+import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '../../constants/design';
 
 const { width, height } = Dimensions.get('window');
@@ -40,16 +41,31 @@ export default function RezeptScanScreen() {
 
   const handleZurück = async () => {
     const result = await dispatch({ type: 'ZURUECK' });
-    if (result.ok) router.replace(STATUS_META[result.session.status].route as any);
+    if (result.ok) {
+      router.replace(STATUS_META[result.session.status].route as any);
+    } else {
+      zeigeDispatchFehler();
+    }
   };
 
   const nachAufnahme = async (uri: string) => {
     setVerarbeitung(true);
-    const { result, confidence } = await simuliereRezeptOcr();
-    const transitionResult = await dispatch({ type: 'REZEPT_OCR_ABGESCHLOSSEN', uri, result, confidence });
-    setVerarbeitung(false);
-    if (transitionResult.ok) {
-      router.push(STATUS_META[transitionResult.session.status].route as any);
+    try {
+      const { result, confidence } = await simuliereRezeptOcr();
+      const transitionResult = await dispatch({ type: 'REZEPT_OCR_ABGESCHLOSSEN', uri, result, confidence });
+      if (transitionResult.ok) {
+        router.push(STATUS_META[transitionResult.session.status].route as any);
+      } else {
+        zeigeDispatchFehler();
+      }
+    } catch {
+      Alert.alert(
+        'Rezept konnte nicht erkannt werden',
+        'Wir konnten dein Rezept nicht vollständig auslesen. Bitte überprüfe die Beleuchtung und versuche es erneut.',
+      );
+    } finally {
+      setVerarbeitung(false);
+      setAufgenommen(false);
     }
   };
 

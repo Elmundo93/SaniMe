@@ -19,12 +19,13 @@ import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
 import { hatPflichtfelderRezept } from '../../store/onboardingMachine';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
+import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '../../constants/design';
 import type { OcrResult } from '../../types';
 
 export default function ReviewScreen() {
   const router = useRouter();
-  const { session, ready } = useOnboardingGuard('REZEPT_PRUEFUNG');
+  const { session, ready } = useOnboardingGuard('REZEPT_PRUEFUNG', { requireOcrResult: true });
   const dispatch = useOnboardingStore((s) => s.dispatch);
 
   if (!ready || !session) return <OnboardingLoadingView />;
@@ -53,7 +54,11 @@ export default function ReviewScreen() {
         text: 'Neu scannen',
         onPress: async () => {
           const result = await dispatch({ type: 'ZURUECK' });
-          if (result.ok) router.replace(STATUS_META[result.session.status].route as any);
+          if (result.ok) {
+            router.replace(STATUS_META[result.session.status].route as any);
+          } else {
+            zeigeDispatchFehler();
+          }
         },
       },
     ]);
@@ -61,7 +66,11 @@ export default function ReviewScreen() {
 
   const handleZurück = async () => {
     const result = await dispatch({ type: 'ZURUECK' });
-    if (result.ok) router.replace(STATUS_META[result.session.status].route as any);
+    if (result.ok) {
+      router.replace(STATUS_META[result.session.status].route as any);
+    } else {
+      zeigeDispatchFehler();
+    }
   };
 
   return (

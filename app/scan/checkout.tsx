@@ -12,13 +12,14 @@ import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { useOtpVerification } from '../../hooks/useOtpVerification';
 import { useAuthStore } from '../../store/authStore';
+import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '../../constants/design';
 
 type CheckoutSubstep = 'kontakt' | 'otp' | 'zahlung';
 
 export default function CheckoutScreen() {
   const router = useRouter();
-  const { session, ready } = useOnboardingGuard(['CHECKOUT', 'CHECKOUT_FEHLGESCHLAGEN']);
+  const { session, ready } = useOnboardingGuard(['CHECKOUT', 'CHECKOUT_FEHLGESCHLAGEN'], { requireSupply: true });
   const dispatch = useOnboardingStore((s) => s.dispatch);
   const abschliessen = useOnboardingStore((s) => s.abschliessen);
   const bereitsEingeloggt = useAuthStore((s) => !!s.benutzer);
@@ -38,6 +39,7 @@ export default function CheckoutScreen() {
       return;
     }
     setSubstep('kontakt');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, bereitsEingeloggt]);
 
   if (!ready || !session || !substep) return <OnboardingLoadingView />;
@@ -74,14 +76,26 @@ export default function CheckoutScreen() {
     const versorgungId = `v-${Date.now()}`;
     const result = await dispatch({ type: 'ZAHLUNG_ERFOLGREICH', versorgungId });
     if (result.ok) {
-      await abschliessen();
+      // Die Versorgung ist zu diesem Zeitpunkt bereits im versorgungStore angelegt
+      // (erster Schritt in abschliessen()) — bei einem Fehler danach (z.B. AsyncStorage)
+      // navigieren wir trotzdem weiter, statt den Nutzer mit einem endlosen Spinner
+      // auf einem Status stehen zu lassen, der schon ABGESCHLOSSEN ist.
+      try {
+        await abschliessen();
+      } catch {
+        // Best effort: Benutzer-Erstellung/Session-Cleanup kann fehlschlagen,
+        // die eigentliche Versorgung ist aber bereits gesichert.
+      }
       router.replace('/(app)/dashboard');
+      return;
     }
     setZahlungLäuft(false);
+    zeigeDispatchFehler();
   };
 
   const handleErneutVersuchen = async () => {
-    await dispatch({ type: 'CHECKOUT_ERNEUT_VERSUCHEN' });
+    const result = await dispatch({ type: 'CHECKOUT_ERNEUT_VERSUCHEN' });
+    if (!result.ok) zeigeDispatchFehler();
   };
 
   return (

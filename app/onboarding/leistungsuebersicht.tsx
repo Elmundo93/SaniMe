@@ -55,6 +55,7 @@ function SuccessRing() {
   React.useEffect(() => {
     check.value = withDelay(200, withSpring(1, D.spring.bouncy));
     ring1.value = withDelay(400, withRepeat(withSpring(1.35, D.spring.breath), -1, true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const ring1Style = useAnimatedStyle(() => ({

@@ -23,7 +23,7 @@ export const D = {
     // Ink
     ink:            '#0A0F1E',
     inkSecondary:   '#3D5273',
-    inkTertiary:    '#8498B5',
+    inkTertiary:    '#5A6E8C', // dunkler als das ursprüngliche #8498B5 (~3:1 auf bg) für WCAG-AA-Kontrast (~4.5:1)
     inkInverted:    '#FFFFFF',
 
     // Status (Apple-Farben)

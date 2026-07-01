@@ -8,7 +8,7 @@ export const Colors = {
 
   ink: '#0F172A',
   inkSecondary: '#475569',
-  inkTertiary: '#94A3B8',
+  inkTertiary: '#64748B', // dunkler als das ursprüngliche #94A3B8 (~2.6:1 auf Weiß) für WCAG-AA-Kontrast (~4.6:1)
 
   border: '#E2E8F0',
   borderFocused: '#005FCC',

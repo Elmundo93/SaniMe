@@ -12,6 +12,7 @@ import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { generiereTerminVorschlaege, terminAusKalenderdatum } from '../../lib/terminplanung';
+import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '../../constants/design';
 import type { TerminSlot } from '../../types';
 
@@ -35,18 +36,27 @@ export default function TerminplanungScreen() {
       const vorschläge = generiereTerminVorschlaege(session);
       dispatch({ type: 'TERMIN_VORSCHLAEGE_BERECHNET', vorschläge });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.id, session?.terminVorschläge.length]);
 
   if (!ready || !session) return <OnboardingLoadingView />;
 
   const handleZurück = async () => {
     const result = await dispatch({ type: 'ZURUECK' });
-    if (result.ok) router.replace(STATUS_META[result.session.status].route as any);
+    if (result.ok) {
+      router.replace(STATUS_META[result.session.status].route as any);
+    } else {
+      zeigeDispatchFehler();
+    }
   };
 
   const bestätigen = async (termin: TerminSlot) => {
     const result = await dispatch({ type: 'TERMIN_AUSGEWAEHLT', termin });
-    if (result.ok) router.push(STATUS_META[result.session.status].route as any);
+    if (result.ok) {
+      router.push(STATUS_META[result.session.status].route as any);
+    } else {
+      zeigeDispatchFehler();
+    }
   };
 
   const handleWeiter = async () => {
@@ -146,6 +156,9 @@ export default function TerminplanungScreen() {
               onPress={handleWeiter}
               disabled={!ausgewähltId}
               activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Weiter"
+              accessibilityState={{ disabled: !ausgewähltId }}
             >
               {ausgewähltId && (
                 <LinearGradient

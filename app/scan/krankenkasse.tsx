@@ -8,6 +8,7 @@ import {
   Dimensions,
   ActivityIndicator,
   Linking,
+  Alert,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
@@ -19,7 +20,15 @@ import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { StepCounter } from '../../components/onboarding/StepCounter';
 import { simuliereKrankenkasseOcr } from '../../lib/mockOcr';
+import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '../../constants/design';
+
+function zeigeOcrFehler() {
+  Alert.alert(
+    'Krankenkassenkarte konnte nicht erkannt werden',
+    'Wir konnten die Karte nicht vollständig auslesen. Bitte überprüfe die Beleuchtung und versuche es erneut.',
+  );
+}
 
 const { width, height } = Dimensions.get('window');
 const CARD_W = width * 0.82;
@@ -38,7 +47,11 @@ export default function KrankenkasseScreen() {
 
   const handleZurück = async () => {
     const result = await dispatch({ type: 'ZURUECK' });
-    if (result.ok) router.replace(STATUS_META[result.session.status].route as any);
+    if (result.ok) {
+      router.replace(STATUS_META[result.session.status].route as any);
+    } else {
+      zeigeDispatchFehler();
+    }
   };
 
   const handleFotoAufnehmen = async () => {
@@ -59,11 +72,14 @@ export default function KrankenkasseScreen() {
         confidence,
         produkte,
       });
-      setVerarbeitung(false);
       if (result.ok) {
         router.push(STATUS_META[result.session.status].route as any);
+      } else {
+        zeigeDispatchFehler();
       }
     } catch {
+      zeigeOcrFehler();
+    } finally {
       setAufgenommen(false);
       setVerarbeitung(false);
     }
@@ -78,27 +94,41 @@ export default function KrankenkasseScreen() {
     if (galerieResult.canceled || !galerieResult.assets[0]?.uri) return;
 
     setVerarbeitung(true);
-    const { krankenkasse, confidence, produkte } = await simuliereKrankenkasseOcr();
-    const result = await dispatch({
-      type: 'KRANKENKASSE_OCR_ABGESCHLOSSEN',
-      uri: galerieResult.assets[0].uri,
-      krankenkasse,
-      confidence,
-      produkte,
-    });
-    setVerarbeitung(false);
-    if (result.ok) {
-      router.push(STATUS_META[result.session.status].route as any);
+    try {
+      const { krankenkasse, confidence, produkte } = await simuliereKrankenkasseOcr();
+      const result = await dispatch({
+        type: 'KRANKENKASSE_OCR_ABGESCHLOSSEN',
+        uri: galerieResult.assets[0].uri,
+        krankenkasse,
+        confidence,
+        produkte,
+      });
+      if (result.ok) {
+        router.push(STATUS_META[result.session.status].route as any);
+      } else {
+        zeigeDispatchFehler();
+      }
+    } catch {
+      zeigeOcrFehler();
+    } finally {
+      setVerarbeitung(false);
     }
   };
 
   const handleÜberspringen = async () => {
     setVerarbeitung(true);
-    const { produkte } = await simuliereKrankenkasseOcr();
-    const result = await dispatch({ type: 'KRANKENKASSE_UEBERSPRUNGEN', produkte });
-    setVerarbeitung(false);
-    if (result.ok) {
-      router.push(STATUS_META[result.session.status].route as any);
+    try {
+      const { produkte } = await simuliereKrankenkasseOcr();
+      const result = await dispatch({ type: 'KRANKENKASSE_UEBERSPRUNGEN', produkte });
+      if (result.ok) {
+        router.push(STATUS_META[result.session.status].route as any);
+      } else {
+        zeigeDispatchFehler();
+      }
+    } catch {
+      zeigeOcrFehler();
+    } finally {
+      setVerarbeitung(false);
     }
   };
 

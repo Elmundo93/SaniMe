@@ -10,6 +10,7 @@ import { Checkbox } from '../../components/ui/Checkbox';
 import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
+import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '../../constants/design';
 
 function SectionRow({ label, wert }: { label: string; wert: string }) {
@@ -51,7 +52,11 @@ function Section({
 
 export default function ZusammenfassungScreen() {
   const router = useRouter();
-  const { session, ready } = useOnboardingGuard('ZUSAMMENFASSUNG');
+  const { session, ready } = useOnboardingGuard('ZUSAMMENFASSUNG', {
+    requireOcrResult: true,
+    requireSupply: true,
+    requireAppointment: true,
+  });
   const dispatch = useOnboardingStore((s) => s.dispatch);
   const [bestätigt, setBestätigt] = useState(false);
 
@@ -66,13 +71,21 @@ export default function ZusammenfassungScreen() {
 
   const handleZurück = async () => {
     const result = await dispatch({ type: 'ZURUECK' });
-    if (result.ok) router.replace(STATUS_META[result.session.status].route as any);
+    if (result.ok) {
+      router.replace(STATUS_META[result.session.status].route as any);
+    } else {
+      zeigeDispatchFehler();
+    }
   };
 
   const handleWeiter = async () => {
     if (!bestätigt) return;
     const result = await dispatch({ type: 'AUFTRAG_BESTAETIGT' });
-    if (result.ok) router.push(STATUS_META[result.session.status].route as any);
+    if (result.ok) {
+      router.push(STATUS_META[result.session.status].route as any);
+    } else {
+      zeigeDispatchFehler();
+    }
   };
 
   return (
@@ -147,6 +160,9 @@ export default function ZusammenfassungScreen() {
             onPress={handleWeiter}
             disabled={!bestätigt}
             activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Weiter zum Checkout"
+            accessibilityState={{ disabled: !bestätigt }}
           >
             {bestätigt && (
               <LinearGradient

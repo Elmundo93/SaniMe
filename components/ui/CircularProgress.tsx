@@ -71,6 +71,7 @@ export function CircularProgress({
 
   useEffect(() => {
     progress.value = withDelay(600, withSpring(value, D.spring.gentle));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   return (

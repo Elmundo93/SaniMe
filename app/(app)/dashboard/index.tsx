@@ -6,7 +6,6 @@ import {
   StyleSheet,
   StatusBar,
   TouchableOpacity,
-  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -110,7 +109,7 @@ export default function DashboardScreen() {
           {/* Header */}
           <Animated.View entering={FadeIn.duration(600)} style={styles.header}>
             <View style={styles.headerLeft}>
-              <Text style={styles.begrüßung}>
+              <Text style={styles.begrüßung} numberOfLines={1} maxFontSizeMultiplier={1.5}>
                 Hallo {benutzer?.vorname ?? 'Max'}.
               </Text>
               {featured ? (
@@ -182,12 +181,18 @@ export default function DashboardScreen() {
                     onPress={() => router.push(`/(app)/dashboard/${featured.id}`)}
                     style={styles.detailButton}
                     activeOpacity={0.75}
+                    accessibilityRole="button"
+                    accessibilityLabel="Versorgungsdetails anzeigen"
                   >
                     <Text style={styles.detailButtonText}>Details anzeigen</Text>
                     <Text style={styles.detailArrow}>›</Text>
                   </TouchableOpacity>
                 </GlassCard>
               </Animated.View>
+
+              {/* Reserviert Abstand zum schwebenden Kamera-Button in der Tab-Bar,
+                  damit "Details anzeigen" nicht in dessen Tap-Bereich hineinragt. */}
+              <View style={{ height: 24 }} />
             </>
           ) : (
             /* Leerer Zustand */
@@ -232,7 +237,7 @@ export default function DashboardScreen() {
           )}
 
           {/* Abstandhalter für FAB + Tab-Bar */}
-          <View style={{ height: 120 }} />
+          <View style={{ height: 160 }} />
         </ScrollView>
       </SafeAreaView>
     </View>

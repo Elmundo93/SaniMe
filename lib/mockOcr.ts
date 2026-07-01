@@ -13,7 +13,7 @@ export async function simuliereRezeptOcr(): Promise<{ result: OcrResult; confide
       krankenkasse: { name: '', versichertenNr: '' },
       diagnose: 'G82.1 — Paraplegie, schlaff',
       hilfsmittel: 'Rollstuhl, faltbar, Sitzbreite 40 cm',
-      hilfsmittelNr: '18.50.03',
+      hilfsmittelNr: '00.00.00',
       datum: '15.06.2026',
     },
     confidence: {
@@ -44,8 +44,8 @@ export const MOCK_PRODUKTE: Produkt[] = [
   {
     id: 'p-001',
     name: 'Rollstuhl Aktiv SB 40 — Basisversorgung',
-    hersteller: 'Sunrise Medical',
-    hilfsmittelNr: '18.50.03.0001',
+    hersteller: 'MobilTech',
+    hilfsmittelNr: '00.00.00.0001',
     beschreibung: 'Leichter Standardrollstuhl, faltbar, Sitzbreite 40 cm. Für den Alltag geeignet.',
     eigenanteil: 10.0,
     lieferzeit: '3–5 Werktage',
@@ -55,8 +55,8 @@ export const MOCK_PRODUKTE: Produkt[] = [
   {
     id: 'p-002',
     name: 'Rollstuhl Komfort Plus SB 40',
-    hersteller: 'Meyra',
-    hilfsmittelNr: '18.50.03.0012',
+    hersteller: 'AktivCare',
+    hilfsmittelNr: '00.00.00.0012',
     beschreibung:
       'Komfortrollstuhl mit verbesserter Polsterung und einstellbarer Rückenlehne. Ideal für längeres Sitzen.',
     eigenanteil: 10.0,
@@ -67,8 +67,8 @@ export const MOCK_PRODUKTE: Produkt[] = [
   {
     id: 'p-003',
     name: 'Rollstuhl Leichtgewicht Aluminium',
-    hersteller: 'Ottobock',
-    hilfsmittelNr: '18.50.03.0025',
+    hersteller: 'FlexMed',
+    hilfsmittelNr: '00.00.00.0025',
     beschreibung:
       'Ultraleichter Aluminiumrollstuhl (10 kg), ideal für aktive Personen und häufigen Transport.',
     eigenanteil: 45.0,

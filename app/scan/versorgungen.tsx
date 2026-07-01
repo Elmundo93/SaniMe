@@ -18,6 +18,7 @@ import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { StepCounter } from '../../components/onboarding/StepCounter';
+import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '../../constants/design';
 import type { Produkt } from '../../types';
 
@@ -112,7 +113,11 @@ export default function VersorgungsauswahlScreen() {
 
   const handleZurück = async () => {
     const result = await dispatch({ type: 'ZURUECK' });
-    if (result.ok) router.replace(STATUS_META[result.session.status].route as any);
+    if (result.ok) {
+      router.replace(STATUS_META[result.session.status].route as any);
+    } else {
+      zeigeDispatchFehler();
+    }
   };
 
   const handleVersorgungStarten = async () => {
@@ -123,6 +128,8 @@ export default function VersorgungsauswahlScreen() {
     setLoading(false);
     if (result.ok) {
       router.push(STATUS_META[result.session.status].route as any);
+    } else {
+      zeigeDispatchFehler();
     }
   };
 

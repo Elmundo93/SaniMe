@@ -1,13 +1,25 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { OnboardingSession, OnboardingStatus } from '../types';
+import type { CustomerContact, OcrResult, OnboardingSession, OnboardingStatus } from '../types';
 import { erstelleLeereSession, transition } from './onboardingMachine';
 import type { OnboardingEvent, TransitionResult } from './onboardingMachine';
 import { useAuthStore } from './authStore';
 import { useVersorgungStore, baueVersorgungAusSession } from './versorgungStore';
 import { trackOnboarding } from '../lib/analytics';
+import { getSecureJSON, setSecureJSON, deleteSecureItem } from '../lib/secureStorage';
 
 const SESSION_KEY = 'sanime_onboarding_session';
+const SENSITIVE_KEY = 'sanime_onboarding_sensitive';
+
+// OCR-Ergebnis (Diagnose, Versichertennummer, Patientenname) und Kontaktdaten sind
+// die einzigen Session-Felder mit echten Gesundheits-/Versicherungsdaten — die landen
+// verschlüsselt im SecureStore, statt im Klartext-AsyncStorage wie der Rest der
+// (beliebig wachsenden) Maschinen-Session. Fotos bleiben als reine URI-Zeiger im
+// AsyncStorage-Teil; sie zeigen auf App-Sandbox-Dateien, nicht auf die Bilddaten selbst.
+interface SensitiveSessionData {
+  ocrResult: OcrResult | null;
+  customerContact: CustomerContact;
+}
 
 export interface StatusMeta {
   route: string;
@@ -41,7 +53,17 @@ interface OnboardingState {
 }
 
 async function persistSession(session: OnboardingSession) {
-  await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  const { ocrResult, customerContact, ...rest } = session;
+  try {
+    await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(rest));
+    await setSecureJSON<SensitiveSessionData>(SENSITIVE_KEY, { ocrResult, customerContact });
+  } catch (e) {
+    // Best effort: dispatch() hat die Transition bereits im Zustand-Store übernommen;
+    // ein Storage-Fehler (Disk voll, Keystore-Fehler) soll den Nutzerfluss nicht mit
+    // einer unbehandelten Promise-Rejection blockieren, nur beim nächsten laden()
+    // hinter dem in-memory-Stand zurückbleiben.
+    if (__DEV__) console.warn('[onboardingStore] persistSession fehlgeschlagen', e);
+  }
   // In Produktion: zusätzlich Backend-Sync-Aufruf hier
 }
 
@@ -100,7 +122,20 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
   laden: async () => {
     try {
       const json = await AsyncStorage.getItem(SESSION_KEY);
-      set({ session: json ? (JSON.parse(json) as OnboardingSession) : null, isLoading: false });
+      if (!json) {
+        set({ session: null, isLoading: false });
+        return;
+      }
+      const rest = JSON.parse(json) as Omit<OnboardingSession, 'ocrResult' | 'customerContact'>;
+      const sensitive = await getSecureJSON<SensitiveSessionData>(SENSITIVE_KEY);
+      set({
+        session: {
+          ...rest,
+          ocrResult: sensitive?.ocrResult ?? null,
+          customerContact: sensitive?.customerContact ?? { email: null, telefon: null, telefonVerifiziert: false },
+        },
+        isLoading: false,
+      });
     } catch {
       set({ session: null, isLoading: false });
     }
@@ -133,7 +168,7 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
         {
           id: `benutzer-${versorgungId}`,
           vorname: session.ocrResult.patient.name.split(' ')[0] ?? '',
-          nachname: session.ocrResult.patient.name.split(' ').slice(1).join(' ') || session.ocrResult.patient.name,
+          nachname: session.ocrResult.patient.name.split(' ').slice(1).join(' '),
           email: session.customerContact.email ?? undefined,
           telefon: session.customerContact.telefon,
           krankenkasse: session.ocrResult.krankenkasse.name,
@@ -145,6 +180,7 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     await useAuthStore.getState().onboardingAbschliessen();
 
     await AsyncStorage.removeItem(SESSION_KEY);
+    await deleteSecureItem(SENSITIVE_KEY);
     set({ session: null });
   },
 }));
