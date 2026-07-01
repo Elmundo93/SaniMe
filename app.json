@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "SaniMe",
+    "slug": "sanime",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "sanime",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#0F172A",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "de.sanime.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "SaniMe benötigt die Kamera, um Ihr Rezept und Ihre Krankenkassenkarte zu fotografieren.",
+        "NSPhotoLibraryUsageDescription": "SaniMe benötigt Zugriff auf Ihre Fotos, um Dokumente hochzuladen.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "de.sanime.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0F172A"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "SaniMe benötigt die Kamera, um Ihr Rezept zu fotografieren."
+        }
+      ],
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
