@@ -93,6 +93,9 @@ export interface Versorgung {
   timeline: TimelineEvent[];
   offeneAktionen: OffeneAktion[];
   lieferadresse?: string;
+  hersteller?: string;
+  ansprechpartner?: string;
+  lieferzeit?: string;
 }
 
 // ─── Benutzer ────────────────────────────────────────────────────────────────

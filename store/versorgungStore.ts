@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import type { OnboardingSession, Versorgung } from '../types';
 
-// Mock-Daten für die Entwicklung
-const MOCK_VERSORGUNGEN: Versorgung[] = [
+// Mock-Daten für die Entwicklung — auch von lib/mockKundenArchiv.ts als Bestandskunden-
+// Historie wiederverwendet, statt sie dort ein zweites Mal zu pflegen.
+export const MOCK_VERSORGUNGEN: Versorgung[] = [
   {
     id: 'v-001',
     status: 'PENDING_INSURANCE',
@@ -13,7 +14,17 @@ const MOCK_VERSORGUNGEN: Versorgung[] = [
     erstellt: '2026-06-20T09:10:00Z',
     aktualisiert: '2026-06-27T11:14:00Z',
     lieferadresse: 'Musterstraße 12, 12345 Berlin',
-    offeneAktionen: [],
+    hersteller: 'Sunrise Medical',
+    ansprechpartner: 'Dein SaniMe-Team',
+    lieferzeit: '5-7 Werktage',
+    offeneAktionen: [
+      {
+        id: 'oa-001-1',
+        titel: 'Rückfrage der Krankenkasse',
+        beschreibung: 'Die Techniker Krankenkasse benötigt eine zusätzliche Unterschrift von dir.',
+        typ: 'formular',
+      },
+    ],
     timeline: [
       {
         id: 'tl-001-1',
@@ -59,6 +70,9 @@ const MOCK_VERSORGUNGEN: Versorgung[] = [
     erstellt: '2026-05-15T14:00:00Z',
     aktualisiert: '2026-05-29T12:00:00Z',
     lieferadresse: 'Musterstraße 12, 12345 Berlin',
+    hersteller: 'medi',
+    ansprechpartner: 'Dein SaniMe-Team',
+    lieferzeit: '2-3 Werktage',
     offeneAktionen: [],
     timeline: [
       {
@@ -95,6 +109,55 @@ const MOCK_VERSORGUNGEN: Versorgung[] = [
       },
     ],
   },
+  {
+    id: 'v-003',
+    status: 'PROCESSING',
+    produkt: 'Badewannenlift Aqua Comfort',
+    hilfsmittelNr: '04.40.02.0002',
+    arzt: 'Dr. med. Sabine Müller',
+    krankenkasse: 'Techniker Krankenkasse',
+    erstellt: '2026-06-10T08:30:00Z',
+    aktualisiert: '2026-06-29T09:00:00Z',
+    lieferadresse: 'Musterstraße 12, 12345 Berlin',
+    hersteller: 'Invacare',
+    ansprechpartner: 'Dein SaniMe-Team',
+    lieferzeit: '3-5 Werktage',
+    offeneAktionen: [],
+    timeline: [
+      {
+        id: 'tl-003-1',
+        status: 'PENDING_REVIEW',
+        label: 'Rezept eingegangen',
+        beschreibung: 'Ihr Rezept wurde erfolgreich hochgeladen.',
+        zeitpunkt: '2026-06-10T08:30:00Z',
+        abgeschlossen: true,
+      },
+      {
+        id: 'tl-003-2',
+        status: 'APPROVED',
+        label: 'Genehmigt',
+        beschreibung: 'Ihre Versorgung wurde von der Techniker Krankenkasse genehmigt.',
+        zeitpunkt: '2026-06-22T10:00:00Z',
+        abgeschlossen: true,
+      },
+      {
+        id: 'tl-003-3',
+        status: 'PROCESSING',
+        label: 'In Vorbereitung',
+        beschreibung: 'Ihre Bestellung wird für den Versand vorbereitet.',
+        zeitpunkt: '2026-06-29T09:00:00Z',
+        abgeschlossen: true,
+      },
+      {
+        id: 'tl-003-4',
+        status: 'SHIPPED',
+        label: 'Versand',
+        beschreibung: 'Ihr Paket ist unterwegs.',
+        zeitpunkt: '',
+        abgeschlossen: false,
+      },
+    ],
+  },
 ];
 
 // Baut den eigentlichen Auftrag erst nach erfolgreichem Checkout aus der OnboardingSession —
@@ -116,6 +179,9 @@ export function baueVersorgungAusSession(session: OnboardingSession, versorgungI
     erstellt: jetzt,
     aktualisiert: jetzt,
     lieferadresse: 'Musterstraße 12, 12345 Berlin',
+    hersteller: produkt.hersteller,
+    ansprechpartner: 'Dein SaniMe-Team',
+    lieferzeit: produkt.lieferzeit,
     offeneAktionen: [],
     timeline: [
       {
@@ -150,6 +216,8 @@ interface VersorgungState {
   versorgungen: Versorgung[];
   laden: () => Promise<void>;
   versorgungHinzufügen: (versorgung: Versorgung) => void;
+  versorgungenSetzen: (versorgungen: Versorgung[]) => void;
+  zuruecksetzen: () => void;
 }
 
 export const useVersorgungStore = create<VersorgungState>((set) => ({
@@ -165,4 +233,13 @@ export const useVersorgungStore = create<VersorgungState>((set) => ({
     set((state) => ({
       versorgungen: [versorgung, ...state.versorgungen],
     })),
+
+  // Setzt die Historie eines per Archiv-Abgleich erkannten Bestandskunden (siehe
+  // lib/mockKundenArchiv.ts) — anders als laden() kein generischer Mock-Fallback,
+  // sondern die tatsächlich zum gematchten Kunden gehörende Liste.
+  versorgungenSetzen: (versorgungen) => set({ versorgungen }),
+
+  // Für einen unbekannten/ausgeloggten Nutzer (kein benutzer) darf das Dashboard
+  // keine Versorgungen eines vorherigen Kunden weiter anzeigen.
+  zuruecksetzen: () => set({ versorgungen: [] }),
 }));

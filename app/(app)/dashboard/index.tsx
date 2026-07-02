@@ -15,54 +15,35 @@ import Animated, {
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GlassCard } from '../../../components/ui/GlassCard';
-import { ProcessStep, type StepStatus } from '../../../components/ui/ProcessStep';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
-import { CircularProgress } from '../../../components/ui/CircularProgress';
-import type { TimelineEvent } from '../../../types';
+import { VersorgungCard } from '../../../components/dashboard/VersorgungCard';
 import { useAuthStore } from '../../../store/authStore';
 import { useVersorgungStore } from '../../../store/versorgungStore';
+import { useOnboardingStore } from '../../../store/onboardingStore';
 import { D } from '../../../constants/design';
-
-// Datum für Prozessschritt aus Timeline-Events extrahieren
-function getDatumForStep(timeline: TimelineEvent[], stepKey: string): string | undefined {
-  const event = timeline.find(
-    (t) => t.status === stepKey && t.abgeschlossen && t.zeitpunkt,
-  );
-  if (!event) return undefined;
-  return new Date(event.zeitpunkt).toLocaleDateString('de-DE', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
-// Mapping auf Prozess-Schritte
-function getStepStatus(currentStatus: string, stepStatus: string): StepStatus {
-  const order = ['PENDING_REVIEW', 'PENDING_INSURANCE', 'APPROVED', 'PROCESSING', 'SHIPPED', 'DELIVERED'];
-  const cur = order.indexOf(currentStatus);
-  const step = order.indexOf(stepStatus);
-  if (step < cur) return 'done';
-  if (step === cur) return 'active';
-  return 'pending';
-}
-
-const STEPS: { label: string; key: string }[] = [
-  { label: 'Rezept eingegangen',       key: 'PENDING_REVIEW' },
-  { label: 'Krankenkasse prüft',       key: 'PENDING_INSURANCE' },
-  { label: 'Lieferung vorbereitet',    key: 'APPROVED' },
-  { label: 'Versand',                  key: 'PROCESSING' },
-  { label: 'Versorgung abgeschlossen', key: 'SHIPPED' },
-];
 
 export default function DashboardScreen() {
   const router = useRouter();
   const benutzer = useAuthStore((s) => s.benutzer);
-  const { versorgungen, laden } = useVersorgungStore();
+  const { versorgungen, laden, zuruecksetzen } = useVersorgungStore();
+  const starten = useOnboardingStore((s) => s.starten);
   const [isLoading, setIsLoading] = React.useState(true);
 
+  const scanStarten = async () => {
+    await starten();
+    router.push('/scan/rezept');
+  };
+
   useEffect(() => {
+    // Ohne benutzer (ausgeloggt / noch nicht per Archiv-Abgleich erkannt) darf hier
+    // keine Versorgungshistorie eines fremden Kunden aufscheinen.
+    if (!benutzer) {
+      zuruecksetzen();
+      setIsLoading(false);
+      return;
+    }
     laden().finally(() => setIsLoading(false));
-  }, [laden]);
+  }, [benutzer, laden, zuruecksetzen]);
 
   const aktive = versorgungen.filter(
     (v) => !['DELIVERED', 'CANCELLED', 'REJECTED'].includes(v.status),
@@ -70,21 +51,9 @@ export default function DashboardScreen() {
   const abgeschlossen = versorgungen.filter((v) =>
     ['DELIVERED', 'CANCELLED', 'REJECTED'].includes(v.status),
   );
-  const featured = aktive[0];
-
-  const progressValue =
-    featured?.status === 'PENDING_REVIEW'    ? 0.18 :
-    featured?.status === 'PENDING_INSURANCE' ? 0.38 :
-    featured?.status === 'APPROVED'          ? 0.58 :
-    featured?.status === 'PROCESSING'        ? 0.75 :
-    featured?.status === 'SHIPPED'           ? 0.90 : 0;
-
-  const statusLabel =
-    featured?.status === 'PENDING_REVIEW'    ? 'Wird geprüft' :
-    featured?.status === 'PENDING_INSURANCE' ? 'Genehmigung läuft' :
-    featured?.status === 'APPROVED'          ? 'Genehmigt' :
-    featured?.status === 'PROCESSING'        ? 'In Vorbereitung' :
-    featured?.status === 'SHIPPED'           ? 'Unterwegs' : '—';
+  const offeneAufgaben = aktive.flatMap((v) =>
+    v.offeneAktionen.map((aktion) => ({ versorgung: v, aktion })),
+  );
 
   return (
     <View style={styles.root}>
@@ -110,10 +79,12 @@ export default function DashboardScreen() {
           <Animated.View entering={FadeIn.duration(600)} style={styles.header}>
             <View style={styles.headerLeft}>
               <Text style={styles.begrüßung} numberOfLines={1} maxFontSizeMultiplier={1.5}>
-                Hallo {benutzer?.vorname ?? 'Max'}.
+                {benutzer ? `Hallo ${benutzer.vorname}.` : 'Willkommen.'}
               </Text>
-              {featured ? (
-                <Text style={styles.headerSub}>Deine Versorgung läuft.</Text>
+              {aktive.length > 0 ? (
+                <Text style={styles.headerSub}>
+                  {aktive.length === 1 ? '1 aktive Versorgung' : `${aktive.length} aktive Versorgungen`}
+                </Text>
               ) : (
                 <Text style={styles.headerSub}>Willkommen bei SaniMe.</Text>
               )}
@@ -124,7 +95,7 @@ export default function DashboardScreen() {
               accessibilityLabel="Profil & Einstellungen"
             >
               <Text style={styles.avatarText}>
-                {(benutzer?.vorname ?? 'M')[0]}{(benutzer?.nachname ?? 'M')[0]}
+                {benutzer ? `${benutzer.vorname[0]}${benutzer.nachname[0]}` : '?'}
               </Text>
             </TouchableOpacity>
           </Animated.View>
@@ -134,64 +105,46 @@ export default function DashboardScreen() {
               <View style={styles.skeleton} />
               <View style={[styles.skeleton, { height: 180, marginTop: 12 }]} />
             </View>
-          ) : featured ? (
+          ) : aktive.length > 0 ? (
             <>
-              {/* Hero Status Card */}
-              <Animated.View entering={FadeInDown.delay(100).springify().damping(18)}>
-                <GlassCard style={styles.heroCard} padding={24} radius={D.radius.xl}>
-                  <Text style={styles.heroLabel}>AKTUELLER STATUS</Text>
+              {offeneAufgaben.length > 0 && (
+                <Animated.View entering={FadeInDown.delay(100).springify().damping(18)}>
+                  <Text style={styles.sectionLabel}>Offene Aufgaben</Text>
+                  {offeneAufgaben.map(({ versorgung, aktion }, i) => (
+                    <TouchableOpacity
+                      key={aktion.id}
+                      onPress={() => router.push(`/(app)/dashboard/${versorgung.id}`)}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${aktion.titel} — ${versorgung.produkt}`}
+                    >
+                      <GlassCard
+                        style={[styles.aufgabeCard, { marginTop: i > 0 ? 10 : 0 }]}
+                        padding={16}
+                        radius={D.radius.md}
+                      >
+                        <View style={styles.aufgabeRow}>
+                          <View style={styles.aufgabeDot} />
+                          <View style={styles.historyContent}>
+                            <Text style={styles.historyName} numberOfLines={1}>{aktion.titel}</Text>
+                            <Text style={styles.historyMeta} numberOfLines={1}>{versorgung.produkt}</Text>
+                          </View>
+                          <Text style={styles.detailArrow}>›</Text>
+                        </View>
+                      </GlassCard>
+                    </TouchableOpacity>
+                  ))}
+                </Animated.View>
+              )}
 
-                  <View style={styles.ringWrap}>
-                    <CircularProgress
-                      value={progressValue}
-                      statusLabel={statusLabel}
-                      subtitle="Wir kümmern uns darum"
-                    />
-                  </View>
+              <Text style={styles.sectionLabel}>Deine Versorgungen</Text>
+              {aktive.map((v, i) => (
+                <Animated.View key={v.id} entering={FadeInDown.delay(150 + i * 60).springify().damping(18)}>
+                  <VersorgungCard versorgung={v} onPress={() => router.push(`/(app)/dashboard/${v.id}`)} />
+                </Animated.View>
+              ))}
 
-                  <Text style={styles.heroProdukt} numberOfLines={2}>
-                    {featured.produkt}
-                  </Text>
-
-                  <View style={styles.heroFooter}>
-                    <Text style={styles.heroMeta}>{featured.krankenkasse}</Text>
-                    <StatusBadge status={featured.status} klein />
-                  </View>
-                </GlassCard>
-              </Animated.View>
-
-              {/* Prozessschritte Card */}
-              <Animated.View entering={FadeInDown.delay(200).springify().damping(18)}>
-                <GlassCard style={styles.processCard} padding={22} radius={D.radius.lg}>
-                  <Text style={styles.cardTitle}>Dein Weg zur Versorgung</Text>
-                  <View style={styles.steps}>
-                    {STEPS.map((step, i) => (
-                      <ProcessStep
-                        key={step.key}
-                        label={step.label}
-                        status={getStepStatus(featured.status, step.key)}
-                        isLast={i === STEPS.length - 1}
-                        index={i}
-                        datum={getDatumForStep(featured.timeline, step.key)}
-                      />
-                    ))}
-                  </View>
-
-                  <TouchableOpacity
-                    onPress={() => router.push(`/(app)/dashboard/${featured.id}`)}
-                    style={styles.detailButton}
-                    activeOpacity={0.75}
-                    accessibilityRole="button"
-                    accessibilityLabel="Versorgungsdetails anzeigen"
-                  >
-                    <Text style={styles.detailButtonText}>Details anzeigen</Text>
-                    <Text style={styles.detailArrow}>›</Text>
-                  </TouchableOpacity>
-                </GlassCard>
-              </Animated.View>
-
-              {/* Reserviert Abstand zum schwebenden Kamera-Button in der Tab-Bar,
-                  damit "Details anzeigen" nicht in dessen Tap-Bereich hineinragt. */}
+              {/* Reserviert Abstand zum schwebenden Kamera-Button in der Tab-Bar. */}
               <View style={{ height: 24 }} />
             </>
           ) : (
@@ -201,8 +154,23 @@ export default function DashboardScreen() {
                 <Text style={styles.emptyEmoji}>📋</Text>
                 <Text style={styles.emptyTitle}>Noch keine Versorgung</Text>
                 <Text style={styles.emptyText}>
-                  Tippe auf den Scannen-Button, um dein erstes Rezept zu fotografieren.
+                  Fotografiere dein Rezept, den Rest übernehmen wir.
                 </Text>
+                <TouchableOpacity
+                  style={styles.emptyButton}
+                  onPress={scanStarten}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="Jetzt Rezept scannen"
+                >
+                  <LinearGradient
+                    colors={[D.color.gradientTop, D.color.gradientBottom]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <Text style={styles.emptyButtonLabel}>Jetzt Rezept scannen</Text>
+                </TouchableOpacity>
               </GlassCard>
             </Animated.View>
           )}
@@ -300,62 +268,6 @@ const styles = StyleSheet.create({
     fontWeight: D.font.bold,
     color: D.color.accent,
   },
-  heroCard: {},
-  ringWrap: {
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  heroLabel: {
-    fontSize: 10,
-    fontWeight: D.font.bold,
-    color: D.color.accent,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  heroProdukt: {
-    fontSize: D.font.sm,
-    color: D.color.inkSecondary,
-    fontWeight: D.font.medium,
-    lineHeight: 18,
-  },
-  heroFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 16,
-  },
-  heroMeta: {
-    fontSize: D.font.sm,
-    color: D.color.inkTertiary,
-    fontWeight: D.font.medium,
-  },
-  processCard: {},
-  cardTitle: {
-    fontSize: D.font.lg,
-    fontWeight: D.font.bold,
-    color: D.color.ink,
-    letterSpacing: -0.3,
-    marginBottom: 20,
-  },
-  steps: {
-    gap: 0,
-  },
-  detailButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 20,
-    paddingVertical: 12,
-    borderTopWidth: 0.5,
-    borderTopColor: 'rgba(63,139,255,0.12)',
-    gap: 4,
-  },
-  detailButtonText: {
-    fontSize: D.font.md,
-    fontWeight: D.font.semibold,
-    color: D.color.accent,
-  },
   detailArrow: {
     fontSize: 20,
     color: D.color.accent,
@@ -382,6 +294,33 @@ const styles = StyleSheet.create({
     color: D.color.inkSecondary,
     textAlign: 'center',
     lineHeight: 22,
+    marginBottom: 24,
+  },
+  emptyButton: {
+    height: 52,
+    minWidth: 220,
+    borderRadius: D.radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  emptyButtonLabel: {
+    fontSize: D.font.md,
+    fontWeight: D.font.bold,
+    color: D.color.inkInverted,
+  },
+  aufgabeCard: {},
+  aufgabeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  aufgabeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: D.color.warning,
+    flexShrink: 0,
   },
   sectionLabel: {
     fontSize: 12,

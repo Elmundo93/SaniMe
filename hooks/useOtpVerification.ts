@@ -1,13 +1,10 @@
 import { useRef, useState } from 'react';
 import { TextInput } from 'react-native';
 
-export type OtpPhase = 'eingabe' | 'code';
-
 // Reine OTP-Sende-/Verifizierungs-Mechanik (Mock-Delays, Validierung) — kennt keine
-// Stores. Wird von app/auth/otp.tsx (Re-Login) und app/scan/checkout.tsx (Erstauftrag)
-// gemeinsam genutzt; was bei Erfolg passiert, entscheidet jeweils der Aufrufer.
+// Stores. Wird von app/scan/checkout.tsx genutzt; was bei Erfolg passiert, entscheidet
+// der Aufrufer.
 export function useOtpVerification(initialKontakt = '') {
-  const [phase, setPhase] = useState<OtpPhase>('eingabe');
   const [kontakt, setKontakt] = useState(initialKontakt);
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,7 +22,6 @@ export function useOtpVerification(initialKontakt = '') {
     await new Promise((r) => setTimeout(r, 1200));
     setLoading(false);
     setKontakt(empfänger);
-    setPhase('code');
     setTimeout(() => codeRef.current?.focus(), 300);
     return true;
   };
@@ -43,11 +39,5 @@ export function useOtpVerification(initialKontakt = '') {
     return true;
   };
 
-  const reset = () => {
-    setPhase('eingabe');
-    setCode('');
-    setFehler('');
-  };
-
-  return { phase, kontakt, setKontakt, code, setCode, loading, fehler, codeRef, codeSenden, codeVerifizieren, reset };
+  return { kontakt, setKontakt, code, setCode, loading, fehler, codeRef, codeSenden, codeVerifizieren };
 }

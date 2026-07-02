@@ -163,7 +163,15 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     const versorgung = baueVersorgungAusSession(session, versorgungId);
     useVersorgungStore.getState().versorgungHinzufügen(versorgung);
 
-    if (!useAuthStore.getState().benutzer && session.ocrResult && session.customerContact.telefon) {
+    if (!useAuthStore.getState().benutzer) {
+      // Darf nie fehlschlagen, solange die Guard-Kette (Datenprüfung, useOnboardingGuard
+      // requireOcrResult auf checkout.tsx) hält — schlägt trotzdem hart fehl statt
+      // onboardingAbschliessen() zu erreichen, denn genau diese Kombination
+      // (onboardingAbgeschlossen=true, benutzer=null) schickt jeden künftigen App-Start
+      // ohne Ausweg auf den Re-Login-Screen.
+      if (!session.ocrResult || !session.customerContact.telefon) {
+        throw new Error('abschliessen(): OCR-Ergebnis oder Telefonnummer fehlt, kann keinen Benutzer anlegen');
+      }
       await useAuthStore.getState().setBenutzer(
         {
           id: `benutzer-${versorgungId}`,

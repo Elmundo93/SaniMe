@@ -70,7 +70,7 @@ export default function EinstellungenScreen() {
         style: 'destructive',
         onPress: async () => {
           await abmelden();
-          router.replace('/auth/otp');
+          router.replace('/(app)/dashboard');
         },
       },
     ]);
@@ -95,8 +95,9 @@ export default function EinstellungenScreen() {
     );
   };
 
-  const initiale =
-    `${(benutzer?.vorname ?? 'M')[0]}${(benutzer?.nachname ?? 'M')[0]}`.toUpperCase();
+  const initiale = benutzer
+    ? `${benutzer.vorname[0]}${benutzer.nachname[0]}`.toUpperCase()
+    : '?';
 
   return (
     <View style={styles.root}>
@@ -134,9 +135,11 @@ export default function EinstellungenScreen() {
               </View>
               <View style={styles.profileInfo}>
                 <Text style={styles.profileName}>
-                  {benutzer?.vorname ?? 'Max'} {benutzer?.nachname ?? 'Mustermann'}
+                  {benutzer ? `${benutzer.vorname} ${benutzer.nachname}` : 'Gast'}
                 </Text>
-                <Text style={styles.profileSub}>{benutzer?.telefon ?? '+49 ···'}</Text>
+                <Text style={styles.profileSub}>
+                  {benutzer?.telefon ?? 'Noch nicht erkannt'}
+                </Text>
               </View>
             </GlassCard>
           </Animated.View>
@@ -215,14 +218,16 @@ export default function EinstellungenScreen() {
             />
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(490).springify().damping(18)}>
-            <SettingsGruppe
-              titel="Account"
-              items={[
-                { icon: '🚪', label: 'Abmelden', onPress: handleAbmelden, gefährlich: true },
-              ]}
-            />
-          </Animated.View>
+          {benutzer && (
+            <Animated.View entering={FadeInDown.delay(490).springify().damping(18)}>
+              <SettingsGruppe
+                titel="Account"
+                items={[
+                  { icon: '🚪', label: 'Abmelden', onPress: handleAbmelden, gefährlich: true },
+                ]}
+              />
+            </Animated.View>
+          )}
 
           <Animated.View entering={FadeIn.delay(600).duration(400)}>
             <Text style={styles.version}>SaniMe · Version 1.0.0</Text>

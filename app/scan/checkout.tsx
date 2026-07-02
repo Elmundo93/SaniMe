@@ -19,7 +19,10 @@ type CheckoutSubstep = 'kontakt' | 'otp' | 'zahlung';
 
 export default function CheckoutScreen() {
   const router = useRouter();
-  const { session, ready } = useOnboardingGuard(['CHECKOUT', 'CHECKOUT_FEHLGESCHLAGEN'], { requireSupply: true });
+  const { session, ready } = useOnboardingGuard(['CHECKOUT', 'CHECKOUT_FEHLGESCHLAGEN'], {
+    requireSupply: true,
+    requireOcrResult: true,
+  });
   const dispatch = useOnboardingStore((s) => s.dispatch);
   const abschliessen = useOnboardingStore((s) => s.abschliessen);
   const bereitsEingeloggt = useAuthStore((s) => !!s.benutzer);

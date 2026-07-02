@@ -60,7 +60,6 @@ function SplashView() {
 
 export default function Index() {
   const [splashDone, setSplashDone] = React.useState(false);
-  const benutzer = useAuthStore((s) => s.benutzer);
   const onboardingAbgeschlossen = useAuthStore((s) => s.onboardingAbgeschlossen);
   const session = useOnboardingStore((s) => s.session);
 
@@ -80,10 +79,10 @@ export default function Index() {
     return <Redirect href="/onboarding" />;
   }
 
-  if (!benutzer) {
-    return <Redirect href="/auth/otp" />;
-  }
-
+  // Kein benutzer (ausgeloggt oder noch nie erkannt) landet auf dem Dashboard statt
+  // einem Login-Zwang — der leere Zustand dort fordert zum Scannen auf, und ein
+  // Krankenkassenkarten-Scan kann die Identität per Archiv-Abgleich wiederherstellen
+  // (siehe lib/mockKundenArchiv.ts).
   return <Redirect href="/(app)/dashboard" />;
 }
 

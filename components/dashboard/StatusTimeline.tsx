@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { D } from '../../constants/design';
 import type { TimelineEvent } from '../../types';
 
 interface StatusTimelineProps {
@@ -9,8 +9,7 @@ interface StatusTimelineProps {
 
 function formatZeit(isoString: string): string {
   if (!isoString) return '';
-  const d = new Date(isoString);
-  return d.toLocaleString('de-DE', {
+  return new Date(isoString).toLocaleString('de-DE', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -28,7 +27,6 @@ export function StatusTimeline({ events }: StatusTimelineProps) {
 
         return (
           <View key={event.id} style={styles.row}>
-            {/* Linie links */}
             <View style={styles.lineContainer}>
               <View
                 style={[
@@ -42,8 +40,7 @@ export function StatusTimeline({ events }: StatusTimelineProps) {
               )}
             </View>
 
-            {/* Inhalt */}
-            <View style={[styles.content, !isLast && { marginBottom: 20 }]}>
+            <View style={[styles.content, !isLast && { marginBottom: 16 }]}>
               <Text
                 style={[
                   styles.label,
@@ -80,56 +77,56 @@ const styles = StyleSheet.create({
     width: 16,
   },
   dot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: Colors.border,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     borderWidth: 2,
-    borderColor: Colors.border,
+    borderColor: 'rgba(63,139,255,0.2)',
+    backgroundColor: D.color.bg,
   },
   dotDone: {
-    backgroundColor: Colors.success,
-    borderColor: Colors.success,
+    backgroundColor: D.color.success,
+    borderColor: D.color.success,
   },
   dotActive: {
-    backgroundColor: Colors.white,
-    borderColor: Colors.primary,
+    backgroundColor: D.color.bg,
+    borderColor: D.color.accent,
     borderWidth: 3,
   },
   line: {
     flex: 1,
-    width: 2,
-    backgroundColor: Colors.border,
+    width: 1.5,
+    backgroundColor: 'rgba(63,139,255,0.12)',
     marginTop: 4,
   },
   lineDone: {
-    backgroundColor: Colors.success,
+    backgroundColor: 'rgba(52,199,89,0.3)',
   },
   content: {
     flex: 1,
     paddingBottom: 4,
   },
   label: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.inkTertiary,
+    fontSize: D.font.md,
+    fontWeight: D.font.semibold,
+    color: D.color.inkTertiary,
     marginBottom: 2,
   },
   labelDone: {
-    color: Colors.ink,
+    color: D.color.ink,
   },
   labelActive: {
-    color: Colors.primary,
+    color: D.color.accent,
   },
   beschreibung: {
-    fontSize: 13,
-    color: Colors.inkSecondary,
+    fontSize: D.font.sm,
+    color: D.color.inkSecondary,
     marginBottom: 3,
     lineHeight: 18,
   },
   zeitpunkt: {
-    fontSize: 12,
-    color: Colors.inkTertiary,
+    fontSize: 11,
+    color: D.color.inkTertiary,
   },
   ausstehend: {
     fontStyle: 'italic',

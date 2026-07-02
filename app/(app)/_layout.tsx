@@ -11,15 +11,26 @@ import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { CameraButton } from '../../components/ui/CameraButton';
+import { useOnboardingStore } from '../../store/onboardingStore';
 import { D } from '../../constants/design';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function PremiumTabBar({ state, descriptors, navigation }: any) {
   const router = useRouter();
+  const starten = useOnboardingStore((s) => s.starten);
+
+  // Nur diese beiden Routen bekommen eine sichtbare Kachel — dashboard/[id] (die
+  // Versorgungsdetailseite) ist Teil desselben Tab-Stacks, aber kein eigener Tab.
+  // (expo-router's `options.href: null` wirkt nur auf die Default-Tabbar, nicht auf
+  // eine custom `tabBar`-Prop, deshalb filtern wir hier explizit über den Routennamen.)
+  const SICHTBARE_TABS = ['dashboard/index', 'einstellungen/index'];
+  const sichtbareRouten = state.routes
+    .map((route: { key: string; name: string }, index: number) => ({ route, index }))
+    .filter(({ route }: { route: { name: string } }) => SICHTBARE_TABS.includes(route.name));
 
   const tabBar = (
     <View style={styles.tabBar}>
-      {state.routes.map((route: { key: string; name: string }, index: number) => {
+      {sichtbareRouten.map(({ route, index }: { route: { key: string; name: string }; index: number }) => {
         const { options } = descriptors[route.key];
         const isFocused = state.index === index;
         const label = options.title ?? route.name;
@@ -58,11 +69,6 @@ function PremiumTabBar({ state, descriptors, navigation }: any) {
           </TouchableOpacity>
         );
       })}
-
-      {/* Floating Camera Button — mittig, schwebt über der Tab-Bar */}
-      <View style={styles.fabWrap} pointerEvents="box-none">
-        <CameraButton onPress={() => router.push('/scan/rezept')} size={72} />
-      </View>
     </View>
   );
 
@@ -79,6 +85,18 @@ function PremiumTabBar({ state, descriptors, navigation }: any) {
           {tabBar}
         </View>
       )}
+
+      {/* Floating Camera Button — außerhalb des overflow:hidden blurContainer, damit der
+          pulsierende Glow des Buttons nicht am oberen Rand abgeschnitten wird. */}
+      <View style={styles.fabWrap} pointerEvents="box-none">
+        <CameraButton
+          onPress={async () => {
+            await starten();
+            router.push('/scan/rezept');
+          }}
+          size={72}
+        />
+      </View>
     </SafeAreaView>
   );
 }
@@ -90,16 +108,16 @@ export default function AppLayout() {
       screenOptions={{ headerShown: false }}
     >
       <Tabs.Screen
-        name="dashboard"
+        name="dashboard/index"
         options={{
-          title: 'Verlauf',
+          title: 'Dashboard',
           tabBarIcon: ({ focused, color, size }: { focused: boolean; color: string; size: number }) => (
             <Feather name="clock" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="einstellungen"
+        name="einstellungen/index"
         options={{
           title: 'Profil',
           tabBarIcon: ({ focused, color, size }: { focused: boolean; color: string; size: number }) => (
@@ -107,6 +125,9 @@ export default function AppLayout() {
           ),
         }}
       />
+      {/* Versorgungsdetail: Teil des Tab-Stacks (per Card-Tap erreichbar), aber keine
+          eigene Tab-Bar-Kachel — sonst erscheint sie als sichtbarer dritter Tab. */}
+      <Tabs.Screen name="dashboard/[id]" options={{ href: null }} />
     </Tabs>
   );
 }
@@ -114,6 +135,7 @@ export default function AppLayout() {
 const styles = StyleSheet.create({
   safeArea: {
     backgroundColor: 'transparent',
+    position: 'relative',
   },
   blurContainer: {
     overflow: 'hidden',
@@ -160,8 +182,7 @@ const styles = StyleSheet.create({
   fabWrap: {
     // Schwebt bewusst nur knapp über der Tab-Bar (statt weiter in die Scene hinein) —
     // ein größerer negativer top-Wert ließ den runden Touch-Bereich des FABs bis in
-    // scrollbaren Content hineinreichen und konkurrierte dort mit Elementen wie dem
-    // "Details anzeigen"-Button auf dem Dashboard um Taps (siehe CLAUDE.md).
+    // scrollbaren Dashboard-Content hineinreichen und konkurrierte dort um Taps.
     position: 'absolute',
     top: -16,
     left: '50%',

@@ -20,7 +20,10 @@ import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { StepCounter } from '../../components/onboarding/StepCounter';
 import { simuliereKrankenkasseOcr } from '../../lib/mockOcr';
+import { sucheKundeImArchiv } from '../../lib/mockKundenArchiv';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
+import { useAuthStore } from '../../store/authStore';
+import { useVersorgungStore } from '../../store/versorgungStore';
 import { D } from '../../constants/design';
 
 function zeigeOcrFehler() {
@@ -38,12 +41,32 @@ export default function KrankenkasseScreen() {
   const router = useRouter();
   const { ready } = useOnboardingGuard('KRANKENKASSE_AUFNAHME');
   const dispatch = useOnboardingStore((s) => s.dispatch);
+  const setBenutzer = useAuthStore((s) => s.setBenutzer);
+  const onboardingAbschliessen = useAuthStore((s) => s.onboardingAbschliessen);
+  const versorgungenSetzen = useVersorgungStore((s) => s.versorgungenSetzen);
   const [permission, requestPermission] = useCameraPermissions();
   const [aufgenommen, setAufgenommen] = useState(false);
   const [verarbeitung, setVerarbeitung] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
   if (!ready) return <OnboardingLoadingView />;
+
+  // Versichertennummer gegen den (mock) Kundenstamm prüfen — bei Treffer kennen wir
+  // den Kunden bereits: Identität + Versorgungshistorie übernehmen und direkt ins
+  // Dashboard, statt Kontaktdaten/OTP später in Checkout nochmal abzufragen. Die
+  // laufende Bestellung bleibt als Session unangetastet und lässt sich später über
+  // den Kamera-Button im Dashboard fortsetzen. Ist bereits ein benutzer eingeloggt
+  // (Folgeauftrag), bleibt dessen echte Identität unangetastet statt sie mit dem
+  // Archiv-Platzhalter zu überschreiben.
+  const pruefeArchivTreffer = async (versichertenNr: string): Promise<boolean> => {
+    if (useAuthStore.getState().benutzer) return false;
+    const treffer = await sucheKundeImArchiv(versichertenNr);
+    if (!treffer) return false;
+    await setBenutzer(treffer.benutzer, `archiv-token-${treffer.benutzer.id}`);
+    versorgungenSetzen(treffer.versorgungen);
+    await onboardingAbschliessen();
+    return true;
+  };
 
   const handleZurück = async () => {
     const result = await dispatch({ type: 'ZURUECK' });
@@ -73,7 +96,11 @@ export default function KrankenkasseScreen() {
         produkte,
       });
       if (result.ok) {
-        router.push(STATUS_META[result.session.status].route as any);
+        if (await pruefeArchivTreffer(krankenkasse.versichertenNr)) {
+          router.replace('/(app)/dashboard');
+        } else {
+          router.push(STATUS_META[result.session.status].route as any);
+        }
       } else {
         zeigeDispatchFehler();
       }
@@ -104,7 +131,11 @@ export default function KrankenkasseScreen() {
         produkte,
       });
       if (result.ok) {
-        router.push(STATUS_META[result.session.status].route as any);
+        if (await pruefeArchivTreffer(krankenkasse.versichertenNr)) {
+          router.replace('/(app)/dashboard');
+        } else {
+          router.push(STATUS_META[result.session.status].route as any);
+        }
       } else {
         zeigeDispatchFehler();
       }

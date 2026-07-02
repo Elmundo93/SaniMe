@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { ProcessStep, type StepStatus } from '../../../components/ui/ProcessStep';
+import { StatusTimeline } from '../../../components/dashboard/StatusTimeline';
 import { useVersorgungStore } from '../../../store/versorgungStore';
 import { D } from '../../../constants/design';
 
@@ -144,6 +145,15 @@ export default function VersorgungsdetailScreen() {
               <Text style={styles.sectionTitel}>Details</Text>
               <InfoZeile label="Arzt" wert={versorgung.arzt} />
               <InfoZeile label="Krankenkasse" wert={versorgung.krankenkasse} />
+              {versorgung.hersteller && (
+                <InfoZeile label="Hersteller" wert={versorgung.hersteller} />
+              )}
+              {versorgung.lieferzeit && (
+                <InfoZeile label="Lieferzeit" wert={versorgung.lieferzeit} />
+              )}
+              {versorgung.ansprechpartner && (
+                <InfoZeile label="Ansprechpartner" wert={versorgung.ansprechpartner} />
+              )}
               {versorgung.lieferadresse && (
                 <InfoZeile label="Lieferadresse" wert={versorgung.lieferadresse} />
               )}
@@ -160,41 +170,7 @@ export default function VersorgungsdetailScreen() {
           <Animated.View entering={FadeInDown.delay(320).springify().damping(18)}>
             <GlassCard padding={20} radius={D.radius.lg}>
               <Text style={styles.sectionTitel}>Verlauf</Text>
-              <View style={styles.timeline}>
-                {versorgung.timeline.map((event, i) => (
-                  <View key={event.id} style={styles.timelineItem}>
-                    <View style={styles.timelineLeft}>
-                      <View style={[
-                        styles.timelineDot,
-                        event.abgeschlossen && styles.timelineDotDone,
-                      ]} />
-                      {i < versorgung.timeline.length - 1 && (
-                        <View style={[
-                          styles.timelineLine,
-                          event.abgeschlossen && styles.timelineLineDone,
-                        ]} />
-                      )}
-                    </View>
-                    <View style={styles.timelineContent}>
-                      <Text style={[
-                        styles.timelineLabel,
-                        !event.abgeschlossen && styles.timelineLabelPending,
-                      ]}>
-                        {event.label}
-                      </Text>
-                      <Text style={styles.timelineBeschreibung}>{event.beschreibung}</Text>
-                      {event.zeitpunkt ? (
-                        <Text style={styles.timelineZeit}>
-                          {new Date(event.zeitpunkt).toLocaleDateString('de-DE', {
-                            day: '2-digit', month: '2-digit', year: 'numeric',
-                            hour: '2-digit', minute: '2-digit',
-                          })}
-                        </Text>
-                      ) : null}
-                    </View>
-                  </View>
-                ))}
-              </View>
+              <StatusTimeline events={versorgung.timeline} />
             </GlassCard>
           </Animated.View>
 
@@ -265,22 +241,6 @@ const styles = StyleSheet.create({
   },
   infoLabel: { fontSize: D.font.sm, color: D.color.inkSecondary, flex: 1 },
   infoWert: { fontSize: D.font.sm, fontWeight: D.font.semibold, color: D.color.ink, flex: 1.5, textAlign: 'right' },
-  timeline: { gap: 0 },
-  timelineItem: { flexDirection: 'row', gap: 14, minHeight: 52 },
-  timelineLeft: { alignItems: 'center', width: 16, paddingTop: 4 },
-  timelineDot: {
-    width: 12, height: 12, borderRadius: 6,
-    borderWidth: 2, borderColor: 'rgba(63,139,255,0.2)',
-    backgroundColor: D.color.bg, flexShrink: 0,
-  },
-  timelineDotDone: { backgroundColor: D.color.success, borderColor: D.color.success },
-  timelineLine: { flex: 1, width: 1.5, backgroundColor: 'rgba(63,139,255,0.12)', marginTop: 4 },
-  timelineLineDone: { backgroundColor: 'rgba(52,199,89,0.3)' },
-  timelineContent: { flex: 1, paddingBottom: 16 },
-  timelineLabel: { fontSize: D.font.md, fontWeight: D.font.semibold, color: D.color.ink },
-  timelineLabelPending: { color: D.color.inkTertiary, fontWeight: D.font.medium },
-  timelineBeschreibung: { fontSize: D.font.sm, color: D.color.inkSecondary, marginTop: 2, lineHeight: 18 },
-  timelineZeit: { fontSize: 11, color: D.color.inkTertiary, marginTop: 3 },
   hilfeSection: { alignItems: 'center', paddingVertical: 8, gap: 12 },
   hilfeText: { fontSize: D.font.sm, color: D.color.inkSecondary },
   supportBtn: {
