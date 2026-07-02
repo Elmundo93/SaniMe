@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useSharedValue, withRepeat, withSequence, withSpring } from 'react-native-reanimated';
-import { D } from '../constants/design';
+import { D } from '@sanime/design-system';
 
 export function useBreathing(
   min = 1.0,

@@ -13,16 +13,21 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
+import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
 import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
+import { useGlowPulse } from '../../hooks/useGlowPulse';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
-import { StepCounter } from '../../components/onboarding/StepCounter';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { IconButton } from '../../components/ui/IconButton';
+import { CameraOverlayHeader } from '../../components/ui/CameraOverlayHeader';
 import { simuliereRezeptOcr } from '../../lib/mockOcr';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
-import { D } from '../../constants/design';
+import { D } from '@sanime/design-system';
 
 const { width, height } = Dimensions.get('window');
 const FRAME_W = width * 0.82;
@@ -36,6 +41,7 @@ export default function RezeptScanScreen() {
   const [aufgenommen, setAufgenommen] = useState(false);
   const [verarbeitung, setVerarbeitung] = useState(false);
   const cameraRef = useRef<CameraView>(null);
+  const glowStyle = useGlowPulse();
 
   if (!ready) return <OnboardingLoadingView />;
 
@@ -71,20 +77,11 @@ export default function RezeptScanScreen() {
 
   if (verarbeitung) {
     return (
-      <View style={styles.loadingContainer}>
-        <StatusBar barStyle="light-content" />
-        <ActivityIndicator color="#FFFFFF" size="large" />
-        <Text style={styles.loadingTitle}>KI liest dein Rezept aus…</Text>
-        <Text style={styles.loadingSubtext}>Das dauert nur einen Moment</Text>
-        <View style={styles.loadingSteps}>
-          {['Bildanalyse', 'Text extrahieren', 'Daten prüfen'].map((s) => (
-            <View key={s} style={styles.loadingStep}>
-              <ActivityIndicator color={D.color.accent} size="small" />
-              <Text style={styles.loadingStepText}>{s}</Text>
-            </View>
-          ))}
-        </View>
-      </View>
+      <LoadingState
+        title="KI liest dein Rezept aus…"
+        subtitle="Das dauert nur einen Moment"
+        steps={['Bildanalyse', 'Text extrahieren', 'Daten prüfen']}
+      />
     );
   }
 
@@ -100,7 +97,7 @@ export default function RezeptScanScreen() {
     return (
       <SafeAreaView style={styles.permissionContainer}>
         <StatusBar barStyle="light-content" />
-        <Text style={styles.permissionEmoji}>📷</Text>
+        <Feather name="camera" size={48} color="#FFFFFF" style={{ marginBottom: 16 }} />
         <Text style={styles.permissionTitle}>Kamerazugriff benötigt</Text>
         <Text style={styles.permissionText}>
           SaniMe benötigt die Kamera, um dein Rezept zu fotografieren. Wir können auch ein Foto aus deiner Galerie verwenden.
@@ -158,6 +155,7 @@ export default function RezeptScanScreen() {
       });
 
       if (foto?.uri) {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         await nachAufnahme(foto.uri);
       }
     } catch {
@@ -193,10 +191,11 @@ export default function RezeptScanScreen() {
       </View>
 
       {/* Rahmen-Ecken */}
-      <View
+      <Animated.View
         pointerEvents="none"
         style={[
           styles.frame,
+          glowStyle,
           {
             width: FRAME_W,
             height: FRAME_H,
@@ -208,22 +207,15 @@ export default function RezeptScanScreen() {
         {['tl', 'tr', 'bl', 'br'].map((pos) => (
           <View key={pos} style={[styles.corner, styles[pos as 'tl']]} />
         ))}
-      </View>
+      </Animated.View>
 
       {/* Hinweis oben */}
-      <SafeAreaView style={styles.topHint} edges={['top']}>
-        <TouchableOpacity
-          onPress={handleZurück}
-          hitSlop={12}
-          style={styles.schließButton}
-          accessibilityLabel="Schließen"
-        >
-          <Text style={styles.schließIcon}>✕</Text>
-        </TouchableOpacity>
-        <View style={styles.schrittAnzeige}>
-          <StepCounter aktuellerSchritt={STATUS_META.REZEPT_AUFNAHME.schritt} gesamtSchritte={11} />
-        </View>
-      </SafeAreaView>
+      <CameraOverlayHeader
+        onBack={handleZurück}
+        schritt={STATUS_META.REZEPT_AUFNAHME.schritt}
+        icon="x"
+        accessibilityLabel="Schließen"
+      />
 
       {/* Hinweis unten */}
       <SafeAreaView style={styles.bottomHint} edges={['bottom']}>
@@ -232,13 +224,7 @@ export default function RezeptScanScreen() {
 
         <View style={styles.controlsRow}>
           {/* Galerie */}
-          <TouchableOpacity
-            style={styles.sideButton}
-            onPress={handleGalerie}
-            accessibilityLabel="Galerie öffnen"
-          >
-            <Feather name="image" size={24} color="rgba(255,255,255,0.85)" />
-          </TouchableOpacity>
+          <IconButton icon="image" onPress={handleGalerie} accessibilityLabel="Galerie öffnen" />
 
           {/* Kamera-Auslöser */}
           <TouchableOpacity
@@ -256,13 +242,7 @@ export default function RezeptScanScreen() {
           </TouchableOpacity>
 
           {/* Hilfe */}
-          <TouchableOpacity
-            style={styles.sideButton}
-            onPress={handleHilfe}
-            accessibilityLabel="Hilfe"
-          >
-            <Feather name="help-circle" size={24} color="rgba(255,255,255,0.85)" />
-          </TouchableOpacity>
+          <IconButton icon="help-circle" onPress={handleHilfe} accessibilityLabel="Hilfe" />
         </View>
       </SafeAreaView>
     </View>
@@ -274,19 +254,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: D.color.dark,
   },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: D.color.dark,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    padding: 32,
-  },
-  loadingTitle: { fontSize: 22, fontWeight: '800', color: '#FFFFFF', textAlign: 'center' },
-  loadingSubtext: { fontSize: 15, color: 'rgba(255,255,255,0.5)', textAlign: 'center' },
-  loadingSteps: { marginTop: 24, gap: 14, width: '100%', maxWidth: 260 },
-  loadingStep: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  loadingStepText: { fontSize: 14, color: 'rgba(255,255,255,0.65)', fontWeight: '500' },
   permissionContainer: {
     flex: 1,
     backgroundColor: D.color.dark,
@@ -294,7 +261,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 32,
   },
-  permissionEmoji: { fontSize: 56, marginBottom: 16 },
   permissionTitle: {
     fontSize: 22,
     fontWeight: '800',
@@ -355,34 +321,6 @@ const styles = StyleSheet.create({
   tr: { top: -1, right: -1, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 4 },
   bl: { bottom: -1, left: -1, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 4 },
   br: { bottom: -1, right: -1, borderBottomWidth: 3, borderRightWidth: 3, borderBottomRightRadius: 4 },
-  topHint: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 8,
-  },
-  schließButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  schließIcon: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  schrittAnzeige: {
-    flex: 1,
-    alignItems: 'center',
-  },
   bottomHint: {
     position: 'absolute',
     bottom: 0,
@@ -416,16 +354,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 48,
     width: '100%',
     marginTop: 8,
-  },
-  sideButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
   },
   aufnahmeButton: {
     width: 72,

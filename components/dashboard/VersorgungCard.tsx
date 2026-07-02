@@ -1,9 +1,10 @@
 import React from 'react';
 import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { GlassCard } from '../ui/GlassCard';
 import { StatusBadge } from '../ui/StatusBadge';
 import { berechneFortschritt, naechsterSchritt } from '../../lib/versorgungProgress';
-import { D } from '../../constants/design';
+import { D } from '@sanime/design-system';
 import type { Versorgung } from '../../types';
 
 interface VersorgungCardProps {
@@ -29,7 +30,7 @@ export function VersorgungCard({ versorgung, onPress }: VersorgungCardProps) {
       <GlassCard style={styles.card} padding={18} radius={D.radius.lg}>
         <View style={styles.topRow}>
           <View style={styles.iconWrap}>
-            <Text style={styles.icon}>📦</Text>
+            <Feather name="package" size={18} color={D.color.accent} />
           </View>
           <View style={styles.headerText}>
             <Text style={styles.produkt} numberOfLines={1}>{versorgung.produkt}</Text>
@@ -50,10 +51,16 @@ export function VersorgungCard({ versorgung, onPress }: VersorgungCardProps) {
 
         <View style={styles.metaRow}>
           {versorgung.ansprechpartner && (
-            <Text style={styles.metaText} numberOfLines={1}>👤 {versorgung.ansprechpartner}</Text>
+            <View style={styles.metaItem}>
+              <Feather name="user" size={12} color={D.color.inkTertiary} />
+              <Text style={styles.metaText} numberOfLines={1}>{versorgung.ansprechpartner}</Text>
+            </View>
           )}
           {versorgung.lieferzeit && (
-            <Text style={styles.metaText} numberOfLines={1}>🚚 {versorgung.lieferzeit}</Text>
+            <View style={styles.metaItem}>
+              <Feather name="truck" size={12} color={D.color.inkTertiary} />
+              <Text style={styles.metaText} numberOfLines={1}>{versorgung.lieferzeit}</Text>
+            </View>
           )}
         </View>
 
@@ -89,9 +96,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-  },
-  icon: {
-    fontSize: 18,
   },
   headerText: {
     flex: 1,
@@ -130,6 +134,11 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 12,
     marginBottom: 6,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
   metaText: {
     fontSize: D.font.sm,

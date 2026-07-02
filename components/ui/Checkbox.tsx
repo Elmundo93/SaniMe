@@ -1,7 +1,8 @@
 import React from 'react';
 import { Pressable, View, Text, StyleSheet, type ViewStyle } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { D } from '../../constants/design';
+import { Feather } from '@expo/vector-icons';
+import { D } from '@sanime/design-system';
 
 interface CheckboxProps {
   checked: boolean;
@@ -34,7 +35,7 @@ export function Checkbox({ checked, onToggle, label, disabled, accessibilityHint
       hitSlop={10}
     >
       <View style={[styles.box, dark && styles.boxDark, checked && (dark ? styles.boxActiveDark : styles.boxActive)]}>
-        {checked && <Text style={styles.check}>✓</Text>}
+        {checked && <Feather name="check" size={14} color="#fff" />}
       </View>
       <Text style={[styles.label, dark && styles.labelDark]}>{label}</Text>
     </Pressable>
@@ -63,7 +64,6 @@ const styles = StyleSheet.create({
   boxDark: { borderColor: 'rgba(255,255,255,0.25)' },
   boxActive: { backgroundColor: D.color.accent, borderColor: D.color.accent },
   boxActiveDark: { backgroundColor: D.color.gradientMid, borderColor: D.color.gradientMid },
-  check: { color: '#fff', fontSize: 13, fontWeight: D.font.bold },
   label: { flex: 1, fontSize: D.font.sm, color: D.color.inkSecondary, lineHeight: 19, paddingTop: 2 },
   labelDark: { color: 'rgba(255,255,255,0.6)' },
 });

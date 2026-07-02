@@ -2,25 +2,27 @@ import React, { useEffect } from 'react';
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
-  StatusBar,
   TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
   FadeIn,
   FadeInDown,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Feather } from '@expo/vector-icons';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
+import { Avatar } from '../../../components/ui/Avatar';
+import { HeroGlow } from '../../../components/ui/HeroGlow';
+import { Screen } from '../../../components/ui/Screen';
+import { ScrollContainer } from '../../../components/ui/ScrollContainer';
 import { VersorgungCard } from '../../../components/dashboard/VersorgungCard';
 import { useAuthStore } from '../../../store/authStore';
 import { useVersorgungStore } from '../../../store/versorgungStore';
 import { useOnboardingStore } from '../../../store/onboardingStore';
-import { D } from '../../../constants/design';
+import { D, durations } from '@sanime/design-system';
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -56,27 +58,10 @@ export default function DashboardScreen() {
   );
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="dark-content" />
-
-      {/* Subtiler blauer Hintergrundglow */}
-      <View style={styles.bgGlow} pointerEvents="none">
-        <LinearGradient
-          colors={['rgba(123,201,255,0.18)', 'rgba(247,249,252,0)']}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-      </View>
-
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
+    <Screen background={<HeroGlow />}>
+      <ScrollContainer contentContainerStyle={styles.scrollContent}>
           {/* Header */}
-          <Animated.View entering={FadeIn.duration(600)} style={styles.header}>
+          <Animated.View entering={FadeIn.duration(durations.slow)} style={styles.header}>
             <View style={styles.headerLeft}>
               <Text style={styles.begrüßung} numberOfLines={1} maxFontSizeMultiplier={1.5}>
                 {benutzer ? `Hallo ${benutzer.vorname}.` : 'Willkommen.'}
@@ -89,15 +74,13 @@ export default function DashboardScreen() {
                 <Text style={styles.headerSub}>Willkommen bei SaniMe.</Text>
               )}
             </View>
-            <TouchableOpacity
+            <Avatar
+              initials={benutzer ? `${benutzer.vorname[0]}${benutzer.nachname[0]}` : '?'}
+              size={46}
+              fontSize={14}
               onPress={() => router.push('/(app)/einstellungen')}
-              style={styles.avatar}
               accessibilityLabel="Profil & Einstellungen"
-            >
-              <Text style={styles.avatarText}>
-                {benutzer ? `${benutzer.vorname[0]}${benutzer.nachname[0]}` : '?'}
-              </Text>
-            </TouchableOpacity>
+            />
           </Animated.View>
 
           {isLoading ? (
@@ -129,7 +112,7 @@ export default function DashboardScreen() {
                             <Text style={styles.historyName} numberOfLines={1}>{aktion.titel}</Text>
                             <Text style={styles.historyMeta} numberOfLines={1}>{versorgung.produkt}</Text>
                           </View>
-                          <Text style={styles.detailArrow}>›</Text>
+                          <Feather name="chevron-right" size={20} color={D.color.accent} />
                         </View>
                       </GlassCard>
                     </TouchableOpacity>
@@ -151,7 +134,9 @@ export default function DashboardScreen() {
             /* Leerer Zustand */
             <Animated.View entering={FadeInDown.delay(100).springify()}>
               <GlassCard style={styles.emptyCard} padding={36} radius={D.radius.xl}>
-                <Text style={styles.emptyEmoji}>📋</Text>
+                <View style={styles.emptyIconWrap}>
+                  <Feather name="file-text" size={28} color={D.color.accent} />
+                </View>
                 <Text style={styles.emptyTitle}>Noch keine Versorgung</Text>
                 <Text style={styles.emptyText}>
                   Fotografiere dein Rezept, den Rest übernehmen wir.
@@ -206,26 +191,12 @@ export default function DashboardScreen() {
 
           {/* Abstandhalter für FAB + Tab-Bar */}
           <View style={{ height: 160 }} />
-        </ScrollView>
-      </SafeAreaView>
-    </View>
+      </ScrollContainer>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: D.color.bg,
-  },
-  bgGlow: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0,
-    height: 320,
-    zIndex: 0,
-  },
-  scroll: {
-    flex: 1,
-  },
   scrollContent: {
     padding: 20,
     paddingTop: 12,
@@ -253,32 +224,17 @@ const styles = StyleSheet.create({
     color: D.color.inkSecondary,
     fontWeight: D.font.regular,
   },
-  avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: D.color.accentLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(63,139,255,0.18)',
-  },
-  avatarText: {
-    fontSize: 14,
-    fontWeight: D.font.bold,
-    color: D.color.accent,
-  },
-  detailArrow: {
-    fontSize: 20,
-    color: D.color.accent,
-    lineHeight: 22,
-  },
   emptyCard: {
     alignItems: 'center',
     paddingVertical: 48,
   },
-  emptyEmoji: {
-    fontSize: 56,
+  emptyIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: D.color.accentLight,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 16,
   },
   emptyTitle: {

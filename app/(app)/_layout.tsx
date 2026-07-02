@@ -12,7 +12,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { CameraButton } from '../../components/ui/CameraButton';
 import { useOnboardingStore } from '../../store/onboardingStore';
-import { D } from '../../constants/design';
+import { D, glass } from '@sanime/design-system';
+
+const FAB_SIZE = 72;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function PremiumTabBar({ state, descriptors, navigation }: any) {
@@ -29,7 +31,7 @@ function PremiumTabBar({ state, descriptors, navigation }: any) {
     .filter(({ route }: { route: { name: string } }) => SICHTBARE_TABS.includes(route.name));
 
   const tabBar = (
-    <View style={styles.tabBar}>
+    <View style={styles.tabBar} accessibilityRole="tablist">
       {sichtbareRouten.map(({ route, index }: { route: { key: string; name: string }; index: number }) => {
         const { options } = descriptors[route.key];
         const isFocused = state.index === index;
@@ -76,7 +78,7 @@ function PremiumTabBar({ state, descriptors, navigation }: any) {
     <SafeAreaView edges={['bottom']} style={styles.safeArea}>
       {Platform.OS === 'ios' ? (
         <View style={styles.blurContainer}>
-          <BlurView intensity={80} tint="extraLight" style={StyleSheet.absoluteFill} />
+          <BlurView intensity={glass.navigation.blur} tint="extraLight" style={StyleSheet.absoluteFill} />
           <View style={[StyleSheet.absoluteFill, styles.blurTint]} />
           {tabBar}
         </View>
@@ -88,13 +90,13 @@ function PremiumTabBar({ state, descriptors, navigation }: any) {
 
       {/* Floating Camera Button — außerhalb des overflow:hidden blurContainer, damit der
           pulsierende Glow des Buttons nicht am oberen Rand abgeschnitten wird. */}
-      <View style={styles.fabWrap} pointerEvents="box-none">
+      <View style={[styles.fabWrap, { marginLeft: -FAB_SIZE / 2 }]} pointerEvents="box-none">
         <CameraButton
           onPress={async () => {
             await starten();
             router.push('/scan/rezept');
           }}
-          size={72}
+          size={FAB_SIZE}
         />
       </View>
     </SafeAreaView>
@@ -186,7 +188,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -16,
     left: '50%',
-    marginLeft: -36,
     zIndex: 20,
     pointerEvents: 'auto',
   },

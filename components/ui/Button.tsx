@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   TouchableOpacity,
   Text,
@@ -6,7 +6,7 @@ import {
   StyleSheet,
   type TouchableOpacityProps,
 } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { D, neutral } from '@sanime/design-system';
 
 interface ButtonProps extends TouchableOpacityProps {
   label: string;
@@ -24,18 +24,31 @@ export function Button({
   icon,
   disabled,
   style,
+  onPressIn,
+  onPressOut,
   ...rest
 }: ButtonProps) {
   const isDisabled = disabled || loading;
+  const [pressed, setPressed] = useState(false);
 
   return (
     <TouchableOpacity
       activeOpacity={0.8}
       disabled={isDisabled}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
+      onPressIn={(e) => {
+        setPressed(true);
+        onPressIn?.(e);
+      }}
+      onPressOut={(e) => {
+        setPressed(false);
+        onPressOut?.(e);
+      }}
       style={[
         styles.base,
         styles[variante],
         styles[`größe_${größe}`],
+        pressed && !isDisabled && styles.pressed,
         isDisabled && styles.disabled,
         style,
       ]}
@@ -43,7 +56,7 @@ export function Button({
     >
       {loading ? (
         <ActivityIndicator
-          color={variante === 'primary' ? Colors.white : Colors.primary}
+          color={variante === 'primary' ? D.color.inkInverted : D.color.accent}
           size="small"
         />
       ) : (
@@ -63,24 +76,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
+    borderRadius: D.radius.sm,
     gap: 8,
     minHeight: 44,
   },
   // Varianten
   primary: {
-    backgroundColor: Colors.primary,
+    backgroundColor: D.color.accent,
   },
   secondary: {
-    backgroundColor: Colors.primaryLight,
+    backgroundColor: D.color.accentLight,
   },
   ghost: {
     backgroundColor: 'transparent',
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: neutral.border,
   },
   danger: {
-    backgroundColor: Colors.errorBg,
+    backgroundColor: D.color.errorLight,
+  },
+  pressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
   },
   disabled: {
     opacity: 0.5,
@@ -91,10 +108,10 @@ const styles = StyleSheet.create({
   größe_lg: { paddingHorizontal: 24, paddingVertical: 18 },
   // Labels
   label: { fontWeight: '600', letterSpacing: 0.2 },
-  label_primary: { color: Colors.white },
-  label_secondary: { color: Colors.primary },
-  label_ghost: { color: Colors.ink },
-  label_danger: { color: Colors.error },
+  label_primary: { color: D.color.inkInverted },
+  label_secondary: { color: D.color.accent },
+  label_ghost: { color: D.color.ink },
+  label_danger: { color: D.color.error },
   labelGröße_sm: { fontSize: 14 },
   labelGröße_md: { fontSize: 16 },
   labelGröße_lg: { fontSize: 18 },

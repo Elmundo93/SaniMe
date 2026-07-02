@@ -7,7 +7,7 @@ import Animated, {
   withSpring,
   SharedValue,
 } from 'react-native-reanimated';
-import { D } from '../../constants/design';
+import { D } from '@sanime/design-system';
 
 const SEGMENTS = 36;
 

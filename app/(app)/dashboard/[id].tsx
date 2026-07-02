@@ -2,22 +2,23 @@ import React from 'react';
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
   TouchableOpacity,
-  StatusBar,
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
+import { ScreenHeader } from '../../../components/ui/ScreenHeader';
+import { BackLink } from '../../../components/ui/BackLink';
+import { HeroGlow } from '../../../components/ui/HeroGlow';
+import { Screen } from '../../../components/ui/Screen';
+import { ScrollContainer } from '../../../components/ui/ScrollContainer';
 import { ProcessStep, type StepStatus } from '../../../components/ui/ProcessStep';
 import { StatusTimeline } from '../../../components/dashboard/StatusTimeline';
 import { useVersorgungStore } from '../../../store/versorgungStore';
-import { D } from '../../../constants/design';
+import { D, durations } from '@sanime/design-system';
 
 const STEPS: { label: string; key: string }[] = [
   { label: 'Rezept geprüft',             key: 'PENDING_REVIEW' },
@@ -53,43 +54,25 @@ export default function VersorgungsdetailScreen() {
 
   if (!versorgung) {
     return (
-      <View style={styles.root}>
-        <SafeAreaView style={styles.notFoundArea}>
+      <Screen>
+        <View style={styles.notFoundArea}>
           <Text style={styles.notFoundText}>Versorgung nicht gefunden.</Text>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backLink}>
-            <Text style={styles.backLinkText}>← Zurück</Text>
-          </TouchableOpacity>
-        </SafeAreaView>
-      </View>
+          <BackLink onPress={() => router.back()} />
+        </View>
+      </Screen>
     );
   }
 
   const isAbgeschlossen = ['DELIVERED', 'CANCELLED', 'REJECTED'].includes(versorgung.status);
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="dark-content" />
-
-      {/* Hintergrundglow */}
-      <View style={styles.bgGlow} pointerEvents="none">
-        <LinearGradient
-          colors={['rgba(123,201,255,0.14)', 'rgba(247,249,252,0)']}
-          start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-      </View>
-
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+    <Screen background={<HeroGlow />}>
         {/* Header */}
-        <Animated.View entering={FadeIn.duration(400)} style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={styles.zurückBtn} accessibilityLabel="Zurück">
-            <Text style={styles.zurückIcon}>←</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitel} numberOfLines={1}>{versorgung.produkt}</Text>
-          <View style={{ width: 40 }} />
+        <Animated.View entering={FadeIn.duration(durations.slow)}>
+          <ScreenHeader title={versorgung.produkt} onBack={() => router.back()} backSize={40} />
         </Animated.View>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <ScrollContainer contentContainerStyle={styles.scrollContent}>
           {/* Status Hero */}
           <Animated.View entering={FadeInDown.delay(80).springify().damping(18)}>
             <GlassCard padding={22} radius={D.radius.xl}>
@@ -185,28 +168,14 @@ export default function VersorgungsdetailScreen() {
           </Animated.View>
 
           <View style={{ height: 60 }} />
-        </ScrollView>
-      </SafeAreaView>
-    </View>
+        </ScrollContainer>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: D.color.bg },
-  bgGlow: { position: 'absolute', top: 0, left: 0, right: 0, height: 300 },
   notFoundArea: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   notFoundText: { fontSize: D.font.lg, color: D.color.inkSecondary },
-  backLink: { paddingVertical: 8 },
-  backLinkText: { fontSize: D.font.lg, color: D.color.accent, fontWeight: D.font.semibold },
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 0.5, borderBottomColor: D.color.glassBorder,
-    gap: 12, backgroundColor: D.color.bgSoft,
-  },
-  zurückBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  zurückIcon: { fontSize: 22, color: D.color.accent },
-  headerTitel: { flex: 1, fontSize: D.font.lg, fontWeight: D.font.bold, color: D.color.ink, textAlign: 'center' },
   scrollContent: { padding: 16, gap: 14, paddingBottom: 40 },
   statusChipLabel: {
     fontSize: 10, fontWeight: D.font.bold, color: D.color.accent,

@@ -2,24 +2,25 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
   TouchableOpacity,
-  StatusBar,
   ActivityIndicator,
   Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Feather } from '@expo/vector-icons';
 import { GlassCard } from '../../components/ui/GlassCard';
+import { Screen } from '../../components/ui/Screen';
+import { ScrollContainer } from '../../components/ui/ScrollContainer';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { StepCounter } from '../../components/onboarding/StepCounter';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
-import { D } from '../../constants/design';
+import { D } from '@sanime/design-system';
 import type { Produkt } from '../../types';
 
 interface ProduktKarteProps {
@@ -48,14 +49,14 @@ function ProduktKarte({ produkt, ausgewählt, onAuswählen, index }: ProduktKart
           {/* Header */}
           <View style={styles.produktHeader}>
             <View style={[styles.produktIcon, ausgewählt && styles.produktIconAktiv]}>
-              <Text style={styles.produktIconText}>♿</Text>
+              <Feather name="activity" size={18} color={D.color.accent} />
             </View>
             <View style={styles.produktTitelBlock}>
               <Text style={styles.produktName}>{produkt.name}</Text>
               <Text style={styles.produktHersteller}>{produkt.hersteller}</Text>
             </View>
             <View style={[styles.auswahlKreis, ausgewählt && styles.auswahlKreisAktiv]}>
-              {ausgewählt && <Text style={styles.auswahlCheck}>✓</Text>}
+              {ausgewählt && <Feather name="check" size={12} color="#fff" />}
             </View>
           </View>
 
@@ -88,7 +89,8 @@ function ProduktKarte({ produkt, ausgewählt, onAuswählen, index }: ProduktKart
               </Text>
             </View>
             <View style={styles.lieferzeitChip}>
-              <Text style={styles.lieferzeitText}>🚚 {produkt.lieferzeit}</Text>
+              <Feather name="truck" size={12} color={D.color.inkSecondary} />
+              <Text style={styles.lieferzeitText}>{produkt.lieferzeit}</Text>
             </View>
           </View>
         </GlassCard>
@@ -134,25 +136,22 @@ export default function VersorgungsauswahlScreen() {
   };
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="dark-content" />
-
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+    <Screen edges={['top', 'bottom']}>
         {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleZurück} hitSlop={12} style={styles.zurückBtn} accessibilityLabel="Zurück">
-            <Text style={styles.zurückIcon}>←</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitel}>Versorgung wählen</Text>
-          <StepCounter
-            aktuellerSchritt={STATUS_META.VERSORGUNGSAUSWAHL.schritt}
-            gesamtSchritte={11}
-            variant="light"
-            label={`${STATUS_META.VERSORGUNGSAUSWAHL.schritt}/11`}
-          />
-        </View>
+        <ScreenHeader
+          title="Versorgung wählen"
+          onBack={handleZurück}
+          right={
+            <StepCounter
+              aktuellerSchritt={STATUS_META.VERSORGUNGSAUSWAHL.schritt}
+              gesamtSchritte={11}
+              variant="light"
+              label={`${STATUS_META.VERSORGUNGSAUSWAHL.schritt}/11`}
+            />
+          }
+        />
 
-        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <ScrollContainer contentContainerStyle={styles.scrollContent}>
           {/* Diagnose-Banner */}
           <Animated.View entering={FadeInDown.delay(60).springify().damping(18)}>
             <View style={styles.diagnoseBanner}>
@@ -186,18 +185,19 @@ export default function VersorgungsauswahlScreen() {
 
           <Animated.View entering={FadeInDown.delay(500).springify()}>
             <View style={styles.hinweisBox}>
+              <Feather name="info" size={16} color={D.color.accent} style={styles.hinweisIcon} />
               <Text style={styles.hinweisText}>
-                ℹ️ Alle Produkte sind durch Ihre Krankenkasse erstattungsfähig.
+                Alle Produkte sind durch Ihre Krankenkasse erstattungsfähig.
                 Der Eigenanteil richtet sich nach dem gesetzlichen Festbetrag.
               </Text>
             </View>
           </Animated.View>
 
           <View style={{ height: 120 }} />
-        </ScrollView>
+        </ScrollContainer>
 
         {/* Sticky Footer */}
-        <SafeAreaView edges={['bottom']} style={styles.footer}>
+        <View style={styles.footer}>
           {ausgewählt && (
             <Text style={styles.footerInfo}>
               {ausgewählt.name} · {ausgewählt.lieferzeit}
@@ -225,23 +225,12 @@ export default function VersorgungsauswahlScreen() {
               </Text>
             )}
           </TouchableOpacity>
-        </SafeAreaView>
-      </SafeAreaView>
-    </View>
+        </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: D.color.bg },
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 0.5, borderBottomColor: D.color.glassBorder,
-    gap: 12, backgroundColor: D.color.bgSoft,
-  },
-  zurückBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  zurückIcon: { fontSize: 22, color: D.color.accent },
-  headerTitel: { flex: 1, fontSize: D.font.lg, fontWeight: D.font.bold, color: D.color.ink, textAlign: 'center' },
   scrollContent: { padding: 16, gap: 12 },
   diagnoseBanner: {
     borderRadius: D.radius.md, padding: 16, overflow: 'hidden',
@@ -266,7 +255,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   produktIconAktiv: { backgroundColor: 'rgba(63,139,255,0.16)' },
-  produktIconText: { fontSize: 22 },
   produktTitelBlock: { flex: 1 },
   produktName: { fontSize: D.font.md, fontWeight: D.font.bold, color: D.color.ink, lineHeight: 20 },
   produktHersteller: { fontSize: D.font.sm, color: D.color.inkSecondary, marginTop: 2 },
@@ -276,7 +264,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   auswahlKreisAktiv: { backgroundColor: D.color.accent, borderColor: D.color.accent },
-  auswahlCheck: { color: '#fff', fontSize: 12, fontWeight: D.font.heavy },
   himiRow: { flexDirection: 'row', gap: 6, marginBottom: 8 },
   himiLabel: { fontSize: 11, color: D.color.inkTertiary, fontWeight: D.font.semibold },
   himiWert: { fontSize: 11, color: D.color.inkSecondary, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
@@ -297,15 +284,18 @@ const styles = StyleSheet.create({
   eigenanteilWert: { fontSize: D.font.xl, fontWeight: D.font.heavy, color: D.color.ink },
   eigenanteilWertAktiv: { color: D.color.accent },
   lieferzeitChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: D.color.bgSoft, paddingHorizontal: 10, paddingVertical: 6,
     borderRadius: 8, borderWidth: 1, borderColor: D.color.glassBorder,
   },
   lieferzeitText: { fontSize: 11, color: D.color.inkSecondary, fontWeight: D.font.medium },
   hinweisBox: {
+    flexDirection: 'row', gap: 10,
     backgroundColor: D.color.accentLight, borderRadius: D.radius.md,
     padding: 14, borderWidth: 1, borderColor: 'rgba(63,139,255,0.15)',
   },
-  hinweisText: { fontSize: D.font.sm, color: D.color.inkSecondary, lineHeight: 19 },
+  hinweisIcon: { marginTop: 2 },
+  hinweisText: { flex: 1, fontSize: D.font.sm, color: D.color.inkSecondary, lineHeight: 19 },
   footer: {
     backgroundColor: D.color.bgSoft, borderTopWidth: 0.5,
     borderTopColor: D.color.glassBorder, padding: 16, gap: 8,

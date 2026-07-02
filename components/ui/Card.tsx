@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, type ViewProps } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { D, neutral, shadows } from '@sanime/design-system';
 
 interface CardProps extends ViewProps {
   padding?: number;
@@ -9,7 +9,7 @@ interface CardProps extends ViewProps {
 
 export function Card({ padding = 16, shadow = true, style, children, ...rest }: CardProps) {
   return (
-    <View style={[styles.card, shadow && styles.shadow, { padding }, style]} {...rest}>
+    <View style={[styles.card, shadow && shadows.low, { padding }, style]} {...rest}>
       {children}
     </View>
   );
@@ -17,16 +17,9 @@ export function Card({ padding = 16, shadow = true, style, children, ...rest }: 
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
+    backgroundColor: neutral.surface,
+    borderRadius: D.radius.md,
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  shadow: {
-    shadowColor: Colors.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    borderColor: neutral.border,
   },
 });

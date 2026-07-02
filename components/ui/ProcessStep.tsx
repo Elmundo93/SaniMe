@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -7,7 +8,7 @@ import Animated, {
   withSpring,
   FadeInDown,
 } from 'react-native-reanimated';
-import { D } from '../../constants/design';
+import { D } from '@sanime/design-system';
 
 export type StepStatus = 'done' | 'active' | 'pending';
 
@@ -68,7 +69,7 @@ export function ProcessStep({ label, status, isLast = false, index, datum }: Pro
           ]}
         >
           {status === 'done' && (
-            <Text style={styles.check}>✓</Text>
+            <Feather name="check" size={11} color="#fff" />
           )}
           {status === 'active' && (
             <View style={[styles.activeDot, { backgroundColor: D.color.accent }]} />
@@ -137,11 +138,6 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 3.5,
-  },
-  check: {
-    fontSize: 10,
-    color: '#fff',
-    fontWeight: '700',
   },
   line: {
     width: 1.5,

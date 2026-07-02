@@ -2,17 +2,18 @@ import React from 'react';
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
   TouchableOpacity,
-  StatusBar,
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Feather } from '@expo/vector-icons';
 import { GlassCard } from '../../components/ui/GlassCard';
+import { Screen } from '../../components/ui/Screen';
+import { ScrollContainer } from '../../components/ui/ScrollContainer';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { DatenFeld, DatenFeldGruppenTitel } from '../../components/onboarding/DatenFeld';
 import { StepCounter } from '../../components/onboarding/StepCounter';
 import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
@@ -20,7 +21,7 @@ import { hatPflichtfelderRezept } from '../../store/onboardingMachine';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
-import { D } from '../../constants/design';
+import { D } from '@sanime/design-system';
 import type { OcrResult } from '../../types';
 
 export default function ReviewScreen() {
@@ -74,34 +75,27 @@ export default function ReviewScreen() {
   };
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="dark-content" />
-
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+    <Screen edges={['top', 'bottom']}>
         {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleZurück} hitSlop={12} style={styles.zurückBtn} accessibilityLabel="Zurück">
-            <Text style={styles.zurückIcon}>←</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitel}>Daten prüfen</Text>
-          <StepCounter
-            aktuellerSchritt={STATUS_META.REZEPT_PRUEFUNG.schritt}
-            gesamtSchritte={11}
-            variant="light"
-            label={`${STATUS_META.REZEPT_PRUEFUNG.schritt}/11`}
-          />
-        </View>
+        <ScreenHeader
+          title="Daten prüfen"
+          onBack={handleZurück}
+          right={
+            <StepCounter
+              aktuellerSchritt={STATUS_META.REZEPT_PRUEFUNG.schritt}
+              gesamtSchritte={11}
+              variant="light"
+              label={`${STATUS_META.REZEPT_PRUEFUNG.schritt}/11`}
+            />
+          }
+        />
 
-        <ScrollView
-          style={{ flex: 1 }}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
+        <ScrollContainer contentContainerStyle={styles.scrollContent}>
           {/* Erfolgs-Banner */}
           <Animated.View entering={FadeInDown.delay(60).springify().damping(18)}>
             <View style={styles.successBanner}>
               <View style={styles.successIcon}>
-                <Text style={styles.successEmoji}>✓</Text>
+                <Feather name="check" size={16} color="#fff" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.successTitel}>Rezept erkannt</Text>
@@ -176,15 +170,16 @@ export default function ReviewScreen() {
 
           <Animated.View entering={FadeInDown.delay(320).springify()}>
             <TouchableOpacity onPress={handleNeuScannen} style={styles.neuScannenBtn} accessibilityRole="button">
-              <Text style={styles.neuScannenText}>📷  Rezept erneut scannen</Text>
+              <Feather name="camera" size={16} color={D.color.accent} />
+              <Text style={styles.neuScannenText}>Rezept erneut scannen</Text>
             </TouchableOpacity>
           </Animated.View>
 
           <View style={{ height: 100 }} />
-        </ScrollView>
+        </ScrollContainer>
 
         {/* Sticky Footer */}
-        <SafeAreaView edges={['bottom']} style={styles.footer}>
+        <View style={styles.footer}>
           <TouchableOpacity
             style={[styles.button, !vollständig && styles.buttonDisabled]}
             onPress={handleWeiter}
@@ -203,27 +198,12 @@ export default function ReviewScreen() {
               {vollständig ? 'Weiter' : 'Bitte alle Pflichtfelder ausfüllen'}
             </Text>
           </TouchableOpacity>
-        </SafeAreaView>
-      </SafeAreaView>
-    </View>
+        </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: D.color.bg },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 0.5,
-    borderBottomColor: D.color.glassBorder,
-    gap: 12,
-    backgroundColor: D.color.bgSoft,
-  },
-  zurückBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  zurückIcon: { fontSize: 22, color: D.color.accent },
-  headerTitel: { flex: 1, fontSize: D.font.lg, fontWeight: D.font.bold, color: D.color.ink, textAlign: 'center' },
   scrollContent: { padding: 16, gap: 12, paddingBottom: 20 },
   successBanner: {
     flexDirection: 'row',
@@ -241,14 +221,13 @@ const styles = StyleSheet.create({
     backgroundColor: D.color.success,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  successEmoji: { color: '#fff', fontSize: 16, fontWeight: D.font.heavy },
   successTitel: { fontSize: D.font.md, fontWeight: D.font.bold, color: D.color.success },
   successText: { fontSize: D.font.sm, color: D.color.inkSecondary, marginTop: 2 },
   legendeRow: { flexDirection: 'row', gap: 12, marginLeft: 'auto' },
   legendeItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   legendeDot: { width: 7, height: 7, borderRadius: 3.5 },
   legendeText: { fontSize: 11, color: D.color.inkSecondary, fontWeight: D.font.medium },
-  neuScannenBtn: { alignItems: 'center', paddingVertical: 14, minHeight: 44, justifyContent: 'center' },
+  neuScannenBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, minHeight: 44 },
   neuScannenText: { fontSize: D.font.md, color: D.color.accent, fontWeight: D.font.semibold },
   footer: {
     backgroundColor: D.color.bgSoft,

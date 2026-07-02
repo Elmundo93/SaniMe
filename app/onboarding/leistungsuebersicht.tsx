@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -12,19 +11,23 @@ import Animated, {
   FadeIn,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { D } from '../../constants/design';
+import { Feather } from '@expo/vector-icons';
+import { D } from '@sanime/design-system';
 import { useOnboardingStore } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { Checkbox } from '../../components/ui/Checkbox';
+import { BackLink } from '../../components/ui/BackLink';
+import { Screen } from '../../components/ui/Screen';
+import { ScrollContainer } from '../../components/ui/ScrollContainer';
 import { AGB_VERSION, DATENSCHUTZ_VERSION } from '../../constants/legal';
 
-const PROZESS_SCHRITTE = [
-  { emoji: '📋', label: 'Rezept fotografieren' },
-  { emoji: '🏥', label: 'Krankenkassenkarte fotografieren' },
-  { emoji: '♿', label: 'Versorgung auswählen' },
-  { emoji: '📅', label: 'Termin vereinbaren' },
-  { emoji: '📦', label: 'Status verfolgen' },
+const PROZESS_SCHRITTE: { icon: React.ComponentProps<typeof Feather>['name']; label: string }[] = [
+  { icon: 'camera', label: 'Rezept fotografieren' },
+  { icon: 'shield', label: 'Krankenkassenkarte fotografieren' },
+  { icon: 'activity', label: 'Versorgung auswählen' },
+  { icon: 'calendar', label: 'Termin vereinbaren' },
+  { icon: 'package', label: 'Status verfolgen' },
 ];
 
 function ProzessVisual() {
@@ -38,7 +41,7 @@ function ProzessVisual() {
           style={styles.prozessRow}
         >
           <View style={styles.prozessIcon}>
-            <Text style={styles.prozessEmoji}>{schritt.emoji}</Text>
+            <Feather name={schritt.icon} size={16} color={D.color.gradientMid} />
           </View>
           <Text style={styles.prozessLabel}>{schritt.label}</Text>
           {i < PROZESS_SCHRITTE.length - 1 && <View style={styles.prozessLinie} />}
@@ -72,7 +75,7 @@ function SuccessRing() {
       <Animated.View style={[styles.outerRing, ring1Style]} />
       <Animated.View style={[styles.centerCircle, checkStyle]}>
         <LinearGradient colors={['rgba(52,199,89,0.3)', 'rgba(52,199,89,0.15)']} style={StyleSheet.absoluteFill} />
-        <Text style={styles.checkMark}>✓</Text>
+        <Feather name="check" size={32} color={D.color.success} />
       </Animated.View>
     </View>
   );
@@ -113,20 +116,14 @@ export default function LeistungsuebersichtScreen() {
   const weiterLabel = substep < 2 ? 'Weiter' : 'Weiter';
 
   return (
-    <View style={styles.container}>
-      <LinearGradient colors={[D.color.dark, '#0A1630', '#0D1E3A']} style={StyleSheet.absoluteFill} />
-
-      <SafeAreaView style={styles.safeArea}>
+    <Screen
+      backgroundColor={D.color.dark}
+      statusBarStyle="light-content"
+      edges={['top', 'bottom']}
+      background={<LinearGradient colors={[D.color.dark, '#0A1630', '#0D1E3A']} style={StyleSheet.absoluteFill} />}
+    >
         <View style={styles.header}>
-          <TouchableOpacity
-            onPress={handleZurück}
-            hitSlop={12}
-            style={styles.zurückBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Zurück"
-          >
-            <Text style={styles.zurückText}>← Zurück</Text>
-          </TouchableOpacity>
+          <BackLink onPress={handleZurück} variant="dark" />
           <View style={styles.dots}>
             {[0, 1, 2].map((i) => (
               <View key={i} style={[styles.dot, i === substep && styles.dotActive]} />
@@ -134,7 +131,7 @@ export default function LeistungsuebersichtScreen() {
           </View>
         </View>
 
-        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+        <ScrollContainer contentContainerStyle={styles.content}>
           {substep === 0 && (
             <Animated.View key="substep-0" entering={FadeIn.duration(300)} style={styles.substep}>
               <View style={styles.visualArea}>
@@ -195,7 +192,7 @@ export default function LeistungsuebersichtScreen() {
           )}
 
           <View style={{ height: 100 }} />
-        </ScrollView>
+        </ScrollContainer>
 
         <View style={styles.footer}>
           <TouchableOpacity
@@ -215,14 +212,11 @@ export default function LeistungsuebersichtScreen() {
             <Text style={[styles.buttonLabel, !weiterAktiv && styles.buttonLabelDisabled]}>{weiterLabel}</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: D.color.dark },
-  safeArea: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -230,8 +224,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 12,
   },
-  zurückBtn: { minHeight: 44, justifyContent: 'center' },
-  zurückText: { fontSize: D.font.md, color: D.color.gradientMid, fontWeight: D.font.semibold },
   dots: { flexDirection: 'row', gap: 8 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.2)' },
   dotActive: { width: 20, backgroundColor: D.color.gradientMid },
@@ -254,7 +246,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(63,139,255,0.15)',
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  prozessEmoji: { fontSize: 18 },
   prozessLabel: { flex: 1, fontSize: D.font.md, fontWeight: D.font.medium, color: D.color.inkInverted },
   prozessLinie: { display: 'none' },
   ringContainer: { width: 160, height: 160, alignItems: 'center', justifyContent: 'center' },
@@ -267,7 +258,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
     borderWidth: 2, borderColor: 'rgba(52,199,89,0.5)',
   },
-  checkMark: { fontSize: 38, color: D.color.success, fontWeight: D.font.heavy, lineHeight: 44 },
   textBlock: { gap: 12 },
   headline: {
     fontSize: D.font.xxl + 4,

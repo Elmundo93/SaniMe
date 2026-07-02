@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { GlassCard } from '../../components/ui/GlassCard';
 import { StepCounter } from '../../components/onboarding/StepCounter';
+import { Screen } from '../../components/ui/Screen';
+import { ScrollContainer } from '../../components/ui/ScrollContainer';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { Checkbox } from '../../components/ui/Checkbox';
+import { Section } from '../../components/ui/Section';
 import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
-import { D } from '../../constants/design';
+import { D } from '@sanime/design-system';
 
 function SectionRow({ label, wert }: { label: string; wert: string }) {
   return (
@@ -19,34 +21,6 @@ function SectionRow({ label, wert }: { label: string; wert: string }) {
       <Text style={styles.rowLabel}>{label}</Text>
       <Text style={styles.rowWert}>{wert}</Text>
     </View>
-  );
-}
-
-function Section({
-  titel,
-  bearbeitenRoute,
-  children,
-}: {
-  titel: string;
-  bearbeitenRoute: string;
-  children: React.ReactNode;
-}) {
-  const router = useRouter();
-  return (
-    <GlassCard padding={16} radius={D.radius.md}>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitel}>{titel}</Text>
-        <TouchableOpacity
-          onPress={() => router.push(bearbeitenRoute as any)}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={`${titel} bearbeiten`}
-        >
-          <Text style={styles.bearbeitenLink}>Bearbeiten</Text>
-        </TouchableOpacity>
-      </View>
-      {children}
-    </GlassCard>
   );
 }
 
@@ -89,25 +63,23 @@ export default function ZusammenfassungScreen() {
   };
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="dark-content" />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleZurück} hitSlop={12} style={styles.zurückBtn} accessibilityLabel="Zurück">
-            <Text style={styles.zurückIcon}>←</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitel}>Zusammenfassung</Text>
-          <StepCounter
-            aktuellerSchritt={STATUS_META.ZUSAMMENFASSUNG.schritt}
-            gesamtSchritte={11}
-            variant="light"
-            label={`${STATUS_META.ZUSAMMENFASSUNG.schritt}/11`}
-          />
-        </View>
+    <Screen edges={['top', 'bottom']}>
+        <ScreenHeader
+          title="Zusammenfassung"
+          onBack={handleZurück}
+          right={
+            <StepCounter
+              aktuellerSchritt={STATUS_META.ZUSAMMENFASSUNG.schritt}
+              gesamtSchritte={11}
+              variant="light"
+              label={`${STATUS_META.ZUSAMMENFASSUNG.schritt}/11`}
+            />
+          }
+        />
 
-        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <ScrollContainer contentContainerStyle={styles.scrollContent}>
           <Animated.View entering={FadeInDown.delay(60).springify().damping(18)}>
-            <Section titel="Person & Krankenkasse" bearbeitenRoute="/scan/datenpruefung">
+            <Section titel="Person & Krankenkasse" aktionLabel="Bearbeiten" onAktion={() => router.push('/scan/datenpruefung' as any)} padding={16}>
               <SectionRow label="Name" wert={ocr.patient.name} />
               <SectionRow label="Krankenkasse" wert={ocr.krankenkasse.name} />
               <SectionRow label="Versichertennummer" wert={ocr.krankenkasse.versichertenNr} />
@@ -115,14 +87,14 @@ export default function ZusammenfassungScreen() {
           </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(120).springify().damping(18)}>
-            <Section titel="Rezept" bearbeitenRoute="/scan/datenpruefung">
+            <Section titel="Rezept" aktionLabel="Bearbeiten" onAktion={() => router.push('/scan/datenpruefung' as any)} padding={16}>
               <SectionRow label="Diagnose" wert={ocr.diagnose} />
               <SectionRow label="Hilfsmittel" wert={ocr.hilfsmittel} />
             </Section>
           </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(180).springify().damping(18)}>
-            <Section titel="Versorgung" bearbeitenRoute="/scan/versorgungen">
+            <Section titel="Versorgung" aktionLabel="Bearbeiten" onAktion={() => router.push('/scan/versorgungen' as any)} padding={16}>
               <SectionRow label="Produkt" wert={produkt.name} />
               <SectionRow label="Hersteller" wert={produkt.hersteller} />
               <SectionRow label="Lieferzeit" wert={produkt.lieferzeit} />
@@ -130,7 +102,7 @@ export default function ZusammenfassungScreen() {
           </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(240).springify().damping(18)}>
-            <Section titel="Termin" bearbeitenRoute="/scan/termin">
+            <Section titel="Termin" aktionLabel="Bearbeiten" onAktion={() => router.push('/scan/termin' as any)} padding={16}>
               <SectionRow label="Wann" wert={terminText} />
               <SectionRow label="Wo" wert={termin.ort} />
             </Section>
@@ -152,9 +124,9 @@ export default function ZusammenfassungScreen() {
           </Animated.View>
 
           <View style={{ height: 100 }} />
-        </ScrollView>
+        </ScrollContainer>
 
-        <SafeAreaView edges={['bottom']} style={styles.footer}>
+        <View style={styles.footer}>
           <TouchableOpacity
             style={[styles.button, !bestätigt && styles.buttonDisabled]}
             onPress={handleWeiter}
@@ -174,27 +146,13 @@ export default function ZusammenfassungScreen() {
             )}
             <Text style={[styles.buttonLabel, !bestätigt && styles.buttonLabelDisabled]}>Weiter zum Checkout</Text>
           </TouchableOpacity>
-        </SafeAreaView>
-      </SafeAreaView>
-    </View>
+        </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: D.color.bg },
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 0.5, borderBottomColor: D.color.glassBorder,
-    gap: 12, backgroundColor: D.color.bgSoft,
-  },
-  zurückBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  zurückIcon: { fontSize: 22, color: D.color.accent },
-  headerTitel: { flex: 1, fontSize: D.font.lg, fontWeight: D.font.bold, color: D.color.ink, textAlign: 'center' },
   scrollContent: { padding: 16, gap: 12, paddingBottom: 20 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  sectionTitel: { fontSize: D.font.sm, fontWeight: D.font.bold, color: D.color.inkTertiary, textTransform: 'uppercase', letterSpacing: 0.6 },
-  bearbeitenLink: { fontSize: D.font.sm, color: D.color.accent, fontWeight: D.font.semibold },
   row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, gap: 12 },
   rowLabel: { fontSize: D.font.sm, color: D.color.inkSecondary, flexShrink: 0 },
   rowWert: { fontSize: D.font.sm, color: D.color.ink, fontWeight: D.font.medium, flex: 1, textAlign: 'right' },

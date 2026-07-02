@@ -1,7 +1,30 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { D } from '../../constants/design';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSpring,
+  FadeInDown,
+} from 'react-native-reanimated';
+import { D } from '@sanime/design-system';
 import type { TimelineEvent } from '../../types';
+
+function PulsRing() {
+  const pulse = useSharedValue(1);
+
+  useEffect(() => {
+    pulse.value = withRepeat(withSpring(1.6, D.spring.breath), -1, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const style = useAnimatedStyle(() => ({
+    transform: [{ scale: pulse.value }],
+    opacity: (1.6 - pulse.value) / 0.6 * 0.35,
+  }));
+
+  return <Animated.View style={[styles.pulsRing, style]} />;
+}
 
 interface StatusTimelineProps {
   events: TimelineEvent[];
@@ -26,8 +49,13 @@ export function StatusTimeline({ events }: StatusTimelineProps) {
         const isActive = !event.abgeschlossen && index > 0 && events[index - 1]?.abgeschlossen;
 
         return (
-          <View key={event.id} style={styles.row}>
+          <Animated.View
+            key={event.id}
+            entering={FadeInDown.delay(index * 80).springify().damping(18)}
+            style={styles.row}
+          >
             <View style={styles.lineContainer}>
+              {isActive && <PulsRing />}
               <View
                 style={[
                   styles.dot,
@@ -57,7 +85,7 @@ export function StatusTimeline({ events }: StatusTimelineProps) {
                 <Text style={[styles.zeitpunkt, styles.ausstehend]}>Ausstehend</Text>
               )}
             </View>
-          </View>
+          </Animated.View>
         );
       })}
     </View>
@@ -76,6 +104,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: 16,
   },
+  pulsRing: {
+    position: 'absolute',
+    top: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: D.color.accent,
+    zIndex: 0,
+  },
   dot: {
     width: 12,
     height: 12,
@@ -83,6 +120,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(63,139,255,0.2)',
     backgroundColor: D.color.bg,
+    zIndex: 1,
   },
   dotDone: {
     backgroundColor: D.color.success,

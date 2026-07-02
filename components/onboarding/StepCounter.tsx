@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { D } from '../../constants/design';
+import { D } from '@sanime/design-system';
 
 interface StepCounterProps {
   aktuellerSchritt: number;

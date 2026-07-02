@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
-import { D } from '../../constants/design';
+import { Feather } from '@expo/vector-icons';
+import { D } from '@sanime/design-system';
 import type { ConfidenceLevel } from '../../types';
 
 interface DatenFeldProps {
@@ -48,9 +49,12 @@ export function DatenFeld({ label, wert, confidence, onEdit }: DatenFeldProps) {
         >
           <Text style={styles.feldWert}>{wertLokal || '—'}</Text>
           {zeigeWarnung && (
-            <Text style={[styles.feldHinweis, { color: konfidenzFarbe }]}>
-              {confidence === 'medium' ? '⚠ Bitte prüfen — KI unsicher' : '⚠ Bitte korrigieren — nicht lesbar'}
-            </Text>
+            <View style={styles.feldHinweisRow}>
+              <Feather name="alert-circle" size={11} color={konfidenzFarbe} />
+              <Text style={[styles.feldHinweis, { color: konfidenzFarbe }]}>
+                {confidence === 'medium' ? 'Bitte prüfen — KI unsicher' : 'Bitte korrigieren — nicht lesbar'}
+              </Text>
+            </View>
           )}
           {onEdit && !zeigeWarnung && <Text style={styles.feldBearbeitenHint}>Antippen zum Bearbeiten</Text>}
         </TouchableOpacity>
@@ -75,7 +79,8 @@ const styles = StyleSheet.create({
   feldLabel: { fontSize: 11, color: D.color.inkTertiary, fontWeight: D.font.semibold, letterSpacing: 0.3 },
   confidenceDot: { width: 7, height: 7, borderRadius: 3.5 },
   feldWert: { fontSize: D.font.md, color: D.color.ink, fontWeight: D.font.medium },
-  feldHinweis: { fontSize: 11, marginTop: 3, fontWeight: D.font.semibold },
+  feldHinweisRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+  feldHinweis: { fontSize: 11, fontWeight: D.font.semibold },
   feldBearbeitenHint: { fontSize: 10, color: D.color.inkTertiary, marginTop: 2 },
   feldInput: {
     fontSize: D.font.md, color: D.color.ink, fontWeight: D.font.medium,

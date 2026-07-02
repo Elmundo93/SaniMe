@@ -12,7 +12,7 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../store/authStore';
 import { useOnboardingStore, STATUS_META } from '../store/onboardingStore';
-import { D } from '../constants/design';
+import { D } from '@sanime/design-system';
 
 function SplashView() {
   const logoScale = useSharedValue(0.6);

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, type ViewStyle } from 'react-native';
-import { Colors } from '../../constants/colors';
+import { D } from '@sanime/design-system';
 
 interface SectionHeaderProps {
   titel: string;
@@ -32,11 +32,11 @@ const styles = StyleSheet.create({
   titel: {
     fontSize: 18,
     fontWeight: '700',
-    color: Colors.ink,
+    color: D.color.ink,
   },
   aktion: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.primary,
+    color: D.color.accent,
   },
 });

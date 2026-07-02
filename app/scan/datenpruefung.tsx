@@ -1,10 +1,12 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, StatusBar, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GlassCard } from '../../components/ui/GlassCard';
+import { Screen } from '../../components/ui/Screen';
+import { ScrollContainer } from '../../components/ui/ScrollContainer';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { DatenFeld, DatenFeldGruppenTitel } from '../../components/onboarding/DatenFeld';
 import { StepCounter } from '../../components/onboarding/StepCounter';
 import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
@@ -12,7 +14,7 @@ import { hatPflichtfelderKomplett } from '../../store/onboardingMachine';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
-import { D } from '../../constants/design';
+import { D } from '@sanime/design-system';
 import type { OcrResult } from '../../types';
 
 export default function DatenpruefungScreen() {
@@ -51,23 +53,21 @@ export default function DatenpruefungScreen() {
   };
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="dark-content" />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleZurück} hitSlop={12} style={styles.zurückBtn} accessibilityLabel="Zurück">
-            <Text style={styles.zurückIcon}>←</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitel}>Daten prüfen</Text>
-          <StepCounter
-            aktuellerSchritt={STATUS_META.DATENPRUEFUNG.schritt}
-            gesamtSchritte={11}
-            variant="light"
-            label={`${STATUS_META.DATENPRUEFUNG.schritt}/11`}
-          />
-        </View>
+    <Screen edges={['top', 'bottom']}>
+        <ScreenHeader
+          title="Daten prüfen"
+          onBack={handleZurück}
+          right={
+            <StepCounter
+              aktuellerSchritt={STATUS_META.DATENPRUEFUNG.schritt}
+              gesamtSchritte={11}
+              variant="light"
+              label={`${STATUS_META.DATENPRUEFUNG.schritt}/11`}
+            />
+          }
+        />
 
-        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <ScrollContainer contentContainerStyle={styles.scrollContent}>
           <Animated.View entering={FadeInDown.delay(40).springify()}>
             <Text style={styles.hinweis}>
               Hier siehst du alle erkannten Daten auf einen Blick. Du kannst jedes Feld antippen und korrigieren.
@@ -129,9 +129,9 @@ export default function DatenpruefungScreen() {
           </Animated.View>
 
           <View style={{ height: 100 }} />
-        </ScrollView>
+        </ScrollContainer>
 
-        <SafeAreaView edges={['bottom']} style={styles.footer}>
+        <View style={styles.footer}>
           <TouchableOpacity
             style={[styles.button, !vollständig && styles.buttonDisabled]}
             onPress={handleWeiter}
@@ -150,23 +150,12 @@ export default function DatenpruefungScreen() {
               {vollständig ? 'Weiter zur Versorgungsauswahl' : 'Bitte alle Pflichtfelder ausfüllen'}
             </Text>
           </TouchableOpacity>
-        </SafeAreaView>
-      </SafeAreaView>
-    </View>
+        </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: D.color.bg },
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 0.5, borderBottomColor: D.color.glassBorder,
-    gap: 12, backgroundColor: D.color.bgSoft,
-  },
-  zurückBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  zurückIcon: { fontSize: 22, color: D.color.accent },
-  headerTitel: { flex: 1, fontSize: D.font.lg, fontWeight: D.font.bold, color: D.color.ink, textAlign: 'center' },
   scrollContent: { padding: 16, gap: 12, paddingBottom: 20 },
   hinweis: { fontSize: D.font.sm, color: D.color.inkSecondary, lineHeight: 19, paddingHorizontal: 4 },
   footer: {

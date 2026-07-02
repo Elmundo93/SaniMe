@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { D } from '../../constants/design';
+import { Feather } from '@expo/vector-icons';
+import { D } from '@sanime/design-system';
 
 interface MiniKalenderProps {
   onAuswahl: (datum: Date) => void;
@@ -48,7 +49,7 @@ export function MiniKalender({ onAuswahl, ausgewähltesDatum }: MiniKalenderProp
           accessibilityRole="button"
           accessibilityLabel="Vorheriger Monat"
         >
-          <Text style={[styles.monatsBtnText, monatsOffset === 0 && styles.monatsBtnDisabled]}>‹</Text>
+          <Feather name="chevron-left" size={20} color={monatsOffset === 0 ? D.color.inkTertiary : D.color.accent} />
         </TouchableOpacity>
         <Text style={styles.monatsTitel}>
           {MONATSNAMEN[anzeigeMonat.getMonth()]} {anzeigeMonat.getFullYear()}
@@ -61,7 +62,7 @@ export function MiniKalender({ onAuswahl, ausgewähltesDatum }: MiniKalenderProp
           accessibilityRole="button"
           accessibilityLabel="Nächster Monat"
         >
-          <Text style={[styles.monatsBtnText, monatsOffset === 2 && styles.monatsBtnDisabled]}>›</Text>
+          <Feather name="chevron-right" size={20} color={monatsOffset === 2 ? D.color.inkTertiary : D.color.accent} />
         </TouchableOpacity>
       </View>
 
@@ -106,8 +107,6 @@ const styles = StyleSheet.create({
   root: { gap: 10 },
   monatsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   monatsBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
-  monatsBtnText: { fontSize: 22, color: D.color.accent, fontWeight: D.font.bold },
-  monatsBtnDisabled: { color: D.color.inkTertiary },
   monatsTitel: { fontSize: D.font.md, fontWeight: D.font.bold, color: D.color.ink },
   wochentageRow: { flexDirection: 'row' },
   wochentagText: { width: CELL, textAlign: 'center', fontSize: 11, color: D.color.inkTertiary, fontWeight: D.font.semibold },

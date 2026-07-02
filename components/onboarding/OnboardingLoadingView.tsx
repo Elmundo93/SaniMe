@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { D } from '../../constants/design';
+import { D } from '@sanime/design-system';
 
 // Wird gezeigt, während useOnboardingGuard die Session hydriert oder einen
 // Fehlnavigations-Redirect ausführt — verhindert einen weißen/falschen Flash

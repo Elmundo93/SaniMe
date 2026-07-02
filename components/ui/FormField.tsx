@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TextInput, StyleSheet, type KeyboardTypeOptions } from 'react-native';
-import { D } from '../../constants/design';
+import { D } from '@sanime/design-system';
 
 interface FormFieldProps {
   label: string;

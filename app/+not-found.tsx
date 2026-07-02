@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Link } from 'expo-router';
-import { Colors } from '../constants/colors';
+import { D } from '@sanime/design-system';
 
 export default function NotFound() {
   return (
@@ -19,17 +19,17 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.background,
+    backgroundColor: D.color.bg,
     padding: 24,
   },
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: Colors.ink,
+    color: D.color.ink,
     marginBottom: 16,
   },
   link: {
-    color: Colors.primary,
+    color: D.color.accent,
     fontSize: 16,
   },
 });

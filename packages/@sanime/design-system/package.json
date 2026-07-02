@@ -1,0 +1,13 @@
+{
+  "name": "@sanime/design-system",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "types": "index.ts",
+  "sideEffects": false,
+  "peerDependencies": {
+    "react-native": "0.81.5",
+    "react-native-reanimated": "~4.1.1",
+    "expo-haptics": "~15.0.8"
+  }
+}

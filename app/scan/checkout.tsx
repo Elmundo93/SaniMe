@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { FormField } from '../../components/ui/FormField';
+import { Screen } from '../../components/ui/Screen';
+import { ScrollContainer } from '../../components/ui/ScrollContainer';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { BackLink } from '../../components/ui/BackLink';
 import { StepCounter } from '../../components/onboarding/StepCounter';
 import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
@@ -13,7 +16,7 @@ import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoa
 import { useOtpVerification } from '../../hooks/useOtpVerification';
 import { useAuthStore } from '../../store/authStore';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
-import { D } from '../../constants/design';
+import { D } from '@sanime/design-system';
 
 type CheckoutSubstep = 'kontakt' | 'otp' | 'zahlung';
 
@@ -102,21 +105,20 @@ export default function CheckoutScreen() {
   };
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="dark-content" />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={styles.header}>
-          <View style={{ width: 44 }} />
-          <Text style={styles.headerTitel}>Checkout</Text>
-          <StepCounter
-            aktuellerSchritt={STATUS_META.CHECKOUT.schritt}
-            gesamtSchritte={11}
-            variant="light"
-            label={`${STATUS_META.CHECKOUT.schritt}/11`}
-          />
-        </View>
+    <Screen>
+        <ScreenHeader
+          title="Checkout"
+          right={
+            <StepCounter
+              aktuellerSchritt={STATUS_META.CHECKOUT.schritt}
+              gesamtSchritte={11}
+              variant="light"
+              label={`${STATUS_META.CHECKOUT.schritt}/11`}
+            />
+          }
+        />
 
-        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <ScrollContainer contentContainerStyle={styles.scrollContent}>
           {substep === 'kontakt' && (
             <Animated.View entering={FadeInDown.duration(300)} style={{ gap: 20 }}>
               <Text style={styles.headline}>Wie erreichen{'\n'}wir dich?</Text>
@@ -147,9 +149,7 @@ export default function CheckoutScreen() {
 
           {substep === 'otp' && (
             <Animated.View entering={FadeInDown.duration(300)} style={{ gap: 20 }}>
-              <TouchableOpacity onPress={() => setSubstep('kontakt')} hitSlop={12} accessibilityLabel="Zurück zur Eingabe">
-                <Text style={styles.zurückLink}>← Zurück</Text>
-              </TouchableOpacity>
+              <BackLink onPress={() => setSubstep('kontakt')} accessibilityLabel="Zurück zur Eingabe" />
               <Text style={styles.headline}>Code{'\n'}bestätigen.</Text>
               <Text style={styles.sub}>
                 Wir haben einen Code an {otpFlow.kontakt} gesendet.
@@ -208,28 +208,18 @@ export default function CheckoutScreen() {
           )}
 
           <View style={{ height: 60 }} />
-        </ScrollView>
-      </SafeAreaView>
-    </View>
+        </ScrollContainer>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: D.color.bg },
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 0.5, borderBottomColor: D.color.glassBorder,
-    gap: 12, backgroundColor: D.color.bgSoft,
-  },
-  headerTitel: { flex: 1, fontSize: D.font.lg, fontWeight: D.font.bold, color: D.color.ink, textAlign: 'center' },
   scrollContent: { padding: 20 },
   headline: {
     fontSize: D.font.xxl + 4, fontWeight: D.font.heavy, color: D.color.ink,
     letterSpacing: -0.8, lineHeight: (D.font.xxl + 4) * 1.1,
   },
   sub: { fontSize: D.font.md, color: D.color.inkSecondary, lineHeight: 22 },
-  zurückLink: { fontSize: D.font.md, color: D.color.accent, fontWeight: D.font.semibold },
   button: {
     height: 56, borderRadius: D.radius.lg,
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',

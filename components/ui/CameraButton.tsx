@@ -11,14 +11,14 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useBreathing } from '../../hooks/useBreathing';
-import { D } from '../../constants/design';
+import { D } from '@sanime/design-system';
 
 interface CameraButtonProps {
   onPress: () => void;
   size?: number;
 }
 
-export function CameraButton({ onPress, size = 74 }: CameraButtonProps) {
+export function CameraButton({ onPress, size = 72 }: CameraButtonProps) {
   const breathe = useBreathing(1.0, 1.055);
   const pressScale = useSharedValue(1);
   const glowOpacity = useSharedValue(0.3);

@@ -1,8 +1,20 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import type { OrderStatus } from '../../types';
-import { StatusColors } from '../../constants/colors';
+import { D, semantic } from '@sanime/design-system';
 import { StatusLabel } from '../../constants/labels';
+
+const STATUS_COLORS: Record<OrderStatus, { text: string; bg: string }> = {
+  PENDING_PRESCRIPTION: { text: semantic.warning, bg: semantic.warningLight },
+  PENDING_REVIEW: { text: semantic.warning, bg: semantic.warningLight },
+  PENDING_INSURANCE: { text: semantic.info, bg: semantic.infoLight },
+  APPROVED: { text: semantic.success, bg: semantic.successLight },
+  PROCESSING: { text: semantic.info, bg: semantic.infoLight },
+  SHIPPED: { text: semantic.info, bg: semantic.infoLight },
+  DELIVERED: { text: semantic.success, bg: semantic.successLight },
+  CANCELLED: { text: D.color.inkTertiary, bg: D.color.bg },
+  REJECTED: { text: semantic.critical, bg: semantic.criticalLight },
+};
 
 interface StatusBadgeProps {
   status: OrderStatus;
@@ -10,7 +22,7 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, klein = false }: StatusBadgeProps) {
-  const farben = StatusColors[status] ?? { text: '#475569', bg: '#F0F4F8' };
+  const farben = STATUS_COLORS[status] ?? { text: D.color.inkTertiary, bg: D.color.bg };
   const label = StatusLabel[status] ?? status;
 
   return (

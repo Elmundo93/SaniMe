@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -18,8 +17,10 @@ import Animated, {
   SharedValue,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { D } from '../../constants/design';
+import { Feather } from '@expo/vector-icons';
+import { D } from '@sanime/design-system';
 import { useOnboardingStore } from '../../store/onboardingStore';
+import { Screen } from '../../components/ui/Screen';
 
 // Einzelnes Partikel-Element
 function Particle({
@@ -107,21 +108,27 @@ export default function OnboardingScreen1() {
   }));
 
   return (
-    <View style={styles.container}>
-      <LinearGradient
-        colors={[D.color.dark, '#0A1630', '#0D1E3A']}
-        style={StyleSheet.absoluteFill}
-      />
-
-      {/* Subtiler blauer Glow im Hintergrund */}
-      <View style={styles.glowCircle} pointerEvents="none">
-        <LinearGradient
-          colors={['rgba(91,174,255,0.22)', 'transparent']}
-          style={StyleSheet.absoluteFill}
-        />
-      </View>
-
-      <SafeAreaView style={styles.safeArea}>
+    <Screen
+      backgroundColor={D.color.dark}
+      statusBarStyle="light-content"
+      edges={['top', 'bottom']}
+      background={
+        <>
+          <LinearGradient
+            colors={[D.color.dark, '#0A1630', '#0D1E3A']}
+            style={StyleSheet.absoluteFill}
+          />
+          {/* Subtiler blauer Glow im Hintergrund */}
+          <View style={styles.glowCircle} pointerEvents="none">
+            <LinearGradient
+              colors={['rgba(91,174,255,0.22)', 'transparent']}
+              style={StyleSheet.absoluteFill}
+            />
+          </View>
+        </>
+      }
+    >
+      <View style={styles.safeArea}>
         {/* Visual-Bereich: Partikel + Dokument + Logo */}
         <View style={styles.visualArea}>
           {/* Partikel */}
@@ -138,7 +145,7 @@ export default function OnboardingScreen1() {
                 colors={['rgba(255,255,255,0.09)', 'rgba(255,255,255,0.03)']}
                 style={StyleSheet.absoluteFill}
               />
-              <Text style={styles.docIcon}>📋</Text>
+              <Feather name="file-text" size={28} color="rgba(255,255,255,0.85)" />
               <View style={styles.docLines}>
                 <View style={styles.docLine} />
                 <View style={[styles.docLine, { width: '70%' }]} />
@@ -195,16 +202,12 @@ export default function OnboardingScreen1() {
             <Text style={styles.buttonLabel}>Weiter</Text>
           </TouchableOpacity>
         </Animated.View>
-      </SafeAreaView>
-    </View>
+      </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: D.color.dark,
-  },
   glowCircle: {
     position: 'absolute',
     top: -100, left: '50%', marginLeft: -200,
@@ -243,9 +246,6 @@ const styles = StyleSheet.create({
     borderColor: D.color.darkBorder,
     backgroundColor: D.color.darkCard,
     gap: 12,
-  },
-  docIcon: {
-    fontSize: 44,
   },
   docLines: {
     width: '72%',
