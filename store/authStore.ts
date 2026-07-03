@@ -13,12 +13,13 @@ interface AuthState {
   isLoading: boolean;
 
   setBenutzer: (benutzer: Benutzer, token: string) => Promise<void>;
+  aktualisiereBenutzer: (patch: Partial<Benutzer>) => Promise<void>;
   abmelden: () => Promise<void>;
   onboardingAbschliessen: () => Promise<void>;
   laden: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   benutzer: null,
   token: null,
   onboardingAbgeschlossen: false,
@@ -32,6 +33,18 @@ export const useAuthStore = create<AuthState>((set) => ({
       if (__DEV__) console.warn('[authStore] Konnte Token/Benutzer nicht sicher speichern', e);
     }
     set({ benutzer, token });
+  },
+
+  aktualisiereBenutzer: async (patch) => {
+    const aktuell = get().benutzer;
+    if (!aktuell) return;
+    const merged = { ...aktuell, ...patch };
+    try {
+      await setSecureJSON(BENUTZER_KEY, merged);
+    } catch (e) {
+      if (__DEV__) console.warn('[authStore] Konnte Benutzer nicht sicher speichern', e);
+    }
+    set({ benutzer: merged });
   },
 
   abmelden: async () => {

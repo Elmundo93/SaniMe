@@ -15,6 +15,9 @@ import { Section } from '../../../components/ui/Section';
 import { HeroGlow } from '../../../components/ui/HeroGlow';
 import { Screen } from '../../../components/ui/Screen';
 import { ScrollContainer } from '../../../components/ui/ScrollContainer';
+import { ProfilFeld } from '../../../components/settings/ProfilFeld';
+import { VollstaendigkeitsBadge, vollstaendigkeitsLabel } from '../../../components/settings/VollstaendigkeitsBadge';
+import { berechneProfilVollstaendigkeit } from '../../../lib/vollstaendigkeit';
 import { useAuthStore } from '../../../store/authStore';
 import { D, durations } from '@sanime/design-system';
 
@@ -28,7 +31,7 @@ interface SettingsItem {
 
 function SettingsGruppe({ titel, items }: { titel: string; items: SettingsItem[] }) {
   return (
-    <Section titel={titel}>
+    <Section titel={titel} collapsible>
       {items.map((item, i) => (
         <TouchableOpacity
           key={item.label}
@@ -64,6 +67,11 @@ export default function EinstellungenScreen() {
   const router = useRouter();
   const benutzer = useAuthStore((s) => s.benutzer);
   const abmelden = useAuthStore((s) => s.abmelden);
+  const aktualisiereBenutzer = useAuthStore((s) => s.aktualisiereBenutzer);
+
+  const { profil, krankenkasse, lieferung } = berechneProfilVollstaendigkeit(benutzer);
+
+  const bearbeitenOnEdit = (feld: (wert: string) => void) => (benutzer ? feld : undefined);
 
   const handleAbmelden = () => {
     Alert.alert('Abmelden', 'Möchten Sie sich wirklich abmelden?', [
@@ -125,35 +133,115 @@ export default function EinstellungenScreen() {
             </GlassCard>
           </Animated.View>
 
+          {/* Profil */}
           <Animated.View entering={FadeInDown.delay(140).springify().damping(18)}>
-            <SettingsGruppe
+            <Section
               titel="Profil"
-              items={[
-                { icon: 'user', label: 'Name', wert: `${benutzer?.vorname ?? ''} ${benutzer?.nachname ?? ''}`.trim() || '—' },
-                { icon: 'phone', label: 'Telefon', wert: benutzer?.telefon ?? '—', onPress: () => {} },
-                { icon: 'mail', label: 'E-Mail', wert: benutzer?.email ?? 'Nicht hinterlegt', onPress: () => {} },
-              ]}
-            />
+              collapsible
+              headerRight={<VollstaendigkeitsBadge fehlend={profil} />}
+              headerAccessibilityLabel={`Profil, ${vollstaendigkeitsLabel(profil)}`}
+            >
+              <ProfilFeld
+                label="Vorname"
+                wert={benutzer?.vorname ?? ''}
+                ausgefuellt={Boolean(benutzer?.vorname)}
+                onEdit={bearbeitenOnEdit((wert) => aktualisiereBenutzer({ vorname: wert }))}
+              />
+              <ProfilFeld
+                label="Nachname"
+                wert={benutzer?.nachname ?? ''}
+                ausgefuellt={Boolean(benutzer?.nachname)}
+                onEdit={bearbeitenOnEdit((wert) => aktualisiereBenutzer({ nachname: wert }))}
+              />
+              <ProfilFeld
+                label="Telefon"
+                wert={benutzer?.telefon ?? ''}
+                ausgefuellt={Boolean(benutzer?.telefon)}
+                keyboardType="phone-pad"
+                onEdit={bearbeitenOnEdit((wert) => aktualisiereBenutzer({ telefon: wert }))}
+              />
+              <ProfilFeld
+                label="E-Mail"
+                wert={benutzer?.email ?? ''}
+                ausgefuellt={Boolean(benutzer?.email)}
+                keyboardType="email-address"
+                onEdit={bearbeitenOnEdit((wert) => aktualisiereBenutzer({ email: wert }))}
+              />
+            </Section>
           </Animated.View>
 
+          {/* Krankenkasse */}
           <Animated.View entering={FadeInDown.delay(190).springify().damping(18)}>
-            <SettingsGruppe
+            <Section
               titel="Krankenkasse"
-              items={[
-                { icon: 'shield', label: 'Krankenkasse', wert: benutzer?.krankenkasse ?? '—', onPress: () => {} },
-                { icon: 'credit-card', label: 'Versichertennummer', wert: benutzer?.versichertenNr ?? '—', onPress: () => {} },
-              ]}
-            />
+              collapsible
+              headerRight={<VollstaendigkeitsBadge fehlend={krankenkasse} />}
+              headerAccessibilityLabel={`Krankenkasse, ${vollstaendigkeitsLabel(krankenkasse)}`}
+            >
+              <ProfilFeld
+                label="Krankenkasse"
+                wert={benutzer?.krankenkasse ?? ''}
+                ausgefuellt={Boolean(benutzer?.krankenkasse)}
+                onEdit={bearbeitenOnEdit((wert) => aktualisiereBenutzer({ krankenkasse: wert }))}
+              />
+              <ProfilFeld
+                label="Versichertennummer"
+                wert={benutzer?.versichertenNr ?? ''}
+                ausgefuellt={Boolean(benutzer?.versichertenNr)}
+                onEdit={bearbeitenOnEdit((wert) => aktualisiereBenutzer({ versichertenNr: wert }))}
+              />
+            </Section>
           </Animated.View>
 
+          {/* Lieferung */}
           <Animated.View entering={FadeInDown.delay(240).springify().damping(18)}>
-            <SettingsGruppe
+            <Section
               titel="Lieferung"
-              items={[
-                { icon: 'map-pin', label: 'Lieferadresse', onPress: () => {} },
-                { icon: 'file-text', label: 'Rechnungsadresse', onPress: () => {} },
-              ]}
-            />
+              collapsible
+              headerRight={<VollstaendigkeitsBadge fehlend={lieferung} />}
+              headerAccessibilityLabel={`Lieferung, ${vollstaendigkeitsLabel(lieferung)}`}
+            >
+              <ProfilFeld
+                label="Straße & Hausnummer"
+                wert={benutzer?.lieferadresse?.strasse ?? ''}
+                ausgefuellt={Boolean(benutzer?.lieferadresse?.strasse)}
+                onEdit={bearbeitenOnEdit((wert) =>
+                  aktualisiereBenutzer({
+                    lieferadresse: { ...(benutzer?.lieferadresse ?? { strasse: '', plz: '', ort: '' }), strasse: wert },
+                  }),
+                )}
+              />
+              <ProfilFeld
+                label="PLZ"
+                wert={benutzer?.lieferadresse?.plz ?? ''}
+                ausgefuellt={Boolean(benutzer?.lieferadresse?.plz)}
+                keyboardType="numeric"
+                onEdit={bearbeitenOnEdit((wert) =>
+                  aktualisiereBenutzer({
+                    lieferadresse: { ...(benutzer?.lieferadresse ?? { strasse: '', plz: '', ort: '' }), plz: wert },
+                  }),
+                )}
+              />
+              <ProfilFeld
+                label="Ort"
+                wert={benutzer?.lieferadresse?.ort ?? ''}
+                ausgefuellt={Boolean(benutzer?.lieferadresse?.ort)}
+                onEdit={bearbeitenOnEdit((wert) =>
+                  aktualisiereBenutzer({
+                    lieferadresse: { ...(benutzer?.lieferadresse ?? { strasse: '', plz: '', ort: '' }), ort: wert },
+                  }),
+                )}
+              />
+              <TouchableOpacity onPress={() => {}} style={styles.item} accessibilityLabel="Rechnungsadresse" activeOpacity={0.6}>
+                <View style={styles.itemIconWrap}>
+                  <Feather name="file-text" size={18} color={D.color.inkSecondary} />
+                </View>
+                <View style={styles.itemBody}>
+                  <Text style={styles.itemLabel}>Rechnungsadresse</Text>
+                </View>
+                <Feather name="chevron-right" size={20} color={D.color.inkTertiary} />
+              </TouchableOpacity>
+            </Section>
           </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(290).springify().damping(18)}>
@@ -201,12 +289,21 @@ export default function EinstellungenScreen() {
 
           {benutzer && (
             <Animated.View entering={FadeInDown.delay(490).springify().damping(18)}>
-              <SettingsGruppe
-                titel="Account"
-                items={[
-                  { icon: 'log-out', label: 'Abmelden', onPress: handleAbmelden, gefährlich: true },
-                ]}
-              />
+              <Section titel="Account">
+                <TouchableOpacity
+                  onPress={handleAbmelden}
+                  style={styles.item}
+                  accessibilityLabel="Abmelden"
+                  activeOpacity={0.6}
+                >
+                  <View style={styles.itemIconWrap}>
+                    <Feather name="log-out" size={18} color={D.color.error} />
+                  </View>
+                  <View style={styles.itemBody}>
+                    <Text style={[styles.itemLabel, styles.itemDanger]}>Abmelden</Text>
+                  </View>
+                </TouchableOpacity>
+              </Section>
             </Animated.View>
           )}
 

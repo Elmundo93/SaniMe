@@ -21,6 +21,8 @@ Phase 1 – UX Finalisierung
 
 Status: höchste Priorität
 
+> **Umsetzungsstatus (2026-07-03):** ⚠️ Teilweise. Dashboard ist versorgungszentriert umgebaut (`app/(app)/dashboard/index.tsx`: Header + Offene Aufgaben + Versorgungskarten), FAB mit Glow/Haptics/Hero-Animation existiert (`components/ui/CameraButton.tsx`), Navigation ist exakt 3 Tabs (`app/(app)/_layout.tsx`s `PremiumTabBar`). Leere Zustände: nur ein ad-hoc Empty-State im Dashboard, keine wiederverwendbare `EmptyState`/`ErrorState`-Komponente. Fehlerzustände (kein Internet, Upload fehlgeschlagen, OCR fehlgeschlagen, Kamera verweigert, Krankenkasse unbekannt) sind **nicht** als systematische UI-Zustände umgesetzt.
+
 Diese Phase entscheidet darüber, wie professionell sich SaniMe anfühlt.
 
 ⸻
@@ -166,6 +168,8 @@ Alle mit klarer Handlungsempfehlung.
 
 Phase 2 – Scan-Prozess perfektionieren
 
+> **Umsetzungsstatus:** ⚠️ Teilweise, aktiv in Arbeit (aktuell uncommitted). Echte On-Device-OCR (`lib/ocr/`) ist geschrieben und in `app/scan/rezept.tsx`/`krankenkasse.tsx` verdrahtet — ersetzt die frühere Mock-OCR aus `lib/mockOcr.ts`. Details/Abweichungen siehe `work/Ocrintegration.md`, insbesondere: keine Kantenerkennung/Perspektivkorrektur/Unschärfeerkennung (bewusst für v1 ausgelassen). Die Plausibilitätsprüfung nach dem Scan existiert über `hatPflichtfelderRezept`/`hatPflichtfelderKomplett` in `store/onboardingMachine.ts`.
+
 Hier entsteht der eigentliche Mehrwert.
 
 ⸻
@@ -219,6 +223,8 @@ gezielte Rückfrage.
 ⸻
 
 Phase 3 – Produktkatalog
+
+> **Umsetzungsstatus:** ❌ Nicht begonnen. `lib/mockOcr.ts`s `MOCK_PRODUKTE` enthält aktuell nur 3 Produkte, alle in der Kategorie "Rollstuhl" — keine der 12 hier vorgeschlagenen Kategorien oder der 10 Platzhalter-Hersteller sind abgebildet. Per CLAUDE.md ausdrücklich als Platzhalter markiert (keine echten Hersteller-/Preis-/Hilfsmittelnummer-Daten verwenden) — Erweiterung braucht zusätzlich eine Datenquelle/-lizenzierung, ist also nicht rein durch Engineering lösbar.
 
 Der Katalog ist das Herzstück.
 
@@ -294,6 +300,8 @@ Damit kann die gesamte Software bereits produktionsnah entwickelt werden.
 
 Phase 4 – Admin Dashboard
 
+> **Umsetzungsstatus:** ❌ Nicht begonnen. Kein Backend-Repository/keine Admin-Route existiert — dieses Repo enthält ausschließlich die Mobile-App, alle Daten sind in Zustand-Stores gemockt (siehe CLAUDE.md). Strukturell blockiert, bis ein Backend existiert; keine Engineering-Aufgabe in diesem Repo.
+
 Das Backend wird vollständig workfloworientiert.
 
 ⸻
@@ -364,6 +372,8 @@ Rechnung erzeugen
 
 Phase 5 – Automatisierung
 
+> **Umsetzungsstatus:** ❌ Nicht begonnen (ebenfalls Backend-abhängig). Der clientseitige Teil des OCR-Workflows (Scan → OCR → Vorschlag) existiert bereits (siehe Phase 2), aber Dokumentengenerierung, automatische Statusänderungen/Push und Erinnerungen brauchen serverseitige Logik, die in diesem Repo nicht existiert.
+
 Jetzt beginnt die eigentliche Zeitersparnis.
 
 ⸻
@@ -423,6 +433,8 @@ Hilfsmittel austauschen
 ⸻
 
 Phase 6 – Profil
+
+> **Umsetzungsstatus:** ⚠️ Teilweise, aktiv in Arbeit (aktuell uncommitted). `app/(app)/einstellungen/index.tsx` macht Vorname/Nachname/Telefon/E-Mail, Krankenkasse/Versichertennummer und Lieferadresse (Straße/PLZ/Ort) editierbar, mit Vollständigkeits-Badges (`lib/vollstaendigkeit.ts`, `components/settings/`). Geburtsdatum, Hausarzt, Rechnungsadresse und Zweitadresse fehlen als editierbare Felder (Rechnungsadresse ist ein UI-Stub mit leerem `onPress`). Dokumente-Sektion (Rezepte/Genehmigungen/Rechnungen) und Datenschutz-Aktionen (Export/Löschen) sind ebenfalls UI-Stubs bzw. lösen nur eine lokale Alert-Bestätigung ohne echte Backend-Anbindung aus.
 
 Profil vollständig ausbauen.
 
@@ -486,6 +498,8 @@ Löschen
 
 Phase 7 – Design Polish
 
+> **Umsetzungsstatus (korrigiert 2026-07-03):** ⚠️ Deutlich weiter als zunächst eingeschätzt, aber nicht vollständig. Design-Tokens sind vollständig migriert (`packages/@sanime/design-system`), dazu kommen konsolidierte Header (`ScreenHeader`/`CameraOverlayHeader`/`BackLink`, in 9+2+3 Screens verdrahtet), ein einheitliches Glass-System mit `tier`-gesteuerter Reflection (`GlassCard`), ein konsolidierter `HeroGlow`-Hintergrund (3 Screens) und ein vollständig auf Feather vereinheitlichtes Icon-System — siehe `work/Designplan.md` für den Volldetails-Stand (Phasen 1, 3, 4, 6, 7 dort). Weiterhin nicht vorhanden: Shared-Element-Transitions, Card-Expand, Pull-to-Refresh (`RefreshControl`/`onRefresh` kommt im gesamten Code nicht vor) und Skeleton-Loader (kein Treffer für "Skeleton" im Code) — echte Lücken, keine Fehleinschätzung.
+
 Jetzt entsteht Apple-Niveau.
 
 ⸻
@@ -530,6 +544,8 @@ Einheitliches Spacing-System
 
 Phase 8 – Performance
 
+> **Umsetzungsstatus:** ❌ Nicht begonnen. Keine `NetInfo`-, `FlashList`-, Prefetch-, Image-/Memory-Cache-, Offline-Cache- oder Background-Sync-Nutzung irgendwo im Code gefunden.
+
 Optimierungen
 
 Lazy Loading
@@ -550,6 +566,8 @@ Background Sync
 
 Phase 9 – Sicherheit
 
+> **Umsetzungsstatus:** ⚠️ Teilweise. `lib/secureStorage.ts` wrapped `expo-secure-store` für sensible Felder (Commit `92256cd` "Harden storage for sensitive data"), `store/authStore.ts`s `aktualisiereBenutzer` nutzt das bereits (`setSecureJSON`). Keine Audit-Logs (kein Treffer für "audit" im Code), keine Dokumentenverschlüsselung über SecureStore hinaus, kein explizites Session-Management. DSGVO-Texte selbst sind Platzhalter (`constants/legal.ts`).
+
 DSGVO
 
 Verschlüsselung
@@ -565,6 +583,8 @@ Berechtigungen
 ⸻
 
 Phase 10 – Monitoring
+
+> **Umsetzungsstatus:** ❌ Nicht begonnen. Kein Sentry oder anderes Crash-/Performance-Reporting im Code oder in `package.json`s Dependencies.
 
 Sentry
 
@@ -583,6 +603,8 @@ Push Zustellung
 ⸻
 
 Phase 11 – Qualitätssicherung
+
+> **Umsetzungsstatus:** ⚠️ Teilweise, gerade erst begonnen (aktuell uncommitted). `jest.config.js` + `jest-expo`-Preset und 5 Unit-Test-Dateien unter `lib/ocr/*.test.ts` existieren jetzt. Keine Integration-, E2E-, Accessibility-, Dark-Mode-, Offline- oder Gerätetests. Insbesondere `store/onboardingMachine.ts` (die pure State-Machine-Logik) hat noch keine eigenen Tests, obwohl sie sich dafür am besten eignet.
 
 Automatisierte Tests
 
@@ -603,6 +625,8 @@ Gerätetests
 ⸻
 
 Phase 12 – Produktionsvorbereitung
+
+> **Umsetzungsstatus:** ❌ Nicht begonnen. Diese Phase ist praktisch vollständig Nicht-Code-Arbeit (Präqualifikation, Krankenkassenverträge, Hersteller-Anbindung, DSGVO-Texte final, App-Store-Metadaten, Backups) — sie liegt außerhalb dessen, was Engineering in diesem Repo lösen kann, und braucht einen eigenen Produkt-/Geschäfts-Zeitplan parallel zur technischen Arbeit.
 
 Operativ
 

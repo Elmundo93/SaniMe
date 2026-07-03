@@ -14,6 +14,8 @@ Ein vollständig funktionierender Onboarding-Flow vom ersten App-Start bis zum V
 
 Leitprinzipien
 
+> **Status (2026-07-03):** ✅ Im Kern erfüllt. Die State-Machine-Architektur (`store/onboardingMachine.ts`), Persistenz nach jedem Schritt und Resumability (`store/onboardingStore.ts`, `hooks/useOnboardingGuard.ts`) sind solide umgesetzt. Editierbare OCR-Felder existieren (`components/onboarding/DatenFeld.tsx`). Siehe unten bei "Accessibility" für die eine bekannte Lücke.
+
 Während des gesamten Onboardings gelten folgende Regeln:
 
 * Genau eine Aufgabe pro Bildschirm
@@ -287,6 +289,8 @@ Weiter.
 
 Screen 7 – Versorgungsauswahl
 
+> **Status:** ⚠️ Katalog ist Mock. `lib/mockOcr.ts`s `MOCK_PRODUKTE` enthält 3 Platzhalterprodukte, alle Kategorie "Rollstuhl" — kein Tabs-Aufbau "Empfohlen/Weitere/Gesamter Katalog" wie hier beschrieben. Siehe `work/Finalisationplan.md` Phase 3.
+
 Jetzt startet die eigentliche Versorgung.
 
 Tabs
@@ -417,6 +421,8 @@ Weiter
 
 Screen 10 – Checkout
 
+> **Status:** ⚠️ E-Mail/Telefon-Erfassung an dieser Stelle im Flow ist korrekt umgesetzt (`app/scan/checkout.tsx`, `hooks/useOtpVerification.ts`) und übersprungen für Bestandskunden. Die Zahlung selbst ist ein Mock (`checkout.tsx`s `handleZahlung`, inline `Math.random() > 0.15` + `setTimeout`, Kommentar "In Produktion echter Zahlungsanbieter-Aufruf") — kein echter Zahlungsanbieter angebunden.
+
 Jetzt werden
 
 E-Mail
@@ -533,6 +539,8 @@ Fortsetzen an exakt derselben Stelle
 
 Persistenz
 
+> **Status:** ⚠️ Teilweise. "Nach jedem Schritt speichern" und "lokale Datenbank" sind erfüllt (`store/onboardingStore.ts`s `persistSession()` schreibt bei jedem `dispatch()` in AsyncStorage/SecureStore). Der Backend-Schritt ist noch ein TODO-Kommentar (`persistSession()`: "// In Produktion: zusätzlich Backend-Sync-Aufruf hier") — es gibt kein Backend, in das synchronisiert werden könnte.
+
 Nach jedem Schritt speichern
 
 OnboardingSession
@@ -546,6 +554,8 @@ Niemals erst am Ende.
 ⸻
 
 Accessibility
+
+> **Status:** ⚠️ Nur teilweise erfüllt, obwohl hier als "Pflicht" markiert (deckt sich mit CLAUDE.md's WCAG-2.1-AA-Regel). Nur 7 von 14 Onboarding-/Scan-Screens haben überhaupt `accessibilityLabel`/`accessibilityRole`: `app/onboarding/index.tsx`, `app/scan/rezept.tsx`, `krankenkasse.tsx`, `review.tsx`, `termin.tsx`, `zusammenfassung.tsx`, `checkout.tsx`. Es fehlt komplett auf: `app/onboarding/leistungsuebersicht.tsx` (höchstes Risiko — hier sitzen die AGB-/Datenschutz-Consent-Checkboxen), `app/onboarding/agb.tsx`, `app/onboarding/datenschutz-text.tsx`, `app/scan/datenpruefung.tsx`, `app/scan/versorgungen.tsx`.
 
 Pflicht
 

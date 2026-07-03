@@ -100,6 +100,12 @@ export interface Versorgung {
 
 // ─── Benutzer ────────────────────────────────────────────────────────────────
 
+export interface Adresse {
+  strasse: string; // inkl. Hausnummer, z.B. "Musterstraße 12"
+  plz: string;
+  ort: string;
+}
+
 export interface Benutzer {
   id: string;
   vorname: string;
@@ -108,6 +114,7 @@ export interface Benutzer {
   telefon: string;
   krankenkasse?: string;
   versichertenNr?: string;
+  lieferadresse?: Adresse;
 }
 
 // ─── Onboarding-Session ──────────────────────────────────────────────────────

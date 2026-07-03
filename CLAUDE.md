@@ -23,13 +23,14 @@ npm run ios         # expo run:ios — build & launch native iOS
 npm run android     # expo run:android — build & launch native Android
 npm run lint        # eslint .
 npm run typecheck   # tsc --noEmit
+npm run test        # jest (jest-expo preset) — currently only lib/ocr/*.test.ts
 ```
 
 `npm run lint` requires `.eslintrc.js` (extends `expo`) at the repo root — this file didn't exist before and lint silently failed with no config found; it's checked in now, don't delete it.
 
-There is no test runner configured in this repo (no jest config, no `*.test.*` files, no `test` script). Do not assume Jest is set up — if tests are requested, a test framework needs to be added first.
+Jest is configured (`jest.config.js`, `jest-expo` preset) with a `test` script; run with `npm run test`. Tests are co-located next to source as `*.test.ts` — currently only under `lib/ocr/` (unit tests for the parsers/validators/mapper). No integration/E2E/accessibility test automation exists yet — see "Manual/interactive testing" below for that.
 
-Always run `npm run typecheck` and `npm run lint` after changes — this is currently the only automated *static* verification available. For interactive verification (actually tapping through screens), see "Manual/interactive testing" below.
+Always run `npm run typecheck` and `npm run lint` after changes; also run `npm run test` when touching `lib/ocr/`. This is currently the only automated verification available beyond that one test suite — most of the app has no automated coverage. For interactive verification (actually tapping through screens), see "Manual/interactive testing" below.
 
 ## Architecture
 
@@ -72,7 +73,8 @@ Four independent Zustand stores; `onboardingStore` is allowed to call into `auth
 **Types (`types/index.ts`)**: single source of truth for domain types — `OrderStatus`, OCR result/confidence shapes, `Produkt`, `Versorgung`/`TimelineEvent`/`OffeneAktion`, `Benutzer`, plus the onboarding-session types added alongside them: `OnboardingStatus`, `OnboardingSession`, `Einwilligung`/`OnboardingConsent` (versioned/timestamped consent records — `ipAdresse` field exists but is only ever backend-set, never client-side), `TerminSlot`, `CustomerContact`. Extend here rather than declaring ad-hoc shapes in components; the transition table/reducer logic itself belongs in `store/onboardingMachine.ts`, not here.
 
 **`lib/`**: pure helpers with no React dependency —
-- `mockOcr.ts` — `simuliereRezeptOcr()`/`simuliereKrankenkasseOcr()` (mock OCR, 2.2s/1.5s fake delays) + `MOCK_PRODUKTE`. This is the injection point for a real OCR/catalog API.
+- `ocr/` — real, on-device OCR (`erkenneRezept()`/`erkenneKrankenkasse()`, plus `detector.ts`, `processor.ts`, `engine.ts`, `rezeptParser.ts`, `egkParser.ts`, `validatoren.ts`, `mapper.ts`), wired into `app/scan/rezept.tsx`/`krankenkasse.tsx` as a drop-in replacement for the former mock functions. Runs entirely on-device via `expo-text-extractor`; throws `FalschesDokumentError` when the photographed document doesn't match the expected type. `processor.ts`'s `normalisiereBild()` deliberately does *not* do perspective correction/denoise/contrast for v1 (EXIF-rotation-baking + downscale only) — see `work/Ocrintegration.md` before treating that as a bug to fix.
+- `mockOcr.ts` — now only supplies `MOCK_PRODUKTE` (the product catalog, still a placeholder). This is the injection point for a real catalog API.
 - `terminplanung.ts` — `generiereTerminVorschlaege(session)`: deterministic business-day appointment-slot generator (parses `Produkt.lieferzeit`, skips weekends); slot IDs are derived from `session.id` so a resumed session shows the *same* 3 slots rather than re-rolling them. Also `terminAusKalenderdatum()` for the manual-calendar path.
 - `analytics.ts` — `trackOnboarding(event)` takes a **closed discriminated union** (`OnboardingAnalyticsEvent`) with no payload slot capable of carrying OCR values, names, or diagnoses — health data is structurally unrepresentable in an event, not merely filtered at runtime. Events fire centrally from `onboardingStore.dispatch()`'s internal mapping, not from individual screens (guarantees exactly one event per real transition, and keeps the entire "no health data in analytics" surface auditable in one file).
 
@@ -80,7 +82,7 @@ Four independent Zustand stores; `onboardingStore` is allowed to call into `auth
 
 **Labels (`constants/labels.ts`)**: German user-facing copy for `OrderStatus` (label + description) plus `StatusSteps`, the canonical ordered subset of statuses used to render timelines. Status display strings belong here, not inline in components.
 
-**Design system (`constants/design.ts`)**: single `D` object (colors, spacing, radii, typography, spring presets) — the app's design tokens. Every onboarding/scan screen and every `components/onboarding/*` component uses `D.*` exclusively. `constants/colors.ts` (`Colors`) is a separate, older token set used only by `components/ui/Button.tsx`/`Card.tsx`/`SectionHeader.tsx`/`StatusBadge.tsx` — the two systems are not unified; new onboarding/scan code should always use `D`, matching its immediate neighboring screens, not `Colors`.
+**Design system (`packages/@sanime/design-system`)**: an internal monorepo package — `colors.ts`, `spacing.ts`, `radius.ts`, `blur.ts`, `glass.ts`, `opacity.ts`, `shadows.ts`, `typography.ts`, `durations.ts`, `springs.ts`, `haptics.ts`, `elevation.ts` — aggregated via its `index.ts` into a `D` object (colors, spacing, radii, typography, spring presets) plus named exports like `durations`. This replaced the former `constants/design.ts`/`constants/colors.ts` split (both files are deleted); `D` is a 1:1-compatible import, so existing call sites didn't need to change shape. Import as `@sanime/design-system`. Every onboarding/scan screen and every `components/onboarding/*`/`components/ui/*` component uses this exclusively now — there is no second/older token system to avoid.
 
 **Naming convention**: this codebase is German-first — identifiers, store fields, and route segments use German terms (`benutzer`, `laden`, `abmelden`, `versorgung`, `zurücksetzen`, `krankenkasse`, `rezept`). Match this convention for new domain code; don't anglicize field names.
 

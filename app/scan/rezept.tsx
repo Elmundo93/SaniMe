@@ -25,7 +25,7 @@ import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoa
 import { LoadingState } from '../../components/ui/LoadingState';
 import { IconButton } from '../../components/ui/IconButton';
 import { CameraOverlayHeader } from '../../components/ui/CameraOverlayHeader';
-import { simuliereRezeptOcr } from '../../lib/mockOcr';
+import { erkenneRezept, FalschesDokumentError } from '../../lib/ocr';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '@sanime/design-system';
 
@@ -57,18 +57,25 @@ export default function RezeptScanScreen() {
   const nachAufnahme = async (uri: string) => {
     setVerarbeitung(true);
     try {
-      const { result, confidence } = await simuliereRezeptOcr();
+      const { result, confidence } = await erkenneRezept(uri);
       const transitionResult = await dispatch({ type: 'REZEPT_OCR_ABGESCHLOSSEN', uri, result, confidence });
       if (transitionResult.ok) {
         router.push(STATUS_META[transitionResult.session.status].route as any);
       } else {
         zeigeDispatchFehler();
       }
-    } catch {
-      Alert.alert(
-        'Rezept konnte nicht erkannt werden',
-        'Wir konnten dein Rezept nicht vollständig auslesen. Bitte überprüfe die Beleuchtung und versuche es erneut.',
-      );
+    } catch (error) {
+      if (error instanceof FalschesDokumentError) {
+        Alert.alert(
+          'Das sieht nicht nach einem Rezept aus',
+          'Bitte fotografiere dein Kassenrezept (Muster 16).',
+        );
+      } else {
+        Alert.alert(
+          'Rezept konnte nicht erkannt werden',
+          'Wir konnten dein Rezept nicht vollständig auslesen. Bitte überprüfe die Beleuchtung und versuche es erneut.',
+        );
+      }
     } finally {
       setVerarbeitung(false);
       setAufgenommen(false);

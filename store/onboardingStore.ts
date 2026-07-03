@@ -184,6 +184,23 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
         },
         `token-${versorgungId}`,
       );
+    } else {
+      // Bestandskunde: nur Lücken aus der aktuellen Session auffüllen, nie bereits
+      // vorhandene (ggf. vom Nutzer im Profil korrigierte) Werte überschreiben.
+      const bestehender = useAuthStore.getState().benutzer!;
+      const patch: Partial<typeof bestehender> = {};
+      if (!bestehender.email && session.customerContact.email) {
+        patch.email = session.customerContact.email;
+      }
+      if (!bestehender.krankenkasse && session.ocrResult?.krankenkasse.name) {
+        patch.krankenkasse = session.ocrResult.krankenkasse.name;
+      }
+      if (!bestehender.versichertenNr && session.ocrResult?.krankenkasse.versichertenNr) {
+        patch.versichertenNr = session.ocrResult.krankenkasse.versichertenNr;
+      }
+      if (Object.keys(patch).length > 0) {
+        await useAuthStore.getState().aktualisiereBenutzer(patch);
+      }
     }
     await useAuthStore.getState().onboardingAbschliessen();
 

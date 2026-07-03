@@ -24,7 +24,8 @@ import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoa
 import { LoadingState } from '../../components/ui/LoadingState';
 import { IconButton } from '../../components/ui/IconButton';
 import { CameraOverlayHeader } from '../../components/ui/CameraOverlayHeader';
-import { simuliereKrankenkasseOcr } from '../../lib/mockOcr';
+import { MOCK_PRODUKTE } from '../../lib/mockOcr';
+import { erkenneKrankenkasse, FalschesDokumentError } from '../../lib/ocr';
 import { sucheKundeImArchiv } from '../../lib/mockKundenArchiv';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { useAuthStore } from '../../store/authStore';
@@ -36,6 +37,21 @@ function zeigeOcrFehler() {
     'Krankenkassenkarte konnte nicht erkannt werden',
     'Wir konnten die Karte nicht vollständig auslesen. Bitte überprüfe die Beleuchtung und versuche es erneut.',
   );
+}
+
+function zeigeFalschesDokumentFehler() {
+  Alert.alert(
+    'Das sieht nicht nach einer Krankenkassenkarte aus',
+    'Bitte fotografiere die Vorderseite deiner elektronischen Gesundheitskarte (eGK).',
+  );
+}
+
+function behandleOcrFehler(error: unknown) {
+  if (error instanceof FalschesDokumentError) {
+    zeigeFalschesDokumentFehler();
+  } else {
+    zeigeOcrFehler();
+  }
 }
 
 const { width, height } = Dimensions.get('window');
@@ -93,8 +109,7 @@ export default function KrankenkasseScreen() {
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setVerarbeitung(true);
-      // Simulierte OCR-Verarbeitung (in Produktion: API-Aufruf)
-      const { krankenkasse, confidence, produkte } = await simuliereKrankenkasseOcr();
+      const { krankenkasse, confidence, produkte } = await erkenneKrankenkasse(foto.uri);
       const result = await dispatch({
         type: 'KRANKENKASSE_OCR_ABGESCHLOSSEN',
         uri: foto.uri,
@@ -111,8 +126,8 @@ export default function KrankenkasseScreen() {
       } else {
         zeigeDispatchFehler();
       }
-    } catch {
-      zeigeOcrFehler();
+    } catch (error) {
+      behandleOcrFehler(error);
     } finally {
       setAufgenommen(false);
       setVerarbeitung(false);
@@ -129,7 +144,7 @@ export default function KrankenkasseScreen() {
 
     setVerarbeitung(true);
     try {
-      const { krankenkasse, confidence, produkte } = await simuliereKrankenkasseOcr();
+      const { krankenkasse, confidence, produkte } = await erkenneKrankenkasse(galerieResult.assets[0].uri);
       const result = await dispatch({
         type: 'KRANKENKASSE_OCR_ABGESCHLOSSEN',
         uri: galerieResult.assets[0].uri,
@@ -146,8 +161,8 @@ export default function KrankenkasseScreen() {
       } else {
         zeigeDispatchFehler();
       }
-    } catch {
-      zeigeOcrFehler();
+    } catch (error) {
+      behandleOcrFehler(error);
     } finally {
       setVerarbeitung(false);
     }
@@ -156,8 +171,7 @@ export default function KrankenkasseScreen() {
   const handleÜberspringen = async () => {
     setVerarbeitung(true);
     try {
-      const { produkte } = await simuliereKrankenkasseOcr();
-      const result = await dispatch({ type: 'KRANKENKASSE_UEBERSPRUNGEN', produkte });
+      const result = await dispatch({ type: 'KRANKENKASSE_UEBERSPRUNGEN', produkte: MOCK_PRODUKTE });
       if (result.ok) {
         router.push(STATUS_META[result.session.status].route as any);
       } else {
