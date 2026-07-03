@@ -17,12 +17,12 @@ import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { DatenFeld, DatenFeldGruppenTitel } from '../../components/onboarding/DatenFeld';
 import { StepCounter } from '../../components/onboarding/StepCounter';
 import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
-import { hatPflichtfelderRezept } from '../../store/onboardingMachine';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '@sanime/design-system';
-import type { OcrResult } from '../../types';
+import { hatPflichtfelderRezept } from '@sanime/domain';
+import type { OcrResult } from '@sanime/domain';
 
 export default function ReviewScreen() {
   const router = useRouter();

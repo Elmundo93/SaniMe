@@ -1,4 +1,4 @@
-import type { ConfidenceLevel } from '../../types';
+import type { ConfidenceLevel } from '@sanime/domain';
 import { pruefeGeburtsdatumPlausibel } from './validatoren';
 import type { FeldResultat, RezeptFelder } from './typen';
 

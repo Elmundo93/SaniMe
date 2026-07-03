@@ -21,7 +21,7 @@ import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoa
 import { StepCounter } from '../../components/onboarding/StepCounter';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '@sanime/design-system';
-import type { Produkt } from '../../types';
+import type { Produkt } from '@sanime/domain';
 
 interface ProduktKarteProps {
   produkt: Produkt;

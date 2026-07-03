@@ -1,4 +1,4 @@
-import type { ConfidenceLevel, OcrConfidence, OcrKrankenkasse, OcrResult, Produkt } from '../../types';
+import type { ConfidenceLevel, OcrConfidence, OcrKrankenkasse, OcrResult, Produkt } from '@sanime/domain';
 import { MOCK_PRODUKTE } from '../mockOcr';
 import { extrahiereText } from './engine';
 import { normalisiereBild } from './processor';

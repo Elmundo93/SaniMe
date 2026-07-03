@@ -1,4 +1,4 @@
-import type { ConfidenceLevel } from '../../types';
+import type { ConfidenceLevel } from '@sanime/domain';
 
 // Interne Zwischen-Repräsentation der Parser-Pipeline — bewusst getrennt von
 // den Domänentypen in types/index.ts, da hier auch Felder ohne eigenes

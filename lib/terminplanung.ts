@@ -1,4 +1,4 @@
-import type { OnboardingSession, TerminSlot } from '../types';
+import type { OnboardingSession, TerminSlot } from '@sanime/domain';
 
 const MOCK_ADRESSE = 'Musterstraße 12, 12345 Berlin';
 

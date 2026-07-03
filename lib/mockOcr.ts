@@ -1,4 +1,4 @@
-import type { ConfidenceLevel, OcrConfidence, OcrKrankenkasse, OcrResult, Produkt } from '../types';
+import type { ConfidenceLevel, OcrConfidence, OcrKrankenkasse, OcrResult, Produkt } from '@sanime/domain';
 
 // Mock-OCR, aufgeteilt auf die beiden Dokumente: Rezeptaufnahme liefert die
 // Rezept-/Patientenfelder, Krankenkassenaufnahme liefert die Kassen-Felder. In

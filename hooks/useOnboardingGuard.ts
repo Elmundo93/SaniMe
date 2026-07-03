@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useOnboardingStore, STATUS_META } from '../store/onboardingStore';
-import type { OnboardingSession, OnboardingStatus } from '../types';
+import type { OnboardingSession, OnboardingStatus } from '@sanime/domain';
 
 export interface OnboardingGuardOptions {
   // Für Screens, die z.B. session.ocrResult! ohne erneute Prüfung lesen: hier

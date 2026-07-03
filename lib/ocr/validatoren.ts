@@ -1,4 +1,4 @@
-import type { ConfidenceLevel } from '../../types';
+import type { ConfidenceLevel } from '@sanime/domain';
 import type { RezeptFelder } from './typen';
 
 // Reine Prüffunktionen — passen nie den Kontrollfluss an, werfen nie. Ein

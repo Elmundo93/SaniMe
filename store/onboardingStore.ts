@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { CustomerContact, OcrResult, OnboardingSession, OnboardingStatus } from '../types';
-import { erstelleLeereSession, transition } from './onboardingMachine';
-import type { OnboardingEvent, TransitionResult } from './onboardingMachine';
+import { erstelleLeereSession, transition } from '@sanime/domain';
+import type { CustomerContact, OcrResult, OnboardingEvent, OnboardingSession, OnboardingStatus, TransitionResult } from '@sanime/domain';
 import { useAuthStore } from './authStore';
 import { useVersorgungStore, baueVersorgungAusSession } from './versorgungStore';
 import { trackOnboarding } from '../lib/analytics';

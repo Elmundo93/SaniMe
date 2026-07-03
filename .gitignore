@@ -3,6 +3,9 @@ node_modules/
 dist/
 ios/
 android/
+.env
+.env.*
+!.env.example
 *.orig.*
 *.jks
 *.p8

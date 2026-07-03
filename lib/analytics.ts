@@ -1,4 +1,4 @@
-import type { OnboardingStatus } from '../types';
+import type { OnboardingStatus } from '@sanime/domain';
 
 // Geschlossene Union ohne Escape-Hatch: es gibt keinen Payload-Slot für OCR-Werte, Namen,
 // Diagnosen oder Versichertennummern — Gesundheitsdaten lassen sich hier gar nicht erst

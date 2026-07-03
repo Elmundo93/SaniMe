@@ -7,7 +7,9 @@ import type {
   OnboardingStatus,
   Produkt,
   TerminSlot,
-} from '../types';
+} from './types';
+import { createWorkflow } from './workflow';
+import type { TransitionRule } from './workflow';
 
 export type OnboardingEvent =
   | { type: 'WEITER' }
@@ -38,13 +40,6 @@ export type TransitionResult =
   | { ok: true; session: OnboardingSession }
   | { ok: false; reason: string };
 
-interface TransitionRule {
-  from: OnboardingStatus;
-  event: OnboardingEvent['type'];
-  to: OnboardingStatus;
-  guard?: (session: OnboardingSession) => boolean;
-}
-
 export function hatPflichtfelderRezept(session: OnboardingSession): boolean {
   const ocr = session.ocrResult;
   if (!ocr) return false;
@@ -62,7 +57,11 @@ export function hatPflichtfelderKomplett(session: OnboardingSession): boolean {
   );
 }
 
-export const TRANSITIONS: TransitionRule[] = [
+export function telefonVerifiziert(session: OnboardingSession): boolean {
+  return session.customerContact.telefonVerifiziert || !session.customerContact.telefon;
+}
+
+export const TRANSITIONS: TransitionRule<OnboardingStatus, OnboardingEvent, OnboardingSession>[] = [
   { from: 'WILLKOMMEN', event: 'WEITER', to: 'LEISTUNGSUEBERSICHT' },
   { from: 'LEISTUNGSUEBERSICHT', event: 'AGB_AKZEPTIERT', to: 'LEISTUNGSUEBERSICHT' },
   { from: 'LEISTUNGSUEBERSICHT', event: 'DATENSCHUTZ_AKZEPTIERT', to: 'LEISTUNGSUEBERSICHT' },
@@ -106,7 +105,7 @@ export const TRANSITIONS: TransitionRule[] = [
     from: 'CHECKOUT',
     event: 'ZAHLUNG_ERFOLGREICH',
     to: 'ABGESCHLOSSEN',
-    guard: (s) => s.customerContact.telefonVerifiziert || !s.customerContact.telefon,
+    guard: telefonVerifiziert,
   },
   { from: 'CHECKOUT', event: 'ZAHLUNG_FEHLGESCHLAGEN', to: 'CHECKOUT_FEHLGESCHLAGEN' },
   { from: 'CHECKOUT_FEHLGESCHLAGEN', event: 'CHECKOUT_ERNEUT_VERSUCHEN', to: 'CHECKOUT' },
@@ -185,19 +184,14 @@ function applyEventData(session: OnboardingSession, event: OnboardingEvent): Onb
   }
 }
 
+export const OnboardingWorkflow = createWorkflow<OnboardingStatus, OnboardingEvent, OnboardingSession>(
+  TRANSITIONS,
+  (session, event) => ({ ...applyEventData(session, event), aktualisiert: new Date().toISOString() }),
+);
+
 export function transition(session: OnboardingSession, event: OnboardingEvent): TransitionResult {
-  const rule = TRANSITIONS.find((r) => r.from === session.status && r.event === event.type);
-  if (!rule) {
-    return { ok: false, reason: `Kein Übergang von ${session.status} mit ${event.type}` };
-  }
-  if (rule.guard && !rule.guard(session)) {
-    return { ok: false, reason: `Vorbedingung für ${event.type} nicht erfüllt` };
-  }
-  const patched = applyEventData(session, event);
-  return {
-    ok: true,
-    session: { ...patched, status: rule.to, aktualisiert: new Date().toISOString() },
-  };
+  const result = OnboardingWorkflow.transition(session, event);
+  return result.ok ? { ok: true, session: result.context } : result;
 }
 
 export function erstelleLeereSession(id: string): OnboardingSession {

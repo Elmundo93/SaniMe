@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { D } from '@sanime/design-system';
-import type { ConfidenceLevel } from '../../types';
+import type { ConfidenceLevel } from '@sanime/domain';
 
 interface DatenFeldProps {
   label: string;

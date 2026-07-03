@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { OnboardingSession, Versorgung } from '../types';
+import type { Versorgung } from '../types';
+import type { OnboardingSession } from '@sanime/domain';
 
 // Mock-Daten für die Entwicklung — auch von lib/mockKundenArchiv.ts als Bestandskunden-
 // Historie wiederverwendet, statt sie dort ein zweites Mal zu pflegen.

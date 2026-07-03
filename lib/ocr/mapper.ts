@@ -1,4 +1,4 @@
-import type { ConfidenceLevel, OcrConfidence, OcrKrankenkasse, OcrResult } from '../../types';
+import type { ConfidenceLevel, OcrConfidence, OcrKrankenkasse, OcrResult } from '@sanime/domain';
 import type { EgkFelder, RezeptFelder } from './typen';
 
 const RANG: Record<ConfidenceLevel, number> = { low: 0, medium: 1, high: 2 };

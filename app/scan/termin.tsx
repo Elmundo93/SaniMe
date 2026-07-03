@@ -17,7 +17,7 @@ import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoa
 import { generiereTerminVorschlaege, terminAusKalenderdatum } from '../../lib/terminplanung';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '@sanime/design-system';
-import type { TerminSlot } from '../../types';
+import type { TerminSlot } from '@sanime/domain';
 
 function formatTermin(slot: TerminSlot) {
   const beginn = new Date(slot.beginn);
