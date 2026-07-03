@@ -10,10 +10,11 @@ import {
   type OnboardingStatus,
 } from '@sanime/domain';
 import type { TenantContext } from '../../common/repository/tenant-context';
+import { AuditService } from '../audit/audit.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { SupplyOrderService } from '../supply-order/supply-order.service';
 import { VERIFICATION_PROVIDER, type VerificationProvider } from '../verification/ports/verification-provider.port';
-import { ConsentsRepository } from './consents.repository';
+import { ConsentsRepository } from '../consents/consents.repository';
 import { toOcrConfidence, toOcrResult, toProdukt } from './onboarding-session.mapper';
 import { OnboardingSessionsRepository } from './onboarding-sessions.repository';
 import { InsurancePoliciesRepository } from '../health-data/insurance-policies.repository';
@@ -31,6 +32,7 @@ export class OnboardingService {
     private readonly insurancePolicies: InsurancePoliciesRepository,
     private readonly catalog: CatalogService,
     private readonly supplyOrder: SupplyOrderService,
+    private readonly auditService: AuditService,
     @Inject(VERIFICATION_PROVIDER) private readonly verification: VerificationProvider,
   ) {}
 
@@ -55,6 +57,14 @@ export class OnboardingService {
         throw new BadRequestException('Kein Bestätigungscode angegeben');
       }
       const valid = await this.verification.verifyCode(row.contactPhone, VERIFICATION_PURPOSE, extra.otpCode);
+      await this.auditService.record({
+        tenant,
+        actorType: 'customer',
+        actorId: row.customerId ?? row.id,
+        eventType: valid ? 'OtpVerified' : 'OtpVerificationFailed',
+        resourceType: 'onboarding_session',
+        resourceId: row.id,
+      });
       if (!valid) {
         throw new BadRequestException('Bestätigungscode ist ungültig oder abgelaufen');
       }
@@ -153,10 +163,10 @@ export class OnboardingService {
   ): Promise<void> {
     switch (event.type) {
       case 'AGB_AKZEPTIERT':
-        await this.consents.upsert(tenant, row.id, 'agb', event.version, ipAddress);
+        await this.consents.record(tenant, row.id, 'agb', event.version, ipAddress);
         return;
       case 'DATENSCHUTZ_AKZEPTIERT':
-        await this.consents.upsert(tenant, row.id, 'datenschutz', event.version, ipAddress);
+        await this.consents.record(tenant, row.id, 'datenschutz', event.version, ipAddress);
         return;
       case 'REZEPT_OCR_ABGESCHLOSSEN': {
         const created = await this.ocrResults.create(tenant, {
@@ -247,8 +257,8 @@ export class OnboardingService {
 
   private async hydrate(tenant: TenantContext, row: OnboardingSessionRow): Promise<OnboardingSession> {
     const [agb, datenschutz] = await Promise.all([
-      this.consents.findOne(tenant, row.id, 'agb'),
-      this.consents.findOne(tenant, row.id, 'datenschutz'),
+      this.consents.findLatest(tenant, row.id, 'agb'),
+      this.consents.findLatest(tenant, row.id, 'datenschutz'),
     ]);
     const ocrRow = row.ocrResultId ? await this.ocrResults.findById(tenant, row.ocrResultId) : null;
     const policy = ocrRow ? await this.insurancePolicies.findBySubject(tenant, 'onboarding_session', row.id) : null;

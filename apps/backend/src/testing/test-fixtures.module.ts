@@ -1,15 +1,14 @@
 import { Module } from '@nestjs/common';
-import { AuthModule } from '../modules/auth/auth.module';
-import { AuditFixtureController } from './audit-fixture.controller';
-import { AuditFixtureRepository } from './audit-fixture.repository';
 import { IdempotencyFixtureController } from './idempotency-fixture.controller';
 
 // TEMPORARY — only imported into AppModule when NODE_ENV !== 'production'
-// (see app.module.ts). Delete this whole module once Layer 2 provides real
-// endpoints to exercise the audit/idempotency mechanisms end-to-end instead.
+// (see app.module.ts). The audit-fixture half of this module was retired in
+// Layer 4 (Compliance) once real @AuditRead()-decorated endpoints existed
+// (GET /supplies, /orders/:id, /admin/orders(/:id), /admin/inbox,
+// /documents/:id) — see supply-order/documents/admin controllers. Delete the
+// rest of this module once Layer 2's real mutating endpoints (already live)
+// make IdempotencyFixtureController redundant too.
 @Module({
-  imports: [AuthModule],
-  controllers: [AuditFixtureController, IdempotencyFixtureController],
-  providers: [AuditFixtureRepository],
+  controllers: [IdempotencyFixtureController],
 })
 export class TestFixturesModule {}

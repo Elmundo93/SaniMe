@@ -13,6 +13,8 @@ import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { CustomerModule } from './modules/customer/customer.module';
+import { DataExportModule } from './modules/data-export/data-export.module';
+import { DeletionRequestsModule } from './modules/deletion-requests/deletion-requests.module';
 import { DocumentModule } from './modules/document/document.module';
 import { HealthDataModule } from './modules/health-data/health-data.module';
 import { HealthModule } from './modules/health/health.module';
@@ -21,6 +23,7 @@ import { JobQueueModule } from './modules/job-queue/job-queue.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { OnboardingModule } from './modules/onboarding/onboarding.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
+import { RetentionModule } from './modules/retention/retention.module';
 import { SupplyOrderModule } from './modules/supply-order/supply-order.module';
 import { TestFixturesModule } from './testing/test-fixtures.module';
 
@@ -48,6 +51,9 @@ const devOnlyModules = process.env.NODE_ENV !== 'production' ? [TestFixturesModu
     OnboardingModule,
     AppointmentModule,
     AdminModule,
+    DataExportModule,
+    DeletionRequestsModule,
+    RetentionModule,
     ...devOnlyModules,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],

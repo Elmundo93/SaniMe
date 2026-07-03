@@ -3,3 +3,4 @@ export * from './workflow';
 export * from './onboarding';
 export * from './supply';
 export * from './calendar';
+export * from './deletion-request';

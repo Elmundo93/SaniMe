@@ -22,6 +22,10 @@ export const documents = pgTable('documents', {
   status: text('status').notNull().default('pending_upload'), // one of DOCUMENT_STATUSES
   currentVersionId: uuid('current_version_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  // Set by DeletionExecutor once the underlying storage object is deleted —
+  // the row itself is retained (order/supply history may still reference it
+  // for billing-audit reasons), only the scanned image is erased.
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
 });
 
 // No public URLs are ever persisted here — storageKey is an internal object

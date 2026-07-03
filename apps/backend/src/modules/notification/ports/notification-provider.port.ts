@@ -6,6 +6,10 @@ export interface NotificationMessage {
   channel: NotificationChannel;
   target: string;
   title: string;
+  // Free text — its key name never matches scrub()'s denylist (only key
+  // names are matched, not content), so it must never carry health-data-
+  // shaped content (diagnoses, insurance numbers, etc.), only generic
+  // copy (e.g. "Dein Termin am ... steht bevor."). Layer 4.
   body: string;
 }
 

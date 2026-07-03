@@ -35,6 +35,10 @@ import { CustomerSessionStrategy } from './strategies/customer-session.strategy'
     OnboardingSessionsRepository,
     { provide: CUSTOMER_SESSION_SECRET_PORT, useClass: CustomerSessionSecretAdapter },
   ],
-  exports: [AdminJwtAuthGuard, CustomerSessionAuthGuard, AnyPrincipalAuthGuard, RolesGuard],
+  // RolePermissionsRepository must be exported too, not just RolesGuard
+  // itself — RolesGuard had zero cross-module consumers before Layer 4, so
+  // this gap was latent until admin/orders/documents controllers started
+  // applying it via @UseGuards(AdminJwtAuthGuard, RolesGuard).
+  exports: [AdminJwtAuthGuard, CustomerSessionAuthGuard, AnyPrincipalAuthGuard, RolesGuard, RolePermissionsRepository],
 })
 export class AuthModule {}

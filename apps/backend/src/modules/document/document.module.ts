@@ -16,6 +16,9 @@ import { S3StorageProvider } from './providers/s3-storage.provider';
     DocumentService,
     { provide: STORAGE_PROVIDER, useClass: S3StorageProvider },
   ],
-  exports: [DocumentService],
+  // STORAGE_PROVIDER exported alongside DocumentService — Layer 4's
+  // data-export/deletion-request modules need raw put/delete without
+  // depending on document entities.
+  exports: [DocumentService, STORAGE_PROVIDER],
 })
 export class DocumentModule {}

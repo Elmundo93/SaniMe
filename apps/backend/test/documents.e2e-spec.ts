@@ -1,11 +1,11 @@
 import 'dotenv/config';
 import { createHash } from 'crypto';
 import { INestApplication } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
+import { seedAdminWithPermissions } from './helpers/seed-admin';
 
 describe('Documents (e2e)', () => {
   let app: INestApplication;
@@ -17,11 +17,7 @@ describe('Documents (e2e)', () => {
     configureApp(app);
     await app.init();
 
-    const jwt = app.get(JwtService);
-    adminToken = await jwt.signAsync(
-      { sub: 'test-admin', email: 'test-admin@example.com' },
-      { secret: process.env.ADMIN_JWT_SECRET, expiresIn: '5m' },
-    );
+    adminToken = (await seedAdminWithPermissions(app, ['health-data:write'])).token;
   });
 
   afterAll(async () => {

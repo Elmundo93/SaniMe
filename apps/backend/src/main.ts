@@ -29,6 +29,15 @@ if (process.env.SENTRY_DSN) {
     beforeSend(event) {
       return scrub(event) as typeof event;
     },
+    // beforeSend alone doesn't reach breadcrumbs recorded before the event —
+    // Sentry's default HTTP integration creates breadcrumbs keyed like
+    // {category: 'http', data: {url: ...}}, and neither `data` nor `url`
+    // matches scrub()'s key-name denylist, so without this hook a
+    // health-data value embedded in a request URL would bypass redaction
+    // entirely (Layer 4).
+    beforeBreadcrumb(breadcrumb) {
+      return scrub(breadcrumb) as typeof breadcrumb;
+    },
   });
 }
 

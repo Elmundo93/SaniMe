@@ -45,7 +45,10 @@ export class AppointmentsService {
       addressId: input.addressId,
     });
 
-    await this.supplyOrder.transitionOrder(tenant, order.id, { type: 'AppointmentScheduled' }, actor);
+    await this.supplyOrder.transitionOrder(tenant, order.id, { type: 'AppointmentScheduled' }, actor, {
+      appointmentId: appointment.id,
+      supplierId: input.supplierId,
+    });
 
     const delayMs = Math.max(0, new Date(input.scheduledStart).getTime() - REMINDER_LEAD_MS - Date.now());
     await this.jobQueue.enqueue('appointment.reminder', { appointmentId: appointment.id }, { delayMs });

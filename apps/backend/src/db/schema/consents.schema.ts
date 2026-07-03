@@ -1,10 +1,14 @@
 import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { customers } from './customers.schema';
 import { organizations } from './organizations.schema';
 
-// Minimal placeholder per Principle 15 — the compliance module's schema is
-// prepared in Layer 1 alongside auth, so HealthData never has to run without
-// an audit trail even briefly. Full versioning/roles/exports/deletion
-// differentiation happens in Layer 4; this only reserves the table shape.
+// Layer 4: versioned (append-only — every acceptance is a new row, never an
+// update; see modules/consents/consents.repository.ts). subjectType/subjectId
+// always stay 'onboarding_session'/the session id, even after a customer is
+// identified — customerId is backfilled at claim time instead, same
+// "backfilled at claim time" pattern as insurance_policies/ocr_results, so a
+// customer's full consent history across every onboarding session they've
+// ever run is queryable directly by customerId (Layer 4's data export).
 export const consents = pgTable('consents', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id')
@@ -12,6 +16,7 @@ export const consents = pgTable('consents', {
     .references(() => organizations.id),
   subjectType: text('subject_type').notNull(), // 'customer' | 'onboarding_session'
   subjectId: text('subject_id').notNull(),
+  customerId: uuid('customer_id').references(() => customers.id), // backfilled at claim time
   consentType: text('consent_type').notNull(), // 'agb' | 'datenschutz'
   version: text('version').notNull(),
   acceptedAt: timestamp('accepted_at', { withTimezone: true }).notNull(),

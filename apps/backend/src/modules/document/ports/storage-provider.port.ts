@@ -13,4 +13,9 @@ export interface StorageProvider {
   createPresignedUpload(mimeType: string): Promise<PresignedUpload>;
   objectExists(storageKey: string): Promise<boolean>;
   createPresignedDownload(storageKey: string): Promise<string>;
+  // Server-generated writes/deletes — for client-driven uploads use
+  // createPresignedUpload instead. Added in Layer 4 for data-export bundles
+  // (Phase 6) and deletion-request erasure (Phase 7).
+  putObject(key: string, body: Buffer | string, contentType: string): Promise<void>;
+  deleteObject(key: string): Promise<void>;
 }

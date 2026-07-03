@@ -1,11 +1,14 @@
 import 'dotenv/config';
 import { createHash } from 'crypto';
+import { eq } from 'drizzle-orm';
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
+import { DRIZZLE, type Database } from '../src/db/client';
+import { auditEntries } from '../src/db/schema';
 
 // The real full-slice proof of Layer 2: create session -> accept consents ->
 // upload prescription (Document) -> OCR result (HealthData) -> select
@@ -210,6 +213,13 @@ describe('Onboarding full slice (e2e)', () => {
 
     res = await patchEvent({ type: 'OTP_VERIFIZIERT' }, devCode).expect(200);
     expect(res.body.session.customerContact.telefonVerifiziert).toBe(true);
+
+    // Phase 4 (Compliance): both the failed and the succeeded OTP attempt
+    // are audited against the session.
+    const db: Database = app.get(DRIZZLE);
+    const otpAuditEntries = await db.select().from(auditEntries).where(eq(auditEntries.resourceId, sessionId));
+    expect(otpAuditEntries.some((e) => e.eventType === 'OtpVerificationFailed')).toBe(true);
+    expect(otpAuditEntries.some((e) => e.eventType === 'OtpVerified')).toBe(true);
   });
 
   let supplyId: string;

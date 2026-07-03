@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { z } from 'zod';
+import { DEFAULT_TENANT_CONTEXT } from '../../../common/repository/tenant-context';
 import { AdminAuthService } from '../services/admin-auth.service';
 
 const loginSchema = z.object({
@@ -18,6 +19,6 @@ export class AdminAuthController {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.issues.map((i) => i.message).join(', '));
     }
-    return this.adminAuth.login(parsed.data.email, parsed.data.password);
+    return this.adminAuth.login(parsed.data.email, parsed.data.password, DEFAULT_TENANT_CONTEXT);
   }
 }

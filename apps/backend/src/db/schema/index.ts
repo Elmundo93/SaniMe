@@ -15,10 +15,16 @@ export * from './verification-codes.schema';
 export * from './notification.schema';
 export * from './appointment.schema';
 export * from './admin.schema';
+export * from './data-export.schema';
+export * from './deletion-request.schema';
+export * from './retention-policy.schema';
 
 import { accessLogs } from './access-logs.schema';
 import { adminUsers } from './admin-users.schema';
 import { orderNotes } from './admin.schema';
+import { dataExportRequests } from './data-export.schema';
+import { deletionRequests } from './deletion-request.schema';
+import { retentionPolicies } from './retention-policy.schema';
 import { appointments } from './appointment.schema';
 import { auditEntries } from './audit-entries.schema';
 import { catalogCategories, manufacturers, products, supplierProducts, suppliers } from './catalog.schema';
@@ -64,4 +70,7 @@ export const schema = {
   notifications,
   appointments,
   orderNotes,
+  dataExportRequests,
+  deletionRequests,
+  retentionPolicies,
 };

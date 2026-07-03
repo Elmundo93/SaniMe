@@ -35,6 +35,7 @@ export const ocrResults = pgTable('ocr_results', {
     .references(() => organizations.id),
   subjectType: text('subject_type').notNull(), // 'onboarding_session' | 'customer'
   subjectId: text('subject_id').notNull(),
+  customerId: uuid('customer_id').references(() => customers.id), // backfilled at claim time
   documentId: uuid('document_id').references(() => documents.id),
   patientName: text('patient_name').notNull(),
   patientDob: text('patient_dob').notNull(),

@@ -1,8 +1,9 @@
 import 'dotenv/config';
 import { hash } from 'bcrypt';
 import { createDatabase, createPool } from '../client';
-import { adminUsers } from '../schema';
+import { adminUsers, rolePermissions } from '../schema';
 import { DEFAULT_ORGANIZATION_ID } from '../../common/repository/tenant-context';
+import { PERMISSIONS } from '../../modules/auth/permissions';
 
 // Dev/test-only bootstrap admin account, so the admin login endpoint is
 // exercisable before Layer 3's real admin-user lifecycle management exists.
@@ -27,6 +28,19 @@ async function main() {
     .insert(adminUsers)
     .values({ organizationId: DEFAULT_ORGANIZATION_ID, email, passwordHash })
     .onConflictDoNothing();
+
+  // Layer 4: backfill every permission to every existing admin, not just a
+  // newly-inserted one — role_permissions had zero runtime consumers before
+  // RolesGuard started actually gating routes, so no admin ever had a row.
+  // Re-running this seed is a safe, idempotent upgrade path for existing
+  // dev/staging DBs (no super-admin bypass exists — see permissions.ts).
+  const admins = await db.select({ id: adminUsers.id, organizationId: adminUsers.organizationId }).from(adminUsers);
+  if (admins.length > 0) {
+    const grants = admins.flatMap((admin) =>
+      PERMISSIONS.map((permission) => ({ organizationId: admin.organizationId, adminUserId: admin.id, permission })),
+    );
+    await db.insert(rolePermissions).values(grants).onConflictDoNothing();
+  }
 
   await pool.end();
   console.log('Bootstrap-Admin geseedet:', email);

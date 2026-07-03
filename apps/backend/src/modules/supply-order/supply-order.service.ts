@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { erstelleLeereSupply, SupplyWorkflow, type SupplyContext, type SupplyEvent, type SupplyStatus } from '@sanime/domain';
 import type { TenantContext } from '../../common/repository/tenant-context';
 import { AuditService } from '../audit/audit.service';
@@ -80,7 +80,13 @@ export class SupplyOrderService {
     return { supplyId: supplyRow.id, orderId: orderRow.id, status: context.status };
   }
 
-  async transitionOrder(tenant: TenantContext, orderId: string, event: SupplyEvent, actor: SupplyActor) {
+  async transitionOrder(
+    tenant: TenantContext,
+    orderId: string,
+    event: SupplyEvent,
+    actor: SupplyActor,
+    metadata: Record<string, unknown> = {},
+  ) {
     const order = await this.orders.findById(tenant, orderId);
     if (!order) {
       throw new NotFoundException('Bestellung nicht gefunden');
@@ -90,11 +96,18 @@ export class SupplyOrderService {
       throw new NotFoundException('Versorgung nicht gefunden');
     }
     const context: SupplyContext = { id: supply.id, status: supply.status as SupplyStatus };
-    const nextContext = await this.applyTransition(tenant, context, order.id, event, actor);
+    const nextContext = await this.applyTransition(tenant, context, order.id, event, actor, metadata);
     return { supplyId: supply.id, orderId: order.id, status: nextContext.status };
   }
 
-  listSupplies(tenant: TenantContext) {
+  // actorCustomerId: null means unrestricted (admin); a customerId restricts
+  // the read to that customer's own resources — see resolveOwnerFilter's
+  // doc comment for why an unclaimed customer session must never resolve to
+  // null here.
+  listSupplies(tenant: TenantContext, actorCustomerId: string | null = null) {
+    if (actorCustomerId !== null) {
+      return this.supplies.listForCustomer(tenant, actorCustomerId);
+    }
     return this.supplies.listAll(tenant);
   }
 
@@ -102,20 +115,29 @@ export class SupplyOrderService {
     return this.supplies.listForCustomer(tenant, customerId);
   }
 
-  async getSupply(tenant: TenantContext, id: string) {
+  async getSupply(tenant: TenantContext, id: string, actorCustomerId: string | null = null) {
     const supply = await this.supplies.findById(tenant, id);
     if (!supply) {
       throw new NotFoundException('Versorgung nicht gefunden');
+    }
+    if (actorCustomerId !== null && supply.customerId !== actorCustomerId) {
+      throw new ForbiddenException('Kein Zugriff auf diese Versorgung');
     }
     const timeline = await this.timelineEvents.listForSupply(id);
     const actions = await this.openActions.listForSupply(id);
     return { ...supply, timeline, openActions: actions };
   }
 
-  async getOrder(tenant: TenantContext, id: string) {
+  async getOrder(tenant: TenantContext, id: string, actorCustomerId: string | null = null) {
     const order = await this.orders.findById(tenant, id);
     if (!order) {
       throw new NotFoundException('Bestellung nicht gefunden');
+    }
+    if (actorCustomerId !== null) {
+      const supply = await this.supplies.findById(tenant, order.supplyId);
+      if (!supply || supply.customerId !== actorCustomerId) {
+        throw new ForbiddenException('Kein Zugriff auf diese Bestellung');
+      }
     }
     return order;
   }
@@ -148,6 +170,7 @@ export class SupplyOrderService {
     orderId: string,
     event: SupplyEvent,
     actor: SupplyActor,
+    metadata: Record<string, unknown> = {},
   ): Promise<SupplyContext> {
     const result = SupplyWorkflow.transition(context, event);
     if (!result.ok) {
@@ -188,6 +211,7 @@ export class SupplyOrderService {
         eventType: domainEvent.type,
         resourceType: 'supply',
         resourceId: context.id,
+        metadata,
       });
     }
 

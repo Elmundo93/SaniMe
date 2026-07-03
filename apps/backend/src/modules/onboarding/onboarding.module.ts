@@ -4,7 +4,7 @@ import { CatalogModule } from '../catalog/catalog.module';
 import { HealthDataModule } from '../health-data/health-data.module';
 import { SupplyOrderModule } from '../supply-order/supply-order.module';
 import { VerificationModule } from '../verification/verification.module';
-import { ConsentsRepository } from './consents.repository';
+import { ConsentsRepository } from '../consents/consents.repository';
 import { OnboardingController } from './controllers/onboarding.controller';
 import { OnboardingSessionsRepository } from './onboarding-sessions.repository';
 import { OnboardingService } from './onboarding.service';

@@ -1,5 +1,6 @@
 import {
   CreateBucketCommand,
+  DeleteObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
   GetObjectCommand,
@@ -64,5 +65,13 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
     return getSignedUrl(this.client, new GetObjectCommand({ Bucket: this.bucket, Key: storageKey }), {
       expiresIn: DOWNLOAD_URL_EXPIRY_SECONDS,
     });
+  }
+
+  async putObject(key: string, body: Buffer | string, contentType: string): Promise<void> {
+    await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType }));
+  }
+
+  async deleteObject(key: string): Promise<void> {
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 }

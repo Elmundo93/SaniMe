@@ -1,22 +1,19 @@
 import 'dotenv/config';
 import { INestApplication } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
-import { DRIZZLE, type Database } from '../src/db/client';
-import { adminUsers } from '../src/db/schema';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
 import { DEFAULT_TENANT_CONTEXT } from '../src/common/repository/tenant-context';
 import { OnboardingSessionsRepository } from '../src/modules/onboarding/onboarding-sessions.repository';
 import { SupplyOrderService } from '../src/modules/supply-order/supply-order.service';
+import { seedAdminWithPermissions } from './helpers/seed-admin';
 
 const SEEDED_PRODUCT_ID = '40000000-0000-0000-0000-000000000001';
 
 describe('Admin (e2e)', () => {
   let app: INestApplication;
   let adminToken: string;
-  let adminId: string;
   let supplyId: string;
   let orderId: string;
 
@@ -26,17 +23,10 @@ describe('Admin (e2e)', () => {
     configureApp(app);
     await app.init();
 
-    // order_notes.author_admin_id carries a real FK to admin_users, unlike
-    // the plain-text actorId columns other e2e specs get away with using
-    // 'test-admin' for — a real row is required here.
-    const db: Database = app.get(DRIZZLE);
-    const [admin] = await db
-      .insert(adminUsers)
-      .values({ organizationId: DEFAULT_TENANT_CONTEXT.organizationId, email: `test-admin-${Math.random()}@example.com`, passwordHash: 'unused' })
-      .returning();
-    adminId = admin.id;
-    const jwt = app.get(JwtService);
-    adminToken = await jwt.signAsync({ sub: adminId, email: admin.email }, { secret: process.env.ADMIN_JWT_SECRET, expiresIn: '5m' });
+    // order_notes.author_admin_id carries a real FK to admin_users, and
+    // every route below is now RolesGuard-gated — both require a real
+    // admin_users row with real role_permissions rows, not a synthetic sub.
+    adminToken = (await seedAdminWithPermissions(app, ['orders:read', 'orders:write'])).token;
 
     const supplyOrder = app.get(SupplyOrderService);
     const onboardingSessions = app.get(OnboardingSessionsRepository);
@@ -126,5 +116,10 @@ describe('Admin (e2e)', () => {
 
   it('rejects an unauthenticated status transition', async () => {
     await request(app.getHttpServer()).patch(`/api/v1/admin/orders/${orderId}/status`).send({ type: 'SupplierAssigned' }).expect(401);
+  });
+
+  it('rejects a real admin with zero role_permissions rows (RolesGuard, not just AdminJwtAuthGuard)', async () => {
+    const unprivileged = (await seedAdminWithPermissions(app, [])).token;
+    await request(app.getHttpServer()).get('/api/v1/admin/inbox').set('Authorization', `Bearer ${unprivileged}`).expect(403);
   });
 });

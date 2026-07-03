@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, Inject, NotFoundException } from '@nestjs/common';
 import type { TenantContext } from '../../common/repository/tenant-context';
+import { AuditService } from '../audit/audit.service';
+import type { CurrentPrincipalInfo } from '../auth/decorators/current-principal.decorator';
 import { DocumentVersionsRepository } from './document-versions.repository';
 import { DocumentsRepository } from './documents.repository';
 import { STORAGE_PROVIDER, type StorageProvider } from './ports/storage-provider.port';
@@ -11,6 +13,7 @@ export class DocumentService {
     @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
     private readonly documents: DocumentsRepository,
     private readonly versions: DocumentVersionsRepository,
+    private readonly auditService: AuditService,
   ) {}
 
   createUploadUrl(mimeType: string) {
@@ -20,6 +23,7 @@ export class DocumentService {
   async registerDocument(
     tenant: TenantContext,
     input: { type: string; storageKey: string; hash: string; mimeType: string; sizeBytes: number },
+    actor: CurrentPrincipalInfo | null,
   ) {
     if (!DOCUMENT_TYPES.includes(input.type as (typeof DOCUMENT_TYPES)[number])) {
       throw new BadRequestException(`Unbekannter Dokumenttyp: ${input.type}`);
@@ -32,6 +36,17 @@ export class DocumentService {
     const document = await this.documents.create(tenant, input.type);
     const version = await this.versions.create(document.id, input.storageKey, input.hash, input.mimeType, input.sizeBytes);
     await this.documents.setCurrentVersion(tenant, document.id, version.id);
+
+    await this.auditService.record({
+      tenant,
+      actorType: actor?.type ?? 'system',
+      actorId: actor?.id ?? null,
+      eventType: 'DocumentUploaded',
+      resourceType: 'document',
+      resourceId: document.id,
+      metadata: { documentType: input.type },
+    });
+
     return { ...document, currentVersionId: version.id, status: 'uploaded' };
   }
 
@@ -50,7 +65,7 @@ export class DocumentService {
     return { ...document, downloadUrl };
   }
 
-  async setStatus(tenant: TenantContext, id: string, status: string) {
+  async setStatus(tenant: TenantContext, id: string, status: string, adminId: string) {
     if (!DOCUMENT_STATUSES.includes(status as (typeof DOCUMENT_STATUSES)[number])) {
       throw new BadRequestException(`Unbekannter Status: ${status}`);
     }
@@ -59,6 +74,17 @@ export class DocumentService {
       throw new NotFoundException('Dokument nicht gefunden');
     }
     await this.documents.setStatus(tenant, id, status);
+
+    await this.auditService.record({
+      tenant,
+      actorType: 'admin',
+      actorId: adminId,
+      eventType: 'DocumentStatusChanged',
+      resourceType: 'document',
+      resourceId: id,
+      metadata: { status },
+    });
+
     return { ...document, status };
   }
 }

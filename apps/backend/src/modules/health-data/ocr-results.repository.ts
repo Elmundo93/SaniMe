@@ -51,4 +51,17 @@ export class OcrResultsRepository extends TenantScopedRepository {
       .set({ ...patch, rawEdited: true })
       .where(and(this.tenantFilter(ocrResults.organizationId, tenant), eq(ocrResults.id, id)));
   }
+
+  async claimToCustomer(tenant: TenantContext, subjectType: string, subjectId: string, customerId: string) {
+    await this.db
+      .update(ocrResults)
+      .set({ customerId })
+      .where(
+        and(
+          this.tenantFilter(ocrResults.organizationId, tenant),
+          eq(ocrResults.subjectType, subjectType),
+          eq(ocrResults.subjectId, subjectId),
+        ),
+      );
+  }
 }
