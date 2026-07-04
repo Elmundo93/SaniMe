@@ -15,9 +15,14 @@ export default function RootLayout() {
   const onboardingIsLoading = useOnboardingStore((s) => s.isLoading);
 
   useEffect(() => {
-    Promise.all([authLaden(), onboardingLaden()]).then(() => {
+    // Sequential, not Promise.all — onboardingLaden() reads authStore's
+    // token (the current session's bearer secret) to call the real backend,
+    // so authLaden() must resolve first.
+    (async () => {
+      await authLaden();
+      await onboardingLaden();
       SplashScreen.hideAsync();
-    });
+    })();
   }, [authLaden, onboardingLaden]);
 
   if (authIsLoading || onboardingIsLoading) return null;

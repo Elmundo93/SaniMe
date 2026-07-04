@@ -57,6 +57,10 @@ export default function RezeptScanScreen() {
   const nachAufnahme = async (uri: string) => {
     setVerarbeitung(true);
     try {
+      // DSGVO-Datenminimierung: das Originalfoto verlässt das Gerät nie —
+      // die OCR läuft on-device (lib/ocr/), nur die extrahierten Felder
+      // gehen an das Backend. `uri` bleibt ein rein lokaler Sandbox-Pfad,
+      // den der Server ohnehin nie auswertet oder speichert.
       const { result, confidence } = await erkenneRezept(uri);
       const transitionResult = await dispatch({ type: 'REZEPT_OCR_ABGESCHLOSSEN', uri, result, confidence });
       if (transitionResult.ok) {

@@ -29,7 +29,7 @@ export default function CheckoutScreen() {
   const dispatch = useOnboardingStore((s) => s.dispatch);
   const abschliessen = useOnboardingStore((s) => s.abschliessen);
   const bereitsEingeloggt = useAuthStore((s) => !!s.benutzer);
-  const otpFlow = useOtpVerification();
+  const otpFlow = useOtpVerification(dispatch);
 
   const [substep, setSubstep] = useState<CheckoutSubstep | null>(null);
   const [email, setEmail] = useState('');
@@ -54,16 +54,14 @@ export default function CheckoutScreen() {
   const eigenanteilText = produkt.eigenanteil === 0 ? 'Kein Eigenanteil' : `${produkt.eigenanteil.toFixed(2).replace('.', ',')} €`;
 
   const handleKontaktWeiter = async () => {
-    const ok = await otpFlow.codeSenden(otpFlow.kontakt);
+    const ok = await otpFlow.codeSenden(otpFlow.kontakt, email.trim() || null);
     if (!ok) return;
-    await dispatch({ type: 'KONTAKT_ERFASST', email: email.trim() || null, telefon: otpFlow.kontakt.trim() });
     setSubstep('otp');
   };
 
   const handleOtpVerifizieren = async () => {
     const ok = await otpFlow.codeVerifizieren();
     if (!ok) return;
-    await dispatch({ type: 'OTP_VERIFIZIERT' });
     setSubstep('zahlung');
   };
 
@@ -169,7 +167,7 @@ export default function CheckoutScreen() {
                 {otpFlow.loading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.buttonLabel}>Bestätigen</Text>}
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => otpFlow.codeSenden(otpFlow.kontakt)}
+                onPress={() => otpFlow.codeSenden(otpFlow.kontakt, email.trim() || null)}
                 style={styles.nochmalLink}
                 accessibilityRole="button"
                 accessibilityLabel="Code erneut senden"

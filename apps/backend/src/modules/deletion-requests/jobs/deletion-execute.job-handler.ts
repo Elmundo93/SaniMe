@@ -1,6 +1,8 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { DeletionRequestWorkflow, type DeletionRequestContext } from '@sanime/domain';
 import { DEFAULT_TENANT_CONTEXT } from '../../../common/repository/tenant-context';
+import { recordDeletionExecuteDuration } from '../../../common/metrics/metrics';
+import { withSpan } from '../../../common/tracing/tracer';
 import { AuditService } from '../../audit/audit.service';
 import { JOB_QUEUE, type JobHandler, type JobQueue } from '../../job-queue/ports/job-queue.port';
 import { DeletionExecutor } from '../deletion-executor';
@@ -28,7 +30,21 @@ export class DeletionExecuteJobHandler implements JobHandler<DeletionExecutePayl
     this.jobQueue.registerHandler(this);
   }
 
+  // Span + duration histogram together — async job latency (pseudonymization
+  // across several tables) is exactly what that pairing exists to surface.
   async handle({ requestId }: DeletionExecutePayload): Promise<void> {
+    const start = Date.now();
+    try {
+      await withSpan('DeletionExecuteJobHandler.handle', (span) => {
+        span.setAttribute('deletion_request.id', requestId);
+        return this.handleInner(requestId);
+      });
+    } finally {
+      recordDeletionExecuteDuration(Date.now() - start);
+    }
+  }
+
+  private async handleInner(requestId: string): Promise<void> {
     const row = await this.requests.findByIdUntenanted(requestId);
     if (!row) {
       this.logger.warn(`Löschanfrage "${requestId}" nicht gefunden`);

@@ -2,6 +2,8 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { erstelleLeereSupply, SupplyWorkflow, type SupplyContext, type SupplyEvent, type SupplyStatus } from '@sanime/domain';
 import type { TenantContext } from '../../common/repository/tenant-context';
 import { AuditService } from '../audit/audit.service';
+import { recordSupplyTransition } from '../../common/metrics/metrics';
+import { withSpan } from '../../common/tracing/tracer';
 import { OPEN_ACTIONS_META } from './event-consumers/open-actions.consumer';
 import { TIMELINE_META } from './event-consumers/timeline.consumer';
 import { OpenActionsRepository } from './open-actions.repository';
@@ -24,9 +26,21 @@ export interface CreateSupplyFromOnboardingInput {
   productNameSnapshot: string;
   manufacturerNameSnapshot: string;
   hilfsmittelNrSnapshot: string;
+  doctorNameSnapshot?: string;
+  insurerNameSnapshot?: string;
   customerCopaySnapshotCents: number;
   deliveryTimeLabelSnapshot: string;
   deliveryAddressId: string | null;
+}
+
+function groupBySupplyId<T extends { supplyId: string }>(rows: T[]): Map<string, T[]> {
+  const bySupplyId = new Map<string, T[]>();
+  for (const row of rows) {
+    const list = bySupplyId.get(row.supplyId) ?? [];
+    list.push(row);
+    bySupplyId.set(row.supplyId, list);
+  }
+  return bySupplyId;
 }
 
 // Replayed on onboarding completion — by ABGESCHLOSSEN all these
@@ -62,6 +76,8 @@ export class SupplyOrderService {
       productNameSnapshot: input.productNameSnapshot,
       manufacturerNameSnapshot: input.manufacturerNameSnapshot,
       hilfsmittelNrSnapshot: input.hilfsmittelNrSnapshot,
+      doctorNameSnapshot: input.doctorNameSnapshot ?? '',
+      insurerNameSnapshot: input.insurerNameSnapshot ?? '',
       customerCopaySnapshotCents: input.customerCopaySnapshotCents,
       deliveryTimeLabelSnapshot: input.deliveryTimeLabelSnapshot,
       status: 'draft',
@@ -104,11 +120,27 @@ export class SupplyOrderService {
   // the read to that customer's own resources — see resolveOwnerFilter's
   // doc comment for why an unclaimed customer session must never resolve to
   // null here.
-  listSupplies(tenant: TenantContext, actorCustomerId: string | null = null) {
-    if (actorCustomerId !== null) {
-      return this.supplies.listForCustomer(tenant, actorCustomerId);
-    }
-    return this.supplies.listAll(tenant);
+  // Attaches each supply's timeline + unresolved open actions in two batched
+  // queries — the mobile dashboard's list view renders full detail cards
+  // directly from this response (no per-item detail round-trip), and at
+  // pilot scale (a handful of active supplies per customer) this is cheap.
+  async listSupplies(tenant: TenantContext, actorCustomerId: string | null = null) {
+    const rows =
+      actorCustomerId !== null
+        ? await this.supplies.listForCustomer(tenant, actorCustomerId)
+        : await this.supplies.listAll(tenant);
+    const supplyIds = rows.map((r) => r.id);
+    const [actions, timeline] = await Promise.all([
+      this.openActions.listUnresolvedForSupplies(supplyIds),
+      this.timelineEvents.listForSupplies(supplyIds),
+    ]);
+    const actionsBySupplyId = groupBySupplyId(actions);
+    const timelineBySupplyId = groupBySupplyId(timeline);
+    return rows.map((row) => ({
+      ...row,
+      openActions: actionsBySupplyId.get(row.id) ?? [],
+      timeline: timelineBySupplyId.get(row.id) ?? [],
+    }));
   }
 
   listSuppliesForCustomer(tenant: TenantContext, customerId: string) {
@@ -164,7 +196,10 @@ export class SupplyOrderService {
     return this.timelineEvents.createAdminEntry({ supplyId, label, description });
   }
 
-  private async applyTransition(
+  // The single choke point for every supply status change — one span per
+  // call, keyed by the triggering event type, plus a matching counter
+  // increment for the same reason (Layer 5 Phase 8's instrumentation list).
+  private applyTransition(
     tenant: TenantContext,
     context: SupplyContext,
     orderId: string,
@@ -172,10 +207,25 @@ export class SupplyOrderService {
     actor: SupplyActor,
     metadata: Record<string, unknown> = {},
   ): Promise<SupplyContext> {
+    return withSpan('SupplyOrderService.applyTransition', (span) => {
+      span.setAttribute('supply.event', event.type);
+      return this.applyTransitionInner(tenant, context, orderId, event, actor, metadata);
+    });
+  }
+
+  private async applyTransitionInner(
+    tenant: TenantContext,
+    context: SupplyContext,
+    orderId: string,
+    event: SupplyEvent,
+    actor: SupplyActor,
+    metadata: Record<string, unknown>,
+  ): Promise<SupplyContext> {
     const result = SupplyWorkflow.transition(context, event);
     if (!result.ok) {
       throw new BadRequestException(result.reason);
     }
+    recordSupplyTransition(event.type);
 
     await this.supplies.setStatus(tenant, context.id, result.context.status);
     await this.orders.setStatus(tenant, orderId, result.context.status);

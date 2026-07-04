@@ -81,8 +81,8 @@ export default function Index() {
 
   // Kein benutzer (ausgeloggt oder noch nie erkannt) landet auf dem Dashboard statt
   // einem Login-Zwang — der leere Zustand dort fordert zum Scannen auf, und ein
-  // Krankenkassenkarten-Scan kann die Identität per Archiv-Abgleich wiederherstellen
-  // (siehe lib/mockKundenArchiv.ts).
+  // Krankenkassenkarten-Scan kann die Identität per Archiv-Abgleich (POST
+  // /customers/match, siehe app/scan/krankenkasse.tsx) wiederherstellen.
   return <Redirect href="/(app)/dashboard" />;
 }
 

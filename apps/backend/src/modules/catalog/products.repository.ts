@@ -43,6 +43,7 @@ export class ProductsRepository extends TenantScopedRepository {
 
     const offers = await this.db
       .select({
+        id: supplierProducts.id,
         supplierId: suppliers.id,
         supplierName: suppliers.name,
         deliveryTimeDays: supplierProducts.deliveryTimeDays,

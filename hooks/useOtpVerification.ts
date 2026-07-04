@@ -1,27 +1,35 @@
 import { useRef, useState } from 'react';
 import { TextInput } from 'react-native';
+import type { OnboardingEvent, TransitionResult } from '@sanime/domain';
 
-// Reine OTP-Sende-/Verifizierungs-Mechanik (Mock-Delays, Validierung) — kennt keine
-// Stores. Wird von app/scan/checkout.tsx genutzt; was bei Erfolg passiert, entscheidet
-// der Aufrufer.
-export function useOtpVerification(initialKontakt = '') {
+type Dispatch = (event: OnboardingEvent, code?: string) => Promise<TransitionResult & { devCode?: string }>;
+
+// OTP-Sende-/Verifizierungs-Mechanik. codeSenden/codeVerifizieren SIND die
+// dispatch()-Aufrufe (KONTAKT_ERFASST löst den Code-Versand serverseitig aus,
+// OTP_VERIFIZIERT prüft ihn) — app/scan/checkout.tsx darf danach nicht noch
+// einmal selbst dispatchen, sonst feuert ein Tap zwei PATCH-Requests.
+export function useOtpVerification(dispatch: Dispatch, initialKontakt = '') {
   const [kontakt, setKontakt] = useState(initialKontakt);
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [fehler, setFehler] = useState('');
   const codeRef = useRef<TextInput>(null);
 
-  const codeSenden = async (empfänger: string): Promise<boolean> => {
+  const codeSenden = async (empfänger: string, email: string | null): Promise<boolean> => {
     if (!empfänger.trim()) {
       setFehler('Bitte Telefonnummer oder E-Mail eingeben.');
       return false;
     }
     setFehler('');
     setLoading(true);
-    // In Produktion: SMS/E-Mail-Versand via Backend
-    await new Promise((r) => setTimeout(r, 1200));
+    const result = await dispatch({ type: 'KONTAKT_ERFASST', email, telefon: empfänger.trim() });
     setLoading(false);
+    if (!result.ok) {
+      setFehler(result.reason);
+      return false;
+    }
     setKontakt(empfänger);
+    if (__DEV__ && result.devCode) setCode(result.devCode);
     setTimeout(() => codeRef.current?.focus(), 300);
     return true;
   };
@@ -33,9 +41,12 @@ export function useOtpVerification(initialKontakt = '') {
     }
     setFehler('');
     setLoading(true);
-    // In Produktion: Verifizierung via Backend
-    await new Promise((r) => setTimeout(r, 1500));
+    const result = await dispatch({ type: 'OTP_VERIFIZIERT' }, code);
     setLoading(false);
+    if (!result.ok) {
+      setFehler(result.reason);
+      return false;
+    }
     return true;
   };
 

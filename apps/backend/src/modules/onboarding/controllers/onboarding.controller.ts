@@ -61,6 +61,15 @@ export class OnboardingController {
     }
     return this.onboarding.complete(DEFAULT_TENANT_CONTEXT, id);
   }
+
+  @Get(':id/appointment-slots')
+  @UseGuards(CustomerSessionAuthGuard)
+  getAppointmentSlots(@Param('id') id: string, @CurrentCustomerSession() session: { sessionId: string }) {
+    if (session.sessionId !== id) {
+      throw new BadRequestException('Session-ID stimmt nicht mit dem authentifizierten Bearer-Token überein');
+    }
+    return this.onboarding.proposeAppointmentSlots(DEFAULT_TENANT_CONTEXT, id);
+  }
 }
 
 // Principle 9 names PATCH .../:id and POST .../complete explicitly as

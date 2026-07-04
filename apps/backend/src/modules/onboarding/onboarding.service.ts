@@ -10,7 +10,10 @@ import {
   type OnboardingStatus,
 } from '@sanime/domain';
 import type { TenantContext } from '../../common/repository/tenant-context';
+import { AppointmentsService } from '../appointment/appointments.service';
 import { AuditService } from '../audit/audit.service';
+import { recordOnboardingTransition } from '../../common/metrics/metrics';
+import { withSpan } from '../../common/tracing/tracer';
 import { CatalogService } from '../catalog/catalog.service';
 import { SupplyOrderService } from '../supply-order/supply-order.service';
 import { VERIFICATION_PROVIDER, type VerificationProvider } from '../verification/ports/verification-provider.port';
@@ -32,6 +35,7 @@ export class OnboardingService {
     private readonly insurancePolicies: InsurancePoliciesRepository,
     private readonly catalog: CatalogService,
     private readonly supplyOrder: SupplyOrderService,
+    private readonly appointments: AppointmentsService,
     private readonly auditService: AuditService,
     @Inject(VERIFICATION_PROVIDER) private readonly verification: VerificationProvider,
   ) {}
@@ -48,7 +52,31 @@ export class OnboardingService {
     return this.hydrate(tenant, row);
   }
 
-  async patch(tenant: TenantContext, sessionId: string, event: OnboardingEvent, extra: { ipAddress: string | null; otpCode?: string }) {
+  // supplierId/productId are derived entirely from the persisted session row
+  // (never from client input) — the client can't request slots for an
+  // arbitrary supplier/product pair, only for whatever it already selected
+  // via a prior SUPPLY_AUSGEWAEHLT PATCH.
+  async proposeAppointmentSlots(tenant: TenantContext, sessionId: string) {
+    const row = await this.getRowOrThrow(tenant, sessionId);
+    if (!row.selectedProductId) {
+      throw new BadRequestException('Kein Produkt ausgewählt');
+    }
+    const product = await this.catalog.getProduct(tenant, row.selectedProductId);
+    const primaryOffer = product.offers[0];
+    if (!primaryOffer) {
+      throw new BadRequestException('Für dieses Produkt ist aktuell kein Lieferant verfügbar');
+    }
+    return this.appointments.proposeSlots(tenant, primaryOffer.supplierId, row.selectedProductId);
+  }
+
+  patch(tenant: TenantContext, sessionId: string, event: OnboardingEvent, extra: { ipAddress: string | null; otpCode?: string }) {
+    return withSpan('OnboardingService.patch', (span) => {
+      span.setAttribute('onboarding.event', event.type);
+      return this.patchInner(tenant, sessionId, event, extra);
+    });
+  }
+
+  private async patchInner(tenant: TenantContext, sessionId: string, event: OnboardingEvent, extra: { ipAddress: string | null; otpCode?: string }) {
     const row = await this.getRowOrThrow(tenant, sessionId);
     const domainSession = await this.hydrate(tenant, row);
 
@@ -84,6 +112,7 @@ export class OnboardingService {
     if (!result.ok) {
       throw new BadRequestException(result.reason);
     }
+    recordOnboardingTransition(event.type);
 
     await this.applySideEffects(tenant, row, augmentedEvent, extra.ipAddress);
     await this.sessions.update(tenant, row.id, { status: result.session.status });
@@ -96,7 +125,11 @@ export class OnboardingService {
     return { session: await this.hydrate(tenant, await this.getRowOrThrow(tenant, sessionId)) };
   }
 
-  async complete(tenant: TenantContext, sessionId: string) {
+  complete(tenant: TenantContext, sessionId: string) {
+    return withSpan('OnboardingService.complete', () => this.completeInner(tenant, sessionId));
+  }
+
+  private async completeInner(tenant: TenantContext, sessionId: string) {
     const row = await this.getRowOrThrow(tenant, sessionId);
     const domainSession = await this.hydrate(tenant, row);
 
@@ -118,11 +151,13 @@ export class OnboardingService {
         onboardingSessionId: row.id,
         customerId: row.customerId,
         productId: row.selectedProductId,
-        supplierProductId: null,
+        supplierProductId: row.selectedSupplierProductId,
         ocrResultId: row.ocrResultId,
         productNameSnapshot: product.name,
         manufacturerNameSnapshot: product.manufacturerName,
         hilfsmittelNrSnapshot: product.hilfsmittelnummer,
+        doctorNameSnapshot: domainSession.ocrResult?.arzt.name ?? '',
+        insurerNameSnapshot: domainSession.ocrResult?.krankenkasse.name ?? '',
         customerCopaySnapshotCents: primaryOffer?.customerCopayCents ?? 0,
         deliveryTimeLabelSnapshot: primaryOffer ? `${primaryOffer.deliveryTimeDays} Werktage` : 'unbekannt',
         deliveryAddressId: null,
@@ -169,6 +204,11 @@ export class OnboardingService {
         await this.consents.record(tenant, row.id, 'datenschutz', event.version, ipAddress);
         return;
       case 'REZEPT_OCR_ABGESCHLOSSEN': {
+        // DSGVO-Datenminimierung, deliberate: event.uri is only ever a local
+        // on-device sandbox path — the app never uploads the source photo,
+        // only the OCR-extracted fields below. documentId/
+        // prescriptionDocumentId stay null because no server-side document
+        // for this photo is ever created; there is nothing to reference.
         const created = await this.ocrResults.create(tenant, {
           subjectType: 'onboarding_session',
           subjectId: row.id,
@@ -219,6 +259,8 @@ export class OnboardingService {
           const mergedConfidence = toOcrConfidence(existing?.confidence, event.confidence);
           await this.ocrResults.patchFields(tenant, row.ocrResultId, { confidence: mergedConfidence });
         }
+        // Same DSGVO data-minimization rationale as REZEPT_OCR_ABGESCHLOSSEN
+        // above — no eGK photo is ever uploaded/stored server-side.
         await this.sessions.update(tenant, row.id, {
           insuranceCardDocumentId: null,
           availableProductIds: event.produkte.map((p) => p.id),
@@ -231,10 +273,18 @@ export class OnboardingService {
           availableProductIds: event.produkte.map((p) => p.id),
         });
         return;
-      case 'SUPPLY_AUSGEWAEHLT':
-        await this.catalog.assertProductExists(tenant, event.produkt.id);
-        await this.sessions.update(tenant, row.id, { selectedProductId: event.produkt.id });
+      case 'SUPPLY_AUSGEWAEHLT': {
+        // Full product (with offers), not just assertProductExists's raw-row
+        // check — needed to persist selectedSupplierProductId, the column
+        // proposeAppointmentSlots and complete() both read as the single
+        // source of truth for "which supplier is fulfilling this order."
+        const product = await this.catalog.getProduct(tenant, event.produkt.id);
+        await this.sessions.update(tenant, row.id, {
+          selectedProductId: event.produkt.id,
+          selectedSupplierProductId: product.offers[0]?.id ?? null,
+        });
         return;
+      }
       case 'TERMIN_VORSCHLAEGE_BERECHNET':
         await this.sessions.update(tenant, row.id, { appointmentSlotsJson: event.vorschläge });
         return;

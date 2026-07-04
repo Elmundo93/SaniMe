@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { addBusinessDays, applyTimeWindow, DAILY_TIME_WINDOWS } from '@sanime/domain';
 import type { TenantContext } from '../../common/repository/tenant-context';
+import { withSpan } from '../../common/tracing/tracer';
 import { CatalogService } from '../catalog/catalog.service';
 import { AppointmentsRepository } from './appointments.repository';
 
@@ -25,7 +26,15 @@ export class SupplierCalendarService {
     private readonly appointments: AppointmentsRepository,
   ) {}
 
-  async proposeSlots(tenant: TenantContext, supplierId: string, productId: string, count = 3): Promise<ProposedSlot[]> {
+  proposeSlots(tenant: TenantContext, supplierId: string, productId: string, count = 3): Promise<ProposedSlot[]> {
+    return withSpan('SupplierCalendarService.proposeSlots', (span) => {
+      span.setAttribute('supplier.id', supplierId);
+      span.setAttribute('product.id', productId);
+      return this.proposeSlotsInner(tenant, supplierId, productId, count);
+    });
+  }
+
+  private async proposeSlotsInner(tenant: TenantContext, supplierId: string, productId: string, count: number): Promise<ProposedSlot[]> {
     const supplier = await this.catalog.getSupplier(tenant, supplierId);
     const supplierProduct = await this.catalog.getSupplierProduct(tenant, supplierId, productId);
 

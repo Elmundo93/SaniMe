@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { DRIZZLE, type Database } from '../../db/client';
 import { timelineEvents } from '../../db/schema';
 
@@ -25,5 +25,12 @@ export class TimelineEventsRepository {
 
   listForSupply(supplyId: string) {
     return this.db.select().from(timelineEvents).where(eq(timelineEvents.supplyId, supplyId));
+  }
+
+  // One batched query for the dashboard list view (SupplyOrderService.listSupplies) —
+  // same "batch, don't N+1" reasoning as OpenActionsRepository.listUnresolvedForSupplies.
+  listForSupplies(supplyIds: string[]) {
+    if (supplyIds.length === 0) return Promise.resolve([]);
+    return this.db.select().from(timelineEvents).where(inArray(timelineEvents.supplyId, supplyIds));
   }
 }

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AppointmentModule } from '../appointment/appointment.module';
 import { AuthModule } from '../auth/auth.module';
 import { CatalogModule } from '../catalog/catalog.module';
 import { HealthDataModule } from '../health-data/health-data.module';
@@ -10,7 +11,10 @@ import { OnboardingSessionsRepository } from './onboarding-sessions.repository';
 import { OnboardingService } from './onboarding.service';
 
 @Module({
-  imports: [AuthModule, CatalogModule, HealthDataModule, SupplyOrderModule, VerificationModule],
+  // AppointmentModule never imports OnboardingModule (verified) — one-directional,
+  // no cycle. Needed so OnboardingService.proposeAppointmentSlots can call the
+  // existing AppointmentsService.proposeSlots() instead of duplicating it.
+  imports: [AppointmentModule, AuthModule, CatalogModule, HealthDataModule, SupplyOrderModule, VerificationModule],
   controllers: [OnboardingController],
   providers: [OnboardingSessionsRepository, ConsentsRepository, OnboardingService],
   exports: [OnboardingService],

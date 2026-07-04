@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { erstelleLeereSession, transition } from '@sanime/domain';
+import { transition } from '@sanime/domain';
 import type { CustomerContact, OcrResult, OnboardingEvent, OnboardingSession, OnboardingStatus, TransitionResult } from '@sanime/domain';
 import { useAuthStore } from './authStore';
-import { useVersorgungStore, baueVersorgungAusSession } from './versorgungStore';
+import * as onboardingApi from '../lib/api/onboarding';
 import { trackOnboarding } from '../lib/analytics';
 import { getSecureJSON, setSecureJSON, deleteSecureItem } from '../lib/secureStorage';
 
@@ -47,10 +47,13 @@ interface OnboardingState {
 
   starten: () => Promise<OnboardingSession>;
   laden: () => Promise<void>;
-  dispatch: (event: OnboardingEvent) => Promise<TransitionResult>;
+  dispatch: (event: OnboardingEvent, code?: string) => Promise<TransitionResult & { devCode?: string }>;
   abschliessen: () => Promise<void>;
 }
 
+// A local cache of whatever the backend last confirmed — never the source of
+// truth itself. dispatch()/starten() already synced with the real backend
+// before calling this; it just makes the session available offline/cold-start.
 async function persistSession(session: OnboardingSession) {
   const { ocrResult, customerContact, ...rest } = session;
   try {
@@ -63,7 +66,6 @@ async function persistSession(session: OnboardingSession) {
     // hinter dem in-memory-Stand zurückbleiben.
     if (__DEV__) console.warn('[onboardingStore] persistSession fehlgeschlagen', e);
   }
-  // In Produktion: zusätzlich Backend-Sync-Aufruf hier
 }
 
 // Zentrale Instrumentierung: genau ein Analytics-Event pro echtem Übergang, ausgelöst
@@ -112,13 +114,27 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     if (bestehende && bestehende.status !== 'ABGESCHLOSSEN') {
       return bestehende;
     }
-    const neu = erstelleLeereSession(`session-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    await persistSession(neu);
-    set({ session: neu });
-    return neu;
+    const { sessionSecret } = await onboardingApi.create();
+    await useAuthStore.getState().setToken(sessionSecret);
+    const session = await onboardingApi.getCurrent();
+    await persistSession(session);
+    set({ session });
+    return session;
   },
 
   laden: async () => {
+    const token = useAuthStore.getState().token;
+    if (token) {
+      try {
+        const session = await onboardingApi.getCurrent();
+        await persistSession(session);
+        set({ session, isLoading: false });
+        return;
+      } catch {
+        // Offline or the stored secret no longer resolves — fall back to the
+        // local cache below rather than blocking app start entirely.
+      }
+    }
     try {
       const json = await AsyncStorage.getItem(SESSION_KEY);
       if (!json) {
@@ -140,27 +156,46 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     }
   },
 
-  dispatch: async (event) => {
+  // Request-then-apply, never optimistic-then-reconcile: the local
+  // transition() call below is only a fast-fail legality pre-check (the FSM
+  // is shared with the backend, so a client-illegal transition is
+  // guaranteed server-illegal too) — its result is never written to the
+  // store. The server response is the only thing that ever becomes the new
+  // session, since it injects fields the client can't compute itself
+  // (server-recomputed produkte, devCode, consent ipAdresse, ...).
+  dispatch: async (event, code) => {
     const session = get().session;
     if (!session) {
       return { ok: false, reason: 'Keine aktive OnboardingSession' };
     }
-    const result = transition(session, event);
-    if (result.ok) {
-      await persistSession(result.session);
-      set({ session: result.session });
-      emitAnalyticsForTransition(session, result.session, event);
+    const localCheck = transition(session, event);
+    if (!localCheck.ok) return localCheck;
+
+    try {
+      let fresh: OnboardingSession;
+      let devCode: string | undefined;
+      if (event.type === 'ZAHLUNG_ERFOLGREICH') {
+        // Completion is its own endpoint, excluded from the PATCH schema by
+        // design — the server builds the real Supply/Order here, not the client.
+        await onboardingApi.complete(session.id);
+        fresh = await onboardingApi.getCurrent();
+      } else {
+        const result = await onboardingApi.patch(session.id, event, code);
+        fresh = result.session;
+        devCode = result.devCode;
+      }
+      await persistSession(fresh);
+      set({ session: fresh });
+      emitAnalyticsForTransition(session, fresh, event);
+      return { ok: true, session: fresh, devCode };
+    } catch (e) {
+      return { ok: false, reason: e instanceof Error ? e.message : 'Netzwerkfehler' };
     }
-    return result;
   },
 
   abschliessen: async () => {
     const session = get().session;
     if (!session) return;
-
-    const versorgungId = session.versorgungId ?? `v-${Date.now()}`;
-    const versorgung = baueVersorgungAusSession(session, versorgungId);
-    useVersorgungStore.getState().versorgungHinzufügen(versorgung);
 
     if (!useAuthStore.getState().benutzer) {
       // Darf nie fehlschlagen, solange die Guard-Kette (Datenprüfung, useOnboardingGuard
@@ -171,9 +206,13 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
       if (!session.ocrResult || !session.customerContact.telefon) {
         throw new Error('abschliessen(): OCR-Ergebnis oder Telefonnummer fehlt, kann keinen Benutzer anlegen');
       }
+      // benutzer is display-only (never used by any ownership check — those
+      // key off the bearer secret), so this stays a client-side derivation
+      // rather than a new backend endpoint. token is the real sessionSecret
+      // this session already authenticates with, not a fabricated one.
       await useAuthStore.getState().setBenutzer(
         {
-          id: `benutzer-${versorgungId}`,
+          id: session.versorgungId ?? `benutzer-${session.id}`,
           vorname: session.ocrResult.patient.name.split(' ')[0] ?? '',
           nachname: session.ocrResult.patient.name.split(' ').slice(1).join(' '),
           email: session.customerContact.email ?? undefined,
@@ -181,7 +220,7 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
           krankenkasse: session.ocrResult.krankenkasse.name,
           versichertenNr: session.ocrResult.krankenkasse.versichertenNr,
         },
-        `token-${versorgungId}`,
+        useAuthStore.getState().token!,
       );
     } else {
       // Bestandskunde: nur Lücken aus der aktuellen Session auffüllen, nie bereits

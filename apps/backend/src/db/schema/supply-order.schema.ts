@@ -30,6 +30,12 @@ export const supplies = pgTable('supplies', {
   productNameSnapshot: text('product_name_snapshot').notNull(),
   manufacturerNameSnapshot: text('manufacturer_name_snapshot').notNull(),
   hilfsmittelNrSnapshot: text('hilfsmittel_nr_snapshot').notNull(),
+  // Frozen at supply-creation time from the completed OnboardingSession's
+  // ocrResult (see OnboardingService.complete) — the dashboard's Arzt/
+  // Krankenkasse fields need a value even if the source OCR/insurance-policy
+  // row is later pseudonymized by a deletion request.
+  doctorNameSnapshot: text('doctor_name_snapshot').notNull().default(''),
+  insurerNameSnapshot: text('insurer_name_snapshot').notNull().default(''),
   customerCopaySnapshotCents: integer('customer_copay_snapshot_cents').notNull().default(0),
   deliveryTimeLabelSnapshot: text('delivery_time_label_snapshot').notNull(),
   status: text('status').notNull().default('draft'),

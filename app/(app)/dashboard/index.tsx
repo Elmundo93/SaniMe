@@ -44,7 +44,10 @@ export default function DashboardScreen() {
       setIsLoading(false);
       return;
     }
-    laden().finally(() => setIsLoading(false));
+    // Ein Netzwerk-/Serverfehler soll den leeren Zustand zeigen statt eines
+    // Absturzes — laden() wirft nur noch bei einem echten Fehler (403 für
+    // eine nicht zugeordnete Sitzung wird bereits intern zu [] gemappt).
+    laden().catch(() => {}).finally(() => setIsLoading(false));
   }, [benutzer, laden, zuruecksetzen]);
 
   const aktive = versorgungen.filter(

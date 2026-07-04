@@ -14,7 +14,8 @@ import { MiniKalender } from '../../components/onboarding/MiniKalender';
 import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
-import { generiereTerminVorschlaege, terminAusKalenderdatum } from '../../lib/terminplanung';
+import { terminAusKalenderdatum, terminAusVorschlag } from '../../lib/terminplanung';
+import { getAppointmentSlots } from '../../lib/api/onboarding';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '@sanime/design-system';
 import type { TerminSlot } from '@sanime/domain';
@@ -35,10 +36,22 @@ export default function TerminplanungScreen() {
   const [zeigeKalender, setZeigeKalender] = useState(false);
 
   useEffect(() => {
-    if (session && session.terminVorschläge.length === 0) {
-      const vorschläge = generiereTerminVorschlaege(session);
-      dispatch({ type: 'TERMIN_VORSCHLAEGE_BERECHNET', vorschläge });
-    }
+    if (!session || session.terminVorschläge.length > 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const slots = await getAppointmentSlots(session.id);
+        if (cancelled) return;
+        const vorschläge = slots.map(terminAusVorschlag);
+        const result = await dispatch({ type: 'TERMIN_VORSCHLAEGE_BERECHNET', vorschläge });
+        if (!cancelled && !result.ok) zeigeDispatchFehler();
+      } catch {
+        if (!cancelled) zeigeDispatchFehler();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.id, session?.terminVorschläge.length]);
 

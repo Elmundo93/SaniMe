@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Alert,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
@@ -19,7 +20,20 @@ import { ProfilFeld } from '../../../components/settings/ProfilFeld';
 import { VollstaendigkeitsBadge, vollstaendigkeitsLabel } from '../../../components/settings/VollstaendigkeitsBadge';
 import { berechneProfilVollstaendigkeit } from '../../../lib/vollstaendigkeit';
 import { useAuthStore } from '../../../store/authStore';
+import { requestDataExport, getDataExport, requestDeletion } from '../../../lib/api/auth';
+import { ApiError } from '../../../lib/api/client';
 import { D, durations } from '@sanime/design-system';
+
+const NICHT_ZUGEORDNET_HINWEIS =
+  'Diese Funktion ist nur für erkannte Kunden verfügbar. Scanne deine Krankenkassenkarte, damit wir dich zuordnen können.';
+
+function zeigeComplianceFehler(err: unknown) {
+  if (err instanceof ApiError && err.status === 400) {
+    Alert.alert('Noch nicht möglich', NICHT_ZUGEORDNET_HINWEIS);
+    return;
+  }
+  Alert.alert('Das hat nicht funktioniert', 'Bitte versuche es später erneut.');
+}
 
 interface SettingsItem {
   label: string;
@@ -63,6 +77,23 @@ function SettingsGruppe({ titel, items }: { titel: string; items: SettingsItem[]
   );
 }
 
+type ExportStatus = 'idle' | 'requesting' | 'processing' | 'ready' | 'failed';
+
+const EXPORT_STATUS_LABEL: Record<ExportStatus, string | undefined> = {
+  idle: undefined,
+  requesting: 'Wird angefordert…',
+  processing: 'Wird vorbereitet…',
+  ready: 'Bereit — antippen zum Herunterladen',
+  failed: 'Fehlgeschlagen — erneut versuchen',
+};
+
+// Kurzes Polling statt einer echten Benachrichtigung — DataExportGenerateJobHandler
+// löst heute keine Notification bei Fertigstellung aus, also ist ein Live-Status in
+// dieser Sitzung die einzige Möglichkeit, das Ergebnis zu sehen. Läuft die Generierung
+// länger als dieses Fenster, muss der Nutzer es später erneut antippen.
+const EXPORT_POLL_INTERVALL_MS = 1500;
+const EXPORT_POLL_VERSUCHE = 12;
+
 export default function EinstellungenScreen() {
   const router = useRouter();
   const benutzer = useAuthStore((s) => s.benutzer);
@@ -70,6 +101,14 @@ export default function EinstellungenScreen() {
   const aktualisiereBenutzer = useAuthStore((s) => s.aktualisiereBenutzer);
 
   const { profil, krankenkasse, lieferung } = berechneProfilVollstaendigkeit(benutzer);
+
+  const [exportStatus, setExportStatus] = useState<ExportStatus>('idle');
+  const [exportDownloadUrl, setExportDownloadUrl] = useState<string | null>(null);
+  const exportAbgebrochen = useRef(false);
+
+  useEffect(() => () => {
+    exportAbgebrochen.current = true;
+  }, []);
 
   const bearbeitenOnEdit = (feld: (wert: string) => void) => (benutzer ? feld : undefined);
 
@@ -87,6 +126,41 @@ export default function EinstellungenScreen() {
     ]);
   };
 
+  const handleDatenExportieren = async () => {
+    if (exportStatus === 'ready' && exportDownloadUrl) {
+      Linking.openURL(exportDownloadUrl);
+      return;
+    }
+    setExportStatus('requesting');
+    try {
+      const created = await requestDataExport();
+      setExportStatus('processing');
+      for (let versuch = 0; versuch < EXPORT_POLL_VERSUCHE; versuch++) {
+        await new Promise((r) => setTimeout(r, EXPORT_POLL_INTERVALL_MS));
+        if (exportAbgebrochen.current) return;
+        const detail = await getDataExport(created.id);
+        if (detail.status === 'ready' && detail.downloadUrl) {
+          setExportDownloadUrl(detail.downloadUrl);
+          setExportStatus('ready');
+          return;
+        }
+        if (detail.status === 'failed') {
+          setExportStatus('failed');
+          return;
+        }
+      }
+      // Noch nicht fertig nach dem Poll-Fenster — kein Fehler, nur noch nicht bereit.
+      setExportStatus('idle');
+      Alert.alert(
+        'Export wird vorbereitet',
+        'Das dauert länger als erwartet. Bitte versuche es in ein paar Minuten erneut.',
+      );
+    } catch (err) {
+      setExportStatus('idle');
+      zeigeComplianceFehler(err);
+    }
+  };
+
   const handleDatenLöschen = () => {
     Alert.alert(
       'Daten löschen',
@@ -96,11 +170,17 @@ export default function EinstellungenScreen() {
         {
           text: 'Endgültig löschen',
           style: 'destructive',
-          onPress: () =>
-            Alert.alert(
-              'Anfrage gesendet',
-              'Ihre Löschanfrage wurde übermittelt. Wir melden uns innerhalb von 72 Stunden.',
-            ),
+          onPress: async () => {
+            try {
+              await requestDeletion(null);
+              Alert.alert(
+                'Anfrage gesendet',
+                'Ihre Löschanfrage wurde übermittelt. Wir melden uns innerhalb von 72 Stunden.',
+              );
+            } catch (err) {
+              zeigeComplianceFehler(err);
+            }
+          },
         },
       ],
     );
@@ -270,7 +350,12 @@ export default function EinstellungenScreen() {
               titel="Datenschutz"
               items={[
                 { icon: 'clipboard', label: 'Meine Einwilligungen', onPress: () => {} },
-                { icon: 'download', label: 'Daten exportieren', onPress: () => {} },
+                {
+                  icon: 'download',
+                  label: 'Daten exportieren',
+                  wert: EXPORT_STATUS_LABEL[exportStatus],
+                  onPress: exportStatus === 'requesting' || exportStatus === 'processing' ? undefined : handleDatenExportieren,
+                },
                 { icon: 'trash-2', label: 'Daten löschen', onPress: handleDatenLöschen, gefährlich: true },
               ]}
             />

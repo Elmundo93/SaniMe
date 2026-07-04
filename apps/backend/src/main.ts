@@ -4,8 +4,10 @@ import { NestFactory } from '@nestjs/core';
 import * as Sentry from '@sentry/nestjs';
 import { AppModule } from './app.module';
 import { configureApp } from './bootstrap';
+import { initMetrics } from './common/metrics/metrics-init';
 import { scrub } from './common/logging/scrub';
 import { StructuredLoggerService } from './common/logging/structured-logger.service';
+import { initTracing } from './common/tracing/tracing-init';
 
 // Run via `ts-node` (package.json's start/start:dev scripts), not `nest
 // build && node dist/main.js`. @sanime/domain is deliberately raw
@@ -40,6 +42,12 @@ if (process.env.SENTRY_DSN) {
     },
   });
 }
+
+// Same no-op-unless-configured discipline as the Sentry block above — both
+// are pure no-ops with their env vars unset, exactly like every existing
+// test run today.
+initTracing();
+initMetrics();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });

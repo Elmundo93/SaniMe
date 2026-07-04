@@ -1,5 +1,4 @@
 import type { ConfidenceLevel, OcrConfidence, OcrKrankenkasse, OcrResult, Produkt } from '@sanime/domain';
-import { MOCK_PRODUKTE } from '../mockOcr';
 import { extrahiereText } from './engine';
 import { normalisiereBild } from './processor';
 import { erkenneDokumenttyp } from './detector';
@@ -47,9 +46,11 @@ export async function erkenneRezept(uri: string): Promise<{ result: OcrResult; c
   return baueRezeptErgebnis(felder);
 }
 
-// 1:1-Ersatz für simuliereKrankenkasseOcr() — der Produktkatalog ist weiterhin
-// gemockt (eigenständiges, von der OCR unabhängiges Backend-Thema, siehe
-// CLAUDE.md), nur die Krankenkassen-Felder kommen jetzt aus echtem OCR.
+// 1:1-Ersatz für simuliereKrankenkasseOcr(). `produkte` is always [] here —
+// the backend recomputes it from the real catalog server-side for both the
+// KRANKENKASSE_OCR_ABGESCHLOSSEN and KRANKENKASSE_UEBERSPRUNGEN events and
+// discards whatever the client sends (see onboarding.service.ts's patch()),
+// so there's nothing for the client to fill in even provisionally.
 export async function erkenneKrankenkasse(
   uri: string,
 ): Promise<{ krankenkasse: OcrKrankenkasse; confidence: ConfidenceLevel; produkte: Produkt[] }> {
@@ -63,5 +64,5 @@ export async function erkenneKrankenkasse(
   }
 
   const { krankenkasse, confidence } = baueKrankenkasseErgebnis(parseEgk(zeilen));
-  return { krankenkasse, confidence, produkte: MOCK_PRODUKTE };
+  return { krankenkasse, confidence, produkte: [] };
 }

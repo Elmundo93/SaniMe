@@ -1,5 +1,7 @@
 import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { DEFAULT_TENANT_CONTEXT } from '../../../common/repository/tenant-context';
+import { recordDataExportDuration } from '../../../common/metrics/metrics';
+import { withSpan } from '../../../common/tracing/tracer';
 import { STORAGE_PROVIDER, type StorageProvider } from '../../document/ports/storage-provider.port';
 import { JOB_QUEUE, type JobHandler, type JobQueue } from '../../job-queue/ports/job-queue.port';
 import { DataExportPayloadBuilder } from '../data-export-payload.builder';
@@ -31,7 +33,21 @@ export class DataExportGenerateJobHandler implements JobHandler<DataExportGenera
     this.jobQueue.registerHandler(this);
   }
 
+  // Span + duration histogram together — async job latency (retries, storage
+  // upload time) is exactly what that pairing exists to surface.
   async handle({ requestId }: DataExportGeneratePayload): Promise<void> {
+    const start = Date.now();
+    try {
+      await withSpan('DataExportGenerateJobHandler.handle', (span) => {
+        span.setAttribute('data_export.request_id', requestId);
+        return this.handleInner(requestId);
+      });
+    } finally {
+      recordDataExportDuration(Date.now() - start);
+    }
+  }
+
+  private async handleInner(requestId: string): Promise<void> {
     const request = await this.requests.findByIdUntenanted(requestId);
     if (!request) {
       this.logger.warn(`Export-Anfrage "${requestId}" nicht gefunden`);

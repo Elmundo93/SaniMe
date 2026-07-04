@@ -24,12 +24,11 @@ import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoa
 import { LoadingState } from '../../components/ui/LoadingState';
 import { IconButton } from '../../components/ui/IconButton';
 import { CameraOverlayHeader } from '../../components/ui/CameraOverlayHeader';
-import { MOCK_PRODUKTE } from '../../lib/mockOcr';
 import { erkenneKrankenkasse, FalschesDokumentError } from '../../lib/ocr';
-import { sucheKundeImArchiv } from '../../lib/mockKundenArchiv';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { useAuthStore } from '../../store/authStore';
-import { useVersorgungStore } from '../../store/versorgungStore';
+import * as authApi from '../../lib/api/auth';
+import { ApiError } from '../../lib/api/client';
 import { D } from '@sanime/design-system';
 
 function zeigeOcrFehler() {
@@ -63,8 +62,6 @@ export default function KrankenkasseScreen() {
   const { ready } = useOnboardingGuard('KRANKENKASSE_AUFNAHME');
   const dispatch = useOnboardingStore((s) => s.dispatch);
   const setBenutzer = useAuthStore((s) => s.setBenutzer);
-  const onboardingAbschliessen = useAuthStore((s) => s.onboardingAbschliessen);
-  const versorgungenSetzen = useVersorgungStore((s) => s.versorgungenSetzen);
   const [permission, requestPermission] = useCameraPermissions();
   const [aufgenommen, setAufgenommen] = useState(false);
   const [verarbeitung, setVerarbeitung] = useState(false);
@@ -73,21 +70,33 @@ export default function KrankenkasseScreen() {
 
   if (!ready) return <OnboardingLoadingView />;
 
-  // Versichertennummer gegen den (mock) Kundenstamm prüfen — bei Treffer kennen wir
-  // den Kunden bereits: Identität + Versorgungshistorie übernehmen und direkt ins
-  // Dashboard, statt Kontaktdaten/OTP später in Checkout nochmal abzufragen. Die
-  // laufende Bestellung bleibt als Session unangetastet und lässt sich später über
-  // den Kamera-Button im Dashboard fortsetzen. Ist bereits ein benutzer eingeloggt
-  // (Folgeauftrag), bleibt dessen echte Identität unangetastet statt sie mit dem
-  // Archiv-Platzhalter zu überschreiben.
+  // Versichertennummer gegen den echten Kundenstamm prüfen (POST /customers/match) —
+  // bei Treffer claimt der Server die AKTUELLE Session serverseitig auf diesen Kunden
+  // (dasselbe Bearer-Session-Secret bleibt gültig, kein neues Token nötig) und wir
+  // übernehmen die Identität nur für die Anzeige. Die laufende Bestellung bleibt dabei
+  // in Bearbeitung — ein Treffer bedeutet "das ist ein bekannter Kunde", nicht "das
+  // Onboarding ist bereits abgeschlossen". Ist bereits ein benutzer eingeloggt
+  // (Folgeauftrag), bleibt dessen echte Identität unangetastet statt sie zu überschreiben.
   const pruefeArchivTreffer = async (versichertenNr: string): Promise<boolean> => {
     if (useAuthStore.getState().benutzer) return false;
-    const treffer = await sucheKundeImArchiv(versichertenNr);
-    if (!treffer) return false;
-    await setBenutzer(treffer.benutzer, `archiv-token-${treffer.benutzer.id}`);
-    versorgungenSetzen(treffer.versorgungen);
-    await onboardingAbschliessen();
-    return true;
+    try {
+      const { customer } = await authApi.matchByInsuredNumber(versichertenNr);
+      await setBenutzer(
+        {
+          id: customer.id,
+          vorname: customer.firstName,
+          nachname: customer.lastName,
+          email: customer.email ?? undefined,
+          telefon: customer.phone ?? '',
+          versichertenNr: customer.insuredNumber,
+        },
+        useAuthStore.getState().token!,
+      );
+      return true;
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return false; // kein Archiv-Treffer
+      throw error;
+    }
   };
 
   const handleZurück = async () => {
@@ -109,6 +118,8 @@ export default function KrankenkasseScreen() {
 
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setVerarbeitung(true);
+      // DSGVO-Datenminimierung: das Originalfoto der eGK verlässt das Gerät
+      // nie — nur die extrahierten Felder gehen an das Backend.
       const { krankenkasse, confidence, produkte } = await erkenneKrankenkasse(foto.uri);
       const result = await dispatch({
         type: 'KRANKENKASSE_OCR_ABGESCHLOSSEN',
@@ -118,11 +129,10 @@ export default function KrankenkasseScreen() {
         produkte,
       });
       if (result.ok) {
-        if (await pruefeArchivTreffer(krankenkasse.versichertenNr)) {
-          router.replace('/(app)/dashboard');
-        } else {
-          router.push(STATUS_META[result.session.status].route as any);
-        }
+        // Ein Archiv-Treffer identifiziert nur den Kunden — er beendet nicht
+        // die laufende Bestellung, der normale Ablauf geht unverändert weiter.
+        await pruefeArchivTreffer(krankenkasse.versichertenNr);
+        router.push(STATUS_META[result.session.status].route as any);
       } else {
         zeigeDispatchFehler();
       }
@@ -153,11 +163,10 @@ export default function KrankenkasseScreen() {
         produkte,
       });
       if (result.ok) {
-        if (await pruefeArchivTreffer(krankenkasse.versichertenNr)) {
-          router.replace('/(app)/dashboard');
-        } else {
-          router.push(STATUS_META[result.session.status].route as any);
-        }
+        // Ein Archiv-Treffer identifiziert nur den Kunden — er beendet nicht
+        // die laufende Bestellung, der normale Ablauf geht unverändert weiter.
+        await pruefeArchivTreffer(krankenkasse.versichertenNr);
+        router.push(STATUS_META[result.session.status].route as any);
       } else {
         zeigeDispatchFehler();
       }
@@ -171,7 +180,10 @@ export default function KrankenkasseScreen() {
   const handleÜberspringen = async () => {
     setVerarbeitung(true);
     try {
-      const result = await dispatch({ type: 'KRANKENKASSE_UEBERSPRUNGEN', produkte: MOCK_PRODUKTE });
+      // produkte wird serverseitig ohnehin immer neu berechnet und das
+      // Client-seitige Feld ignoriert (siehe onboarding.service.ts) —
+      // kein Mock mehr nötig.
+      const result = await dispatch({ type: 'KRANKENKASSE_UEBERSPRUNGEN', produkte: [] });
       if (result.ok) {
         router.push(STATUS_META[result.session.status].route as any);
       } else {

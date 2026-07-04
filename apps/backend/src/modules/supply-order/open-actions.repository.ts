@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { DRIZZLE, type Database } from '../../db/client';
 import { openActions, supplies } from '../../db/schema';
 import type { TenantContext } from '../../common/repository/tenant-context';
@@ -15,6 +15,16 @@ export class OpenActionsRepository {
 
   listForSupply(supplyId: string) {
     return this.db.select().from(openActions).where(eq(openActions.supplyId, supplyId));
+  }
+
+  // One batched query for a dashboard list view (SupplyOrderService.listSupplies)
+  // instead of N+1 per-supply lookups — unresolved only, matching "offen" semantics.
+  listUnresolvedForSupplies(supplyIds: string[]) {
+    if (supplyIds.length === 0) return Promise.resolve([]);
+    return this.db
+      .select()
+      .from(openActions)
+      .where(and(inArray(openActions.supplyId, supplyIds), isNull(openActions.resolvedAt)));
   }
 
   async resolve(id: string) {

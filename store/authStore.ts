@@ -13,6 +13,7 @@ interface AuthState {
   isLoading: boolean;
 
   setBenutzer: (benutzer: Benutzer, token: string) => Promise<void>;
+  setToken: (token: string | null) => Promise<void>;
   aktualisiereBenutzer: (patch: Partial<Benutzer>) => Promise<void>;
   abmelden: () => Promise<void>;
   onboardingAbschliessen: () => Promise<void>;
@@ -33,6 +34,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (__DEV__) console.warn('[authStore] Konnte Token/Benutzer nicht sicher speichern', e);
     }
     set({ benutzer, token });
+  },
+
+  // Sets the bearer token alone, before a benutzer is known — the state
+  // right after onboardingStore.starten() creates a real session but hasn't
+  // identified a customer yet. `token` is the current onboarding session's
+  // real sessionSecret, not a fabricated login credential.
+  setToken: async (token) => {
+    try {
+      if (token) await setSecureJSON(TOKEN_KEY, token);
+      else await deleteSecureItem(TOKEN_KEY);
+    } catch (e) {
+      if (__DEV__) console.warn('[authStore] Konnte Token nicht sicher speichern', e);
+    }
+    set({ token });
   },
 
   aktualisiereBenutzer: async (patch) => {

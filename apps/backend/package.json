@@ -26,6 +26,12 @@
     "@nestjs/platform-express": "^10.4.15",
     "@nestjs/terminus": "^10.2.3",
     "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/exporter-prometheus": "^0.220.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.220.0",
+    "@opentelemetry/resources": "^2.9.0",
+    "@opentelemetry/sdk-metrics": "^2.9.0",
+    "@opentelemetry/sdk-trace-base": "^2.9.0",
+    "@opentelemetry/sdk-trace-node": "^2.9.0",
     "@sanime/domain": "0.1.0",
     "@sentry/nestjs": "^8.47.0",
     "bcrypt": "^5.1.1",
@@ -65,13 +71,19 @@
     "typescript": "~5.9.2"
   },
   "jest": {
-    "moduleFileExtensions": ["js", "json", "ts"],
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
-    "collectCoverageFrom": ["**/*.(t|j)s"],
+    "collectCoverageFrom": [
+      "**/*.(t|j)s"
+    ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
   }
