@@ -70,6 +70,16 @@ export class OnboardingController {
     }
     return this.onboarding.proposeAppointmentSlots(DEFAULT_TENANT_CONTEXT, id);
   }
+
+  @Post(':id/payment-intent')
+  @UseGuards(CustomerSessionAuthGuard)
+  createPaymentIntent(@Param('id') id: string, @CurrentCustomerSession() session: { sessionId: string }, @Req() req: Request) {
+    requireIdempotencyKey(req);
+    if (session.sessionId !== id) {
+      throw new BadRequestException('Session-ID stimmt nicht mit dem authentifizierten Bearer-Token überein');
+    }
+    return this.onboarding.createPaymentIntent(DEFAULT_TENANT_CONTEXT, id);
+  }
 }
 
 // Principle 9 names PATCH .../:id and POST .../complete explicitly as

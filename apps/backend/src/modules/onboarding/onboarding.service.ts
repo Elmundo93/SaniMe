@@ -15,6 +15,7 @@ import { AuditService } from '../audit/audit.service';
 import { recordOnboardingTransition } from '../../common/metrics/metrics';
 import { withSpan } from '../../common/tracing/tracer';
 import { CatalogService } from '../catalog/catalog.service';
+import { PaymentService } from '../payment/payment.service';
 import { SupplyOrderService } from '../supply-order/supply-order.service';
 import { VERIFICATION_PROVIDER, type VerificationProvider } from '../verification/ports/verification-provider.port';
 import { ConsentsRepository } from '../consents/consents.repository';
@@ -36,6 +37,7 @@ export class OnboardingService {
     private readonly catalog: CatalogService,
     private readonly supplyOrder: SupplyOrderService,
     private readonly appointments: AppointmentsService,
+    private readonly payment: PaymentService,
     private readonly auditService: AuditService,
     @Inject(VERIFICATION_PROVIDER) private readonly verification: VerificationProvider,
   ) {}
@@ -67,6 +69,40 @@ export class OnboardingService {
       throw new BadRequestException('Für dieses Produkt ist aktuell kein Lieferant verfügbar');
     }
     return this.appointments.proposeSlots(tenant, primaryOffer.supplierId, row.selectedProductId);
+  }
+
+  // The Eigenanteil amount is read from the persisted session's selected
+  // product server-side (never trusted from the client) — same reasoning as
+  // proposeAppointmentSlots. Callable from CHECKOUT or CHECKOUT_FEHLGESCHLAGEN
+  // (a retry after a failed payment needs a fresh PaymentIntent).
+  async createPaymentIntent(tenant: TenantContext, sessionId: string) {
+    const row = await this.getRowOrThrow(tenant, sessionId);
+    const domainSession = await this.hydrate(tenant, row);
+    if (domainSession.status !== 'CHECKOUT' && domainSession.status !== 'CHECKOUT_FEHLGESCHLAGEN') {
+      throw new BadRequestException('Zahlung ist in diesem Status nicht möglich');
+    }
+    if (!telefonVerifiziert(domainSession)) {
+      throw new BadRequestException('Telefonnummer ist noch nicht bestätigt');
+    }
+    if (!row.selectedProductId) {
+      throw new BadRequestException('Kein Produkt ausgewählt');
+    }
+    const product = await this.catalog.getProduct(tenant, row.selectedProductId);
+    const amountCents = product.offers[0]?.customerCopayCents ?? 0;
+    return this.payment.createOrReuseIntent(tenant, sessionId, amountCents);
+  }
+
+  // Called only by StripeWebhookController on a payment_intent.payment_failed
+  // event — mirrors patchInner's shape (load, transition, persist) but has no
+  // HTTP-driven inputs, since Stripe is the trigger, not the customer.
+  // A no-op if the session already moved on (e.g. a retried webhook delivery
+  // arriving after the customer already succeeded on a later attempt).
+  async markPaymentFailed(tenant: TenantContext, sessionId: string): Promise<void> {
+    const row = await this.getRowOrThrow(tenant, sessionId);
+    const domainSession = await this.hydrate(tenant, row);
+    const result = transition(domainSession, { type: 'ZAHLUNG_FEHLGESCHLAGEN' });
+    if (!result.ok) return;
+    await this.sessions.update(tenant, row.id, { status: result.session.status });
   }
 
   patch(tenant: TenantContext, sessionId: string, event: OnboardingEvent, extra: { ipAddress: string | null; otpCode?: string }) {

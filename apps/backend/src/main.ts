@@ -50,7 +50,12 @@ initTracing();
 initMetrics();
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // rawBody: true captures req.rawBody as a Buffer (alongside, not instead
+  // of, normal JSON body parsing for every other route) — StripeWebhookController
+  // needs the exact original bytes to verify Stripe's HMAC signature; parsing
+  // and re-serializing the JSON body would produce different bytes and fail
+  // verification even for a genuine, unmodified Stripe request.
+  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
   app.useLogger(app.get(StructuredLoggerService));
   app.enableShutdownHooks();
   configureApp(app);

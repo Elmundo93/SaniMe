@@ -18,6 +18,7 @@ export * from './admin.schema';
 export * from './data-export.schema';
 export * from './deletion-request.schema';
 export * from './retention-policy.schema';
+export * from './payment.schema';
 
 import { accessLogs } from './access-logs.schema';
 import { adminUsers } from './admin-users.schema';
@@ -25,6 +26,7 @@ import { orderNotes } from './admin.schema';
 import { dataExportRequests } from './data-export.schema';
 import { deletionRequests } from './deletion-request.schema';
 import { retentionPolicies } from './retention-policy.schema';
+import { payments } from './payment.schema';
 import { appointments } from './appointment.schema';
 import { auditEntries } from './audit-entries.schema';
 import { catalogCategories, manufacturers, products, supplierProducts, suppliers } from './catalog.schema';
@@ -73,4 +75,5 @@ export const schema = {
   dataExportRequests,
   deletionRequests,
   retentionPolicies,
+  payments,
 };

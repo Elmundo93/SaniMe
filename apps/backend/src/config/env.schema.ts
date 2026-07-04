@@ -29,6 +29,13 @@ export const envSchema = z.object({
   STORAGE_BUCKET: z.string().min(1, 'STORAGE_BUCKET ist erforderlich'),
   STORAGE_FORCE_PATH_STYLE: z.coerce.boolean().default(true),
   VERIFICATION_CODE_PEPPER: z.string().min(1, 'VERIFICATION_CODE_PEPPER ist erforderlich'),
+  // Optional like SENTRY_DSN — unset in dev/test means the app still boots,
+  // PaymentService just throws a clear error the moment its endpoints are
+  // actually called (same "fail loudly, never fake success" discipline as
+  // DevCodeVerificationProvider), rather than requiring real Stripe
+  // credentials before anyone can even run `npm run backend:dev`.
+  STRIPE_SECRET_KEY: optionalWithEmptyAsUndefined(z.string()),
+  STRIPE_WEBHOOK_SECRET: optionalWithEmptyAsUndefined(z.string()),
 });
 
 export type Env = z.infer<typeof envSchema>;

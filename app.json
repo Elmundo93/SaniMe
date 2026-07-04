@@ -38,7 +38,13 @@
           "cameraPermission": "SaniMe benötigt die Kamera, um Ihr Rezept zu fotografieren."
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "@stripe/stripe-react-native",
+        {
+          "enableGooglePay": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

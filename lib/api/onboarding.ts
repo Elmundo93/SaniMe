@@ -31,3 +31,19 @@ export function complete(sessionId: string): Promise<{ supplyId: string }> {
 export function getAppointmentSlots(sessionId: string): Promise<ProposedSlot[]> {
   return request('GET', `/onboarding-sessions/${sessionId}/appointment-slots`);
 }
+
+export interface PaymentIntentResult {
+  clientSecret: string;
+  paymentIntentId: string;
+  amountCents: number;
+  currency: string;
+}
+
+// The amount is computed server-side from the session's selected product —
+// nothing here ever sends an amount to the backend. Completion itself
+// (creating the real Supply/Order, flipping status to ABGESCHLOSSEN) is
+// driven by the backend's Stripe webhook, never by this call succeeding —
+// see checkout.tsx's post-PaymentSheet polling.
+export function createPaymentIntent(sessionId: string): Promise<PaymentIntentResult> {
+  return request('POST', `/onboarding-sessions/${sessionId}/payment-intent`, { idempotent: true });
+}

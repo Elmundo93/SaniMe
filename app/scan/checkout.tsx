@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useStripe } from '@stripe/stripe-react-native';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { FormField } from '../../components/ui/FormField';
 import { Screen } from '../../components/ui/Screen';
@@ -15,8 +16,16 @@ import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { useOtpVerification } from '../../hooks/useOtpVerification';
 import { useAuthStore } from '../../store/authStore';
+import { createPaymentIntent } from '../../lib/api/onboarding';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '@sanime/design-system';
+
+// How long (and how often) to poll after Stripe confirms the PaymentSheet
+// succeeded, waiting for the backend's own Stripe webhook to actually
+// complete the Versorgung server-side — see handleZahlung's comment for why
+// this client never completes the order itself.
+const BESTAETIGUNG_POLL_VERSUCHE = 10;
+const BESTAETIGUNG_POLL_INTERVALL_MS = 1200;
 
 type CheckoutSubstep = 'kontakt' | 'otp' | 'zahlung';
 
@@ -30,10 +39,12 @@ export default function CheckoutScreen() {
   const abschliessen = useOnboardingStore((s) => s.abschliessen);
   const bereitsEingeloggt = useAuthStore((s) => !!s.benutzer);
   const otpFlow = useOtpVerification(dispatch);
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
   const [substep, setSubstep] = useState<CheckoutSubstep | null>(null);
   const [email, setEmail] = useState('');
   const [zahlungLäuft, setZahlungLäuft] = useState(false);
+  const [zahlungsHinweis, setZahlungsHinweis] = useState<string | null>(null);
 
   React.useEffect(() => {
     if (!session || substep) return;
@@ -65,36 +76,85 @@ export default function CheckoutScreen() {
     setSubstep('zahlung');
   };
 
+  // Stripe's PaymentSheet is the entire payment UI (card entry, 3D Secure,
+  // Apple/Google Pay if configured) — raw card data never touches this app
+  // or SaniMe's own backend. Critically, a successful presentPaymentSheet()
+  // here is NOT what completes the Versorgung: that's driven server-side by
+  // the backend's Stripe webhook (see StripeWebhookController), which is the
+  // only thing that can actually confirm a real charge went through. This
+  // client only creates the PaymentIntent, shows the UI, and then waits —
+  // it must never dispatch ZAHLUNG_ERFOLGREICH itself, or a client could
+  // "complete" a Versorgung it never actually paid for.
   const handleZahlung = async () => {
     setZahlungLäuft(true);
-    // Mock-Zahlungs-Gateway: In Produktion echter Zahlungsanbieter-Aufruf.
-    await new Promise((r) => setTimeout(r, 1500));
-    const erfolgreich = Math.random() > 0.15;
-
-    if (!erfolgreich) {
-      setZahlungLäuft(false);
-      await dispatch({ type: 'ZAHLUNG_FEHLGESCHLAGEN' });
-      return;
-    }
-
-    const versorgungId = `v-${Date.now()}`;
-    const result = await dispatch({ type: 'ZAHLUNG_ERFOLGREICH', versorgungId });
-    if (result.ok) {
-      // Die Versorgung ist zu diesem Zeitpunkt bereits im versorgungStore angelegt
-      // (erster Schritt in abschliessen()) — bei einem Fehler danach (z.B. AsyncStorage)
-      // navigieren wir trotzdem weiter, statt den Nutzer mit einem endlosen Spinner
-      // auf einem Status stehen zu lassen, der schon ABGESCHLOSSEN ist.
-      try {
-        await abschliessen();
-      } catch {
-        // Best effort: Benutzer-Erstellung/Session-Cleanup kann fehlschlagen,
-        // die eigentliche Versorgung ist aber bereits gesichert.
+    setZahlungsHinweis(null);
+    try {
+      const { clientSecret } = await createPaymentIntent(session.id);
+      const { error: initError } = await initPaymentSheet({
+        merchantDisplayName: 'SaniMe',
+        paymentIntentClientSecret: clientSecret,
+      });
+      if (initError) {
+        setZahlungLäuft(false);
+        Alert.alert('Das hat nicht funktioniert', 'Die Zahlung konnte nicht vorbereitet werden. Bitte versuche es erneut.');
+        return;
       }
-      router.replace('/(app)/dashboard');
-      return;
+
+      const { error: presentError } = await presentPaymentSheet();
+      if (presentError) {
+        setZahlungLäuft(false);
+        // 'Canceled' means the customer closed the sheet themselves — not a
+        // failure worth alerting about, they can just tap "Jetzt bezahlen" again.
+        if (presentError.code !== 'Canceled') {
+          Alert.alert('Zahlung nicht abgeschlossen', 'Bitte überprüfe deine Zahlungsdaten und versuche es erneut.');
+        }
+        return;
+      }
+
+      setZahlungsHinweis('Zahlung wird bestätigt…');
+      await wartenAufAbschluss();
+    } catch {
+      setZahlungLäuft(false);
+      setZahlungsHinweis(null);
+      zeigeDispatchFehler();
+    }
+  };
+
+  // Polls the backend's own session state — never assumes success from
+  // presentPaymentSheet() alone — until the webhook has actually flipped
+  // status to ABGESCHLOSSEN (or CHECKOUT_FEHLGESCHLAGEN, if Stripe's async
+  // confirmation itself later fails, e.g. a delayed payment method).
+  const wartenAufAbschluss = async () => {
+    for (let versuch = 0; versuch < BESTAETIGUNG_POLL_VERSUCHE; versuch++) {
+      await new Promise((r) => setTimeout(r, BESTAETIGUNG_POLL_INTERVALL_MS));
+      await useOnboardingStore.getState().laden();
+      const aktuellerStatus = useOnboardingStore.getState().session?.status;
+      if (aktuellerStatus === 'ABGESCHLOSSEN') {
+        // Die Versorgung ist zu diesem Zeitpunkt bereits serverseitig angelegt
+        // (der Webhook hat complete() bereits aufgerufen) — bei einem Fehler
+        // danach (z.B. lokales Benutzer-Anlegen) navigieren wir trotzdem
+        // weiter, statt den Nutzer auf einem bereits abgeschlossenen Status
+        // stehen zu lassen.
+        try {
+          await abschliessen();
+        } catch {
+          // Best effort: siehe Kommentar oben.
+        }
+        router.replace('/(app)/dashboard');
+        return;
+      }
+      if (aktuellerStatus === 'CHECKOUT_FEHLGESCHLAGEN') {
+        setZahlungLäuft(false);
+        setZahlungsHinweis(null);
+        return;
+      }
     }
     setZahlungLäuft(false);
-    zeigeDispatchFehler();
+    setZahlungsHinweis(null);
+    Alert.alert(
+      'Wird noch bestätigt',
+      'Deine Zahlung wird noch verarbeitet. Bitte prüfe es in ein paar Minuten erneut.',
+    );
   };
 
   const handleErneutVersuchen = async () => {
@@ -197,10 +257,13 @@ export default function CheckoutScreen() {
                 <Text style={styles.zuzahlungWert}>{eigenanteilText}</Text>
               </View>
               {session.status !== 'CHECKOUT_FEHLGESCHLAGEN' && (
-                <TouchableOpacity style={styles.button} onPress={handleZahlung} disabled={zahlungLäuft} activeOpacity={0.85}>
-                  <LinearGradient colors={[D.color.gradientTop, D.color.gradientBottom]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
-                  {zahlungLäuft ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.buttonLabel}>Jetzt bezahlen — {eigenanteilText}</Text>}
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity style={styles.button} onPress={handleZahlung} disabled={zahlungLäuft} activeOpacity={0.85}>
+                    <LinearGradient colors={[D.color.gradientTop, D.color.gradientBottom]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
+                    {zahlungLäuft ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.buttonLabel}>Jetzt bezahlen — {eigenanteilText}</Text>}
+                  </TouchableOpacity>
+                  {zahlungsHinweis && <Text style={styles.zahlungsHinweis}>{zahlungsHinweis}</Text>}
+                </>
               )}
             </Animated.View>
           )}
@@ -223,6 +286,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
   buttonLabel: { fontSize: D.font.lg, fontWeight: D.font.bold, color: D.color.inkInverted },
+  zahlungsHinweis: { fontSize: D.font.sm, color: D.color.inkSecondary, textAlign: 'center' },
   nochmalLink: { alignItems: 'center', paddingVertical: 8, minHeight: 44, justifyContent: 'center' },
   nochmalText: { fontSize: D.font.md, color: D.color.accent, fontWeight: D.font.semibold },
   zuzahlungBox: {
