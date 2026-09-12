@@ -41,7 +41,6 @@ export default function DashboardScreen() {
     // keine Versorgungshistorie eines fremden Kunden aufscheinen.
     if (!benutzer) {
       zuruecksetzen();
-      setIsLoading(false);
       return;
     }
     // Ein Netzwerk-/Serverfehler soll den leeren Zustand zeigen statt eines
@@ -86,7 +85,7 @@ export default function DashboardScreen() {
             />
           </Animated.View>
 
-          {isLoading ? (
+          {isLoading && benutzer ? (
             <View style={styles.loadingBlock}>
               <View style={styles.skeleton} />
               <View style={[styles.skeleton, { height: 180, marginTop: 12 }]} />

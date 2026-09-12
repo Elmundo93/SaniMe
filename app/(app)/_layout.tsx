@@ -113,7 +113,7 @@ export default function AppLayout() {
         name="dashboard/index"
         options={{
           title: 'Dashboard',
-          tabBarIcon: ({ focused, color, size }: { focused: boolean; color: string; size: number }) => (
+          tabBarIcon: ({ color, size }) => (
             <Feather name="clock" size={size} color={color} />
           ),
         }}
@@ -122,7 +122,7 @@ export default function AppLayout() {
         name="einstellungen/index"
         options={{
           title: 'Profil',
-          tabBarIcon: ({ focused, color, size }: { focused: boolean; color: string; size: number }) => (
+          tabBarIcon: ({ color, size }) => (
             <Feather name="user" size={size} color={color} />
           ),
         }}

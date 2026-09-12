@@ -6,11 +6,6 @@
     "orientation": "portrait",
     "scheme": "sanime",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "backgroundColor": "#0F172A",
-      "resizeMode": "contain"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "de.sanime.app",
@@ -44,7 +39,15 @@
         {
           "enableGooglePay": false
         }
-      ]
+      ],
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0F172A"
+        }
+      ],
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true

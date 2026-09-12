@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 1,
   },
   dimm: {

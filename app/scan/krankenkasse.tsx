@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
   },
   permissionButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
   abbrechen: { color: 'rgba(255,255,255,0.5)', fontSize: 15 },
-  overlay: { ...StyleSheet.absoluteFillObject, zIndex: 1 },
+  overlay: { ...StyleSheet.absoluteFill, zIndex: 1 },
   dimm: { backgroundColor: 'rgba(0,0,0,0.62)' },
   mitteRow: { flexDirection: 'row', height: CARD_H + 20 },
   frame: { position: 'absolute', zIndex: 2, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },

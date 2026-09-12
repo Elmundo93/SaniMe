@@ -48,6 +48,8 @@ export default function CheckoutScreen() {
 
   React.useEffect(() => {
     if (!session || substep) return;
+    // One-time initial substep derived from session/auth data, not a reaction to an external system.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (bereitsEingeloggt) { setSubstep('zahlung'); return; }
     if (session.customerContact.telefonVerifiziert) { setSubstep('zahlung'); return; }
     if (session.customerContact.telefon) {
