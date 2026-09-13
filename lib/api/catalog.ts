@@ -1,13 +1,28 @@
+import type { Produkt } from '@sanime/domain';
 import { request } from './client';
 
-export function listCategories(): Promise<any[]> {
+export interface Kategorie {
+  id: string;
+  name: string;
+}
+
+export function listCategories(): Promise<Kategorie[]> {
   return request('GET', '/catalog/categories');
 }
 
-export function listProducts(): Promise<any[]> {
-  return request('GET', '/products');
+export interface ListProductsFilters {
+  categoryId?: string;
+  q?: string;
 }
 
-export function getProduct(id: string): Promise<any> {
+export function listProducts(filters: ListProductsFilters = {}): Promise<Produkt[]> {
+  const params = new URLSearchParams();
+  if (filters.categoryId) params.set('categoryId', filters.categoryId);
+  if (filters.q) params.set('q', filters.q);
+  const query = params.toString();
+  return request('GET', `/products${query ? `?${query}` : ''}`);
+}
+
+export function getProduct(id: string): Promise<Produkt> {
   return request('GET', `/products/${id}`);
 }

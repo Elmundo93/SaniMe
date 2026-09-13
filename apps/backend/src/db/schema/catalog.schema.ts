@@ -16,6 +16,10 @@ export const catalogCategories = pgTable('catalog_categories', {
     .notNull()
     .references(() => organizations.id),
   name: text('name').notNull(),
+  // Verknüpft eine Kategorie mit einer id aus @sanime/domain's statischer
+  // KRANKHEITSBILD_KATALOG-Taxonomie — bewusst kein FK auf eine eigene
+  // Tabelle, die Taxonomie selbst ist statische Domain-Daten, keine Entität.
+  krankheitsbildId: text('krankheitsbild_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -33,7 +37,10 @@ export const products = pgTable('products', {
     .notNull()
     .references(() => manufacturers.id),
   name: text('name').notNull(),
-  hilfsmittelnummer: text('hilfsmittelnummer').notNull(),
+  // Nullable: a Selbstzahler-Artikel (no statutory-insurance billing) has no
+  // Hilfsmittelnummer at all — see @sanime/domain's Produkt.hilfsmittelNr and
+  // istAbschlussfaehig, which branches the whole onboarding FSM off this.
+  hilfsmittelnummer: text('hilfsmittelnummer'),
   description: text('description').notNull(),
   features: jsonb('features').notNull().default([]),
   requiresApproval: boolean('requires_approval').notNull().default(true),

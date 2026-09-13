@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, ilike, inArray, or } from 'drizzle-orm';
 import { DRIZZLE, type Database } from '../../db/client';
 import { catalogCategories, manufacturers, products, supplierProducts, suppliers } from '../../db/schema';
 import { TenantScopedRepository } from '../../common/repository/tenant-scoped.repository';
@@ -22,13 +22,23 @@ export class ProductsRepository extends TenantScopedRepository {
     super(db);
   }
 
-  listActive(tenant: TenantContext) {
+  listActive(tenant: TenantContext, filters?: { categoryId?: string; categoryIds?: string[]; query?: string }) {
+    const conditions = [this.tenantFilter(products.organizationId, tenant), eq(products.isActive, true)];
+    if (filters?.categoryId) conditions.push(eq(products.categoryId, filters.categoryId));
+    // Used by CatalogService.listProductsForKrankheitsbild — a Krankheitsbild
+    // can map to more than one category.
+    if (filters?.categoryIds && filters.categoryIds.length > 0) {
+      conditions.push(inArray(products.categoryId, filters.categoryIds));
+    }
+    if (filters?.query) {
+      conditions.push(or(ilike(products.name, `%${filters.query}%`), ilike(products.description, `%${filters.query}%`))!);
+    }
     return this.db
       .select(PRODUCT_COLUMNS)
       .from(products)
       .innerJoin(catalogCategories, eq(products.categoryId, catalogCategories.id))
       .innerJoin(manufacturers, eq(products.manufacturerId, manufacturers.id))
-      .where(and(this.tenantFilter(products.organizationId, tenant), eq(products.isActive, true)));
+      .where(and(...conditions));
   }
 
   async findById(tenant: TenantContext, id: string) {

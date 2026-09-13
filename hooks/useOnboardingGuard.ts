@@ -16,7 +16,13 @@ export interface OnboardingGuardOptions {
 }
 
 function fehlendesPflichtfeldRoute(session: OnboardingSession, options?: OnboardingGuardOptions): string | null {
-  if (options?.requireOcrResult && !session.ocrResult) return STATUS_META.REZEPT_AUFNAHME.route;
+  // Jeder Selbstzahler-Pfad (Katalog oder Krankheitsbild) hat legitim nie ein
+  // Rezept fotografiert — ocrResult bleibt dort für die ganze Session null
+  // (siehe istAbschlussfaehig in @sanime/domain). Nur der klassische
+  // REZEPT-Pfad braucht diesen Guard.
+  if (options?.requireOcrResult && session.eintrittspfad === 'REZEPT' && !session.ocrResult) {
+    return STATUS_META.REZEPT_AUFNAHME.route;
+  }
   if (options?.requireSupply && !session.selectedSupply) return STATUS_META.VERSORGUNGSAUSWAHL.route;
   if (options?.requireAppointment && !session.selectedAppointment) return STATUS_META.TERMINPLANUNG.route;
   return null;

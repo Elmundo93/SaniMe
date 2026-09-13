@@ -47,7 +47,14 @@
           "backgroundColor": "#0F172A"
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "SaniMe benötigt Zugriff auf das Mikrofon, um dein gesprochenes Krankheitsbild zu erkennen.",
+          "speechRecognitionPermission": "SaniMe benötigt Spracherkennung, um dein gesprochenes Krankheitsbild in Text umzuwandeln."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

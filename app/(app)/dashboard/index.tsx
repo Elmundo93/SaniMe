@@ -158,6 +158,14 @@ export default function DashboardScreen() {
                   />
                   <Text style={styles.emptyButtonLabel}>Jetzt Rezept scannen</Text>
                 </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.katalogLink}
+                  onPress={() => router.push('/katalog')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Ohne Rezept: Katalog durchsuchen"
+                >
+                  <Text style={styles.katalogLinkText}>Ohne Rezept? Katalog durchsuchen</Text>
+                </TouchableOpacity>
               </GlassCard>
             </Animated.View>
           )}
@@ -266,6 +274,18 @@ const styles = StyleSheet.create({
     fontSize: D.font.md,
     fontWeight: D.font.bold,
     color: D.color.inkInverted,
+  },
+  katalogLink: {
+    marginTop: 14,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  katalogLinkText: {
+    fontSize: D.font.sm,
+    fontWeight: D.font.semibold,
+    color: D.color.accent,
   },
   aufgabeCard: {},
   aufgabeRow: {

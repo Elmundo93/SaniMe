@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
 import {
-  hatPflichtfelderKomplett,
+  istAbschlussfaehig,
   telefonVerifiziert,
   transition,
   type OcrResult,
@@ -142,6 +142,36 @@ export class OnboardingService {
       const products = await this.catalog.listProducts(tenant);
       const produkte = products.map(toProdukt);
       augmentedEvent = { ...event, produkte };
+    } else if (event.type === 'KATALOG_PRODUKT_VORGEMERKT') {
+      // Never trust the client's branch choice: a self-pay product (no
+      // Hilfsmittelnummer) has no business entering the Rezept/Krankenkasse
+      // insurance chain this event routes into.
+      const product = await this.catalog.assertProductExists(tenant, event.produktId);
+      if (!product.hilfsmittelnummer) {
+        throw new BadRequestException('Dieses Produkt hat keine Hilfsmittelnummer und kann nicht vorgemerkt werden');
+      }
+    } else if (event.type === 'KATALOG_PRODUKT_SELBSTZAHLER_GEWAEHLT') {
+      const product = await this.catalog.getProduct(tenant, event.produkt.id);
+      if (product.hilfsmittelnummer) {
+        throw new BadRequestException('Dieses Produkt hat eine Hilfsmittelnummer und ist kein Selbstzahler-Artikel');
+      }
+      augmentedEvent = { ...event, produkt: toProdukt(product) };
+    } else if (event.type === 'KRANKHEITSBILD_AUSGEWAEHLT') {
+      // Recommendations are always computed server-side from the
+      // Krankheitsbild id — never trusted from the client's own event payload.
+      const products = await this.catalog.listProductsForKrankheitsbild(tenant, event.krankheitsbildId);
+      augmentedEvent = { ...event, produkte: products.map(toProdukt) };
+    } else if (event.type === 'KRANKHEITSBILD_PRODUKT_VORGEMERKT') {
+      const product = await this.catalog.assertProductExists(tenant, event.produktId);
+      if (!product.hilfsmittelnummer) {
+        throw new BadRequestException('Dieses Produkt hat keine Hilfsmittelnummer und kann nicht vorgemerkt werden');
+      }
+    } else if (event.type === 'KRANKHEITSBILD_PRODUKT_SELBSTZAHLER_GEWAEHLT') {
+      const product = await this.catalog.getProduct(tenant, event.produkt.id);
+      if (product.hilfsmittelnummer) {
+        throw new BadRequestException('Dieses Produkt hat eine Hilfsmittelnummer und ist kein Selbstzahler-Artikel');
+      }
+      augmentedEvent = { ...event, produkt: toProdukt(product) };
     }
 
     const result = transition(domainSession, augmentedEvent);
@@ -171,7 +201,7 @@ export class OnboardingService {
 
     // Defense in depth: re-validate independently of whatever the client did
     // on the way here, against the persisted session server-side.
-    if (!hatPflichtfelderKomplett(domainSession) || !telefonVerifiziert(domainSession)) {
+    if (!istAbschlussfaehig(domainSession) || !telefonVerifiziert(domainSession)) {
       throw new BadRequestException('Onboarding-Session ist nicht vollständig für den Abschluss');
     }
     if (!row.selectedProductId) {
@@ -321,6 +351,33 @@ export class OnboardingService {
         });
         return;
       }
+      case 'KATALOG_PRODUKT_VORGEMERKT':
+        await this.sessions.update(tenant, row.id, { preselectedProductId: event.produktId });
+        return;
+      case 'KATALOG_PRODUKT_SELBSTZAHLER_GEWAEHLT': {
+        const product = await this.catalog.getProduct(tenant, event.produkt.id);
+        await this.sessions.update(tenant, row.id, {
+          entryPath: 'KATALOG_SELBSTZAHLER',
+          selectedProductId: event.produkt.id,
+          selectedSupplierProductId: product.offers[0]?.id ?? null,
+        });
+        return;
+      }
+      case 'KRANKHEITSBILD_AUSGEWAEHLT':
+        await this.sessions.update(tenant, row.id, { selectedKrankheitsbildId: event.krankheitsbildId });
+        return;
+      case 'KRANKHEITSBILD_PRODUKT_VORGEMERKT':
+        await this.sessions.update(tenant, row.id, { preselectedProductId: event.produktId });
+        return;
+      case 'KRANKHEITSBILD_PRODUKT_SELBSTZAHLER_GEWAEHLT': {
+        const product = await this.catalog.getProduct(tenant, event.produkt.id);
+        await this.sessions.update(tenant, row.id, {
+          entryPath: 'KRANKHEITSBILD_SELBSTZAHLER',
+          selectedProductId: event.produkt.id,
+          selectedSupplierProductId: product.offers[0]?.id ?? null,
+        });
+        return;
+      }
       case 'TERMIN_VORSCHLAEGE_BERECHNET':
         await this.sessions.update(tenant, row.id, { appointmentSlotsJson: event.vorschläge });
         return;
@@ -384,6 +441,9 @@ export class OnboardingService {
       ocrBearbeitet: ocrRow?.rawEdited ?? false,
       verfügbareProdukte,
       selectedSupply,
+      vorausgewaehltesProduktId: row.preselectedProductId ?? null,
+      ausgewaehltesKrankheitsbildId: row.selectedKrankheitsbildId ?? null,
+      eintrittspfad: (row.entryPath as OnboardingSession['eintrittspfad']) ?? 'REZEPT',
       terminVorschläge: Array.isArray(row.appointmentSlotsJson) ? (row.appointmentSlotsJson as OnboardingSession['terminVorschläge']) : [],
       selectedAppointment: (row.selectedAppointmentJson as OnboardingSession['selectedAppointment']) ?? null,
       verbindlicheBestätigung: row.bindingConfirmation,

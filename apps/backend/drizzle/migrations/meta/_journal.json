@@ -113,6 +113,20 @@
       "when": 1783175238077,
       "tag": "0015_add_payments_table",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1789232830698,
+      "tag": "0016_perpetual_mojo",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1789235169060,
+      "tag": "0017_tricky_expediter",
+      "breakpoints": true
     }
   ]
 }

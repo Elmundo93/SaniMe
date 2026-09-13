@@ -1,39 +1,11 @@
-import type { ConfidenceLevel, OcrConfidence, OcrResult, Produkt } from '@sanime/domain';
+import type { ConfidenceLevel, OcrConfidence, OcrResult } from '@sanime/domain';
 import type { InsurancePolicy, OcrResultRow } from '../../db/schema';
 
-interface CatalogProductJoined {
-  id: string;
-  name: string;
-  description: string;
-  hilfsmittelnummer: string;
-  features: unknown;
-  categoryName: string;
-  manufacturerName: string;
-  // Only present when fetched via CatalogService.getProduct (a single
-  // product); CatalogService.listProducts's lighter listing query doesn't
-  // join supplier offers, so this is absent there — eigenanteil/lieferzeit
-  // fall back to placeholders in that case, corrected once a specific
-  // product is fetched individually (SUPPLY_AUSGEWAEHLT, complete()).
-  offers?: { deliveryTimeDays: number; customerCopayCents: number }[];
-}
-
-// Maps the Catalog module's joined product shape (see products.repository.ts)
-// to @sanime/domain's Produkt — the shape the client-side workflow engine
-// already expects (event payloads carry a full Produkt, not just an id).
-export function toProdukt(product: CatalogProductJoined): Produkt {
-  const primaryOffer = product.offers?.[0];
-  return {
-    id: product.id,
-    name: product.name,
-    hersteller: product.manufacturerName,
-    hilfsmittelNr: product.hilfsmittelnummer,
-    beschreibung: product.description,
-    eigenanteil: primaryOffer ? primaryOffer.customerCopayCents / 100 : 0,
-    lieferzeit: primaryOffer ? `${primaryOffer.deliveryTimeDays} Werktage` : 'unbekannt',
-    kategorie: product.categoryName,
-    merkmale: Array.isArray(product.features) ? (product.features as string[]) : [],
-  } as Produkt;
-}
+// Moved to the Catalog module — CatalogController's own GET /products,
+// /products/:id endpoints need this mapping directly, and Onboarding already
+// depends on Catalog, not the reverse. Re-exported here since every existing
+// call site in this file's module imports it from here.
+export { toProdukt } from '../catalog/catalog.mapper';
 
 // ocr_results and insurance_policies are separate tables (Principle 11) —
 // the domain OcrResult's `krankenkasse` sub-object is assembled from both.

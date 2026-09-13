@@ -13,7 +13,7 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { D } from '@sanime/design-system';
-import { useOnboardingStore } from '../../store/onboardingStore';
+import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { Checkbox } from '../../components/ui/Checkbox';
@@ -21,6 +21,7 @@ import { BackLink } from '../../components/ui/BackLink';
 import { Screen } from '../../components/ui/Screen';
 import { ScrollContainer } from '../../components/ui/ScrollContainer';
 import { AGB_VERSION, DATENSCHUTZ_VERSION } from '../../constants/legal';
+import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 
 const PROZESS_SCHRITTE: { icon: React.ComponentProps<typeof Feather>['name']; label: string }[] = [
   { icon: 'camera', label: 'Rezept fotografieren' },
@@ -106,9 +107,17 @@ export default function LeistungsuebersichtScreen() {
       setSubstep((s) => (s + 1) as 0 | 1 | 2);
       return;
     }
-    const result = await dispatch({ type: 'WEITER' });
+    // Eine Katalog-/Krankheitsbild-Produktwahl, die vor Einwilligung getroffen
+    // wurde (siehe useProduktAuswahlDispatch), wird hier statt eines plain
+    // WEITER nachgeholt — Ziel-Status variiert dann (REZEPT_AUFNAHME oder
+    // TERMINPLANUNG), deshalb STATUS_META statt fest verdrahtetem '/scan/rezept'.
+    const pending = useOnboardingStore.getState().pendingEinstiegEvent;
+    const result = await dispatch(pending ?? { type: 'WEITER' });
     if (result.ok) {
-      router.push('/scan/rezept');
+      if (pending) useOnboardingStore.getState().setPendingEinstiegEvent(null);
+      router.push(STATUS_META[result.session.status].route as any);
+    } else {
+      zeigeDispatchFehler();
     }
   };
 

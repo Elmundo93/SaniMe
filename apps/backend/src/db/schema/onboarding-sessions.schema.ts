@@ -29,6 +29,18 @@ export const onboardingSessions = pgTable('onboarding_sessions', {
   selectedSupplierProductId: uuid('selected_supplier_product_id').references(() => supplierProducts.id),
   availableProductIds: jsonb('available_product_ids').notNull().default([]),
 
+  // Set by KATALOG_PRODUKT_VORGEMERKT — pure UX pre-selection for
+  // VERSORGUNGSAUSWAHL, never a guard input (see @sanime/domain's
+  // OnboardingSession.vorausgewaehltesProduktId).
+  preselectedProductId: uuid('preselected_product_id').references(() => products.id),
+  // Navigation bookkeeping only (which ZURUECK event/back-route applies) —
+  // mirrors @sanime/domain's OnboardingSession.eintrittspfad, never itself a
+  // business-rule guard input.
+  entryPath: text('entry_path').notNull().default('REZEPT'),
+  // Set by KRANKHEITSBILD_AUSGEWAEHLT — an id into @sanime/domain's static
+  // KRANKHEITSBILD_KATALOG taxonomy, kept only for later admin visibility.
+  selectedKrankheitsbildId: text('selected_krankheitsbild_id'),
+
   // Deliberately JSON, not a real `appointments` table — real
   // supplier-calendar logic is Layer 3; same "seam now, capacity later"
   // pattern the doc already uses elsewhere.

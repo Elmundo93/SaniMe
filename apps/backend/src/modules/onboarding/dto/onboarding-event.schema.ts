@@ -30,7 +30,7 @@ const produktSchema = z.object({
   id: z.string(),
   name: z.string(),
   hersteller: z.string(),
-  hilfsmittelNr: z.string(),
+  hilfsmittelNr: z.string().optional(),
   beschreibung: z.string(),
   eigenanteil: z.number(),
   lieferzeit: z.string(),
@@ -69,6 +69,24 @@ export const onboardingEventSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('KRANKENKASSE_UEBERSPRUNGEN'), produkte: z.array(produktSchema).optional() }),
   z.object({ type: z.literal('SUPPLY_AUSGEWAEHLT'), produkt: produktSchema }),
+  z.object({ type: z.literal('KATALOG_PRODUKT_VORGEMERKT'), produktId: z.string().min(1) }),
+  // produkt is accepted but always re-fetched/re-validated server-side in
+  // OnboardingService — same "never trust the client's product data" rule as
+  // SUPPLY_AUSGEWAEHLT.
+  z.object({ type: z.literal('KATALOG_PRODUKT_SELBSTZAHLER_GEWAEHLT'), produkt: produktSchema }),
+  z.object({ type: z.literal('ZURUECK_KATALOG') }),
+  z.object({ type: z.literal('KRANKHEITSBILD_STARTEN') }),
+  // krankheitsbildId is the only thing that matters — produkte, if the
+  // client sends anything at all, is always discarded and recomputed
+  // server-side (same discipline as KRANKENKASSE_OCR_ABGESCHLOSSEN).
+  z.object({
+    type: z.literal('KRANKHEITSBILD_AUSGEWAEHLT'),
+    krankheitsbildId: z.string().min(1),
+    produkte: z.array(produktSchema).optional(),
+  }),
+  z.object({ type: z.literal('KRANKHEITSBILD_PRODUKT_VORGEMERKT'), produktId: z.string().min(1) }),
+  z.object({ type: z.literal('KRANKHEITSBILD_PRODUKT_SELBSTZAHLER_GEWAEHLT'), produkt: produktSchema }),
+  z.object({ type: z.literal('ZURUECK_KRANKHEITSBILD') }),
   z.object({ type: z.literal('TERMIN_VORSCHLAEGE_BERECHNET'), vorschläge: z.array(terminSlotSchema) }),
   z.object({ type: z.literal('TERMIN_AUSGEWAEHLT'), termin: terminSlotSchema }),
   z.object({ type: z.literal('AUFTRAG_BESTAETIGT') }),

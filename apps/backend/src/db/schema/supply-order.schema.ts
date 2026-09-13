@@ -29,7 +29,9 @@ export const supplies = pgTable('supplies', {
   ocrResultId: uuid('ocr_result_id').references(() => ocrResults.id),
   productNameSnapshot: text('product_name_snapshot').notNull(),
   manufacturerNameSnapshot: text('manufacturer_name_snapshot').notNull(),
-  hilfsmittelNrSnapshot: text('hilfsmittel_nr_snapshot').notNull(),
+  // Nullable: a Selbstzahler product has no Hilfsmittelnummer to snapshot —
+  // mirrors products.hilfsmittelnummer's own nullability.
+  hilfsmittelNrSnapshot: text('hilfsmittel_nr_snapshot'),
   // Frozen at supply-creation time from the completed OnboardingSession's
   // ocrResult (see OnboardingService.complete) — the dashboard's Arzt/
   // Krankenkasse fields need a value even if the source OCR/insurance-policy

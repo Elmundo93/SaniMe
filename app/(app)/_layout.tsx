@@ -11,7 +11,6 @@ import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { CameraButton } from '../../components/ui/CameraButton';
-import { useOnboardingStore } from '../../store/onboardingStore';
 import { D, glass } from '@sanime/design-system';
 
 const FAB_SIZE = 72;
@@ -19,7 +18,6 @@ const FAB_SIZE = 72;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function PremiumTabBar({ state, descriptors, navigation }: any) {
   const router = useRouter();
-  const starten = useOnboardingStore((s) => s.starten);
 
   // Nur diese beiden Routen bekommen eine sichtbare Kachel — dashboard/[id] (die
   // Versorgungsdetailseite) ist Teil desselben Tab-Stacks, aber kein eigener Tab.
@@ -91,13 +89,7 @@ function PremiumTabBar({ state, descriptors, navigation }: any) {
       {/* Floating Camera Button — außerhalb des overflow:hidden blurContainer, damit der
           pulsierende Glow des Buttons nicht am oberen Rand abgeschnitten wird. */}
       <View style={[styles.fabWrap, { marginLeft: -FAB_SIZE / 2 }]} pointerEvents="box-none">
-        <CameraButton
-          onPress={async () => {
-            await starten();
-            router.push('/scan/rezept');
-          }}
-          size={FAB_SIZE}
-        />
+        <CameraButton onPress={() => router.push('/einstieg')} size={FAB_SIZE} />
       </View>
     </SafeAreaView>
   );

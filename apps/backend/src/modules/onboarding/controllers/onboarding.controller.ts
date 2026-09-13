@@ -97,7 +97,11 @@ function requireIdempotencyKey(req: Request): void {
 // @sanime/domain's OnboardingEvent requires it non-optional; default to []
 // to satisfy the type at the call boundary before the service overrides it.
 function withDefaultedProdukte(event: ReturnType<typeof patchBodySchema.parse>['event']): OnboardingEvent {
-  if (event.type === 'KRANKENKASSE_OCR_ABGESCHLOSSEN' || event.type === 'KRANKENKASSE_UEBERSPRUNGEN') {
+  if (
+    event.type === 'KRANKENKASSE_OCR_ABGESCHLOSSEN' ||
+    event.type === 'KRANKENKASSE_UEBERSPRUNGEN' ||
+    event.type === 'KRANKHEITSBILD_AUSGEWAEHLT'
+  ) {
     return { ...event, produkte: event.produkte ?? [] };
   }
   return event;

@@ -84,7 +84,7 @@ export function CameraButton({ onPress, size = 72 }: CameraButtonProps) {
           activeOpacity={0.85}
           style={{ width: size, height: size }}
           accessibilityRole="button"
-          accessibilityLabel="Rezept scannen"
+          accessibilityLabel="Neue Versorgung starten"
         >
           <View style={[styles.container, D.shadow.fab, { width: size, height: size, borderRadius: radius }]}>
             <LinearGradient

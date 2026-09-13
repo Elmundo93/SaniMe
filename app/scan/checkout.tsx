@@ -11,7 +11,7 @@ import { ScrollContainer } from '../../components/ui/ScrollContainer';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { BackLink } from '../../components/ui/BackLink';
 import { StepCounter } from '../../components/onboarding/StepCounter';
-import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
+import { useOnboardingStore, schrittInfo } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { useOtpVerification } from '../../hooks/useOtpVerification';
@@ -164,16 +164,18 @@ export default function CheckoutScreen() {
     if (!result.ok) zeigeDispatchFehler();
   };
 
+  const { aktuell, gesamt } = schrittInfo(session);
+
   return (
     <Screen>
         <ScreenHeader
           title="Checkout"
           right={
             <StepCounter
-              aktuellerSchritt={STATUS_META.CHECKOUT.schritt}
-              gesamtSchritte={11}
+              aktuellerSchritt={aktuell}
+              gesamtSchritte={gesamt}
               variant="light"
-              label={`${STATUS_META.CHECKOUT.schritt}/11`}
+              label={`${aktuell}/${gesamt}`}
             />
           }
         />

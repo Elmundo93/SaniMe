@@ -27,6 +27,14 @@ export type OnboardingEvent =
     }
   | { type: 'KRANKENKASSE_UEBERSPRUNGEN'; produkte: Produkt[] }
   | { type: 'SUPPLY_AUSGEWAEHLT'; produkt: Produkt }
+  | { type: 'KATALOG_PRODUKT_VORGEMERKT'; produktId: string }
+  | { type: 'KATALOG_PRODUKT_SELBSTZAHLER_GEWAEHLT'; produkt: Produkt }
+  | { type: 'ZURUECK_KATALOG' }
+  | { type: 'KRANKHEITSBILD_STARTEN' }
+  | { type: 'KRANKHEITSBILD_AUSGEWAEHLT'; krankheitsbildId: string; produkte: Produkt[] }
+  | { type: 'KRANKHEITSBILD_PRODUKT_VORGEMERKT'; produktId: string }
+  | { type: 'KRANKHEITSBILD_PRODUKT_SELBSTZAHLER_GEWAEHLT'; produkt: Produkt }
+  | { type: 'ZURUECK_KRANKHEITSBILD' }
   | { type: 'TERMIN_VORSCHLAEGE_BERECHNET'; vorschläge: TerminSlot[] }
   | { type: 'TERMIN_AUSGEWAEHLT'; termin: TerminSlot }
   | { type: 'AUFTRAG_BESTAETIGT' }
@@ -61,6 +69,20 @@ export function telefonVerifiziert(session: OnboardingSession): boolean {
   return session.customerContact.telefonVerifiziert || !session.customerContact.telefon;
 }
 
+export function consentErteilt(session: OnboardingSession): boolean {
+  return session.consent.agb.akzeptiert && session.consent.datenschutz.akzeptiert;
+}
+
+// Ersetzt hatPflichtfelderKomplett als Abschluss-Guard: ein Selbstzahler-Produkt
+// (keine Hilfsmittelnummer) hat legitim nie den Rezept-/Krankenkassen-OCR-Pfad
+// durchlaufen, braucht die Rezept-Pflichtfelder also nie. Bewusst am
+// gewählten Produkt festgemacht, nicht an eintrittspfad — eintrittspfad ist
+// reine Navigations-Buchführung, keine Business-Regel.
+export function istAbschlussfaehig(session: OnboardingSession): boolean {
+  if (session.selectedSupply && !session.selectedSupply.hilfsmittelNr) return true;
+  return hatPflichtfelderKomplett(session);
+}
+
 export const TRANSITIONS: TransitionRule<OnboardingStatus, OnboardingEvent, OnboardingSession>[] = [
   { from: 'WILLKOMMEN', event: 'WEITER', to: 'LEISTUNGSUEBERSICHT' },
   { from: 'LEISTUNGSUEBERSICHT', event: 'AGB_AKZEPTIERT', to: 'LEISTUNGSUEBERSICHT' },
@@ -69,8 +91,35 @@ export const TRANSITIONS: TransitionRule<OnboardingStatus, OnboardingEvent, Onbo
     from: 'LEISTUNGSUEBERSICHT',
     event: 'WEITER',
     to: 'REZEPT_AUFNAHME',
-    guard: (s) => s.consent.agb.akzeptiert && s.consent.datenschutz.akzeptiert,
+    guard: consentErteilt,
   },
+  {
+    from: 'LEISTUNGSUEBERSICHT',
+    event: 'KATALOG_PRODUKT_VORGEMERKT',
+    to: 'REZEPT_AUFNAHME',
+    guard: consentErteilt,
+  },
+  {
+    from: 'LEISTUNGSUEBERSICHT',
+    event: 'KATALOG_PRODUKT_SELBSTZAHLER_GEWAEHLT',
+    to: 'TERMINPLANUNG',
+    guard: consentErteilt,
+  },
+  {
+    from: 'LEISTUNGSUEBERSICHT',
+    event: 'KRANKHEITSBILD_STARTEN',
+    to: 'KRANKHEITSBILD_ERFASSUNG',
+    guard: consentErteilt,
+  },
+  { from: 'KRANKHEITSBILD_ERFASSUNG', event: 'ZURUECK', to: 'LEISTUNGSUEBERSICHT' },
+  { from: 'KRANKHEITSBILD_ERFASSUNG', event: 'KRANKHEITSBILD_AUSGEWAEHLT', to: 'KRANKHEITSBILD_EMPFEHLUNG' },
+  { from: 'KRANKHEITSBILD_EMPFEHLUNG', event: 'ZURUECK', to: 'KRANKHEITSBILD_ERFASSUNG' },
+  // Konsistent mit dem Katalog-Pfad: Konsens ist beim Erreichen von
+  // KRANKHEITSBILD_EMPFEHLUNG bereits erteilt (einziger Weg dorthin führt
+  // über den bereits konsens-geguardeten KRANKHEITSBILD_STARTEN), kein
+  // weiterer Guard nötig.
+  { from: 'KRANKHEITSBILD_EMPFEHLUNG', event: 'KRANKHEITSBILD_PRODUKT_VORGEMERKT', to: 'REZEPT_AUFNAHME' },
+  { from: 'KRANKHEITSBILD_EMPFEHLUNG', event: 'KRANKHEITSBILD_PRODUKT_SELBSTZAHLER_GEWAEHLT', to: 'TERMINPLANUNG' },
   { from: 'REZEPT_AUFNAHME', event: 'REZEPT_OCR_ABGESCHLOSSEN', to: 'REZEPT_PRUEFUNG' },
   { from: 'REZEPT_AUFNAHME', event: 'ZURUECK', to: 'LEISTUNGSUEBERSICHT' },
   { from: 'REZEPT_PRUEFUNG', event: 'FELD_KORRIGIERT', to: 'REZEPT_PRUEFUNG' },
@@ -97,6 +146,15 @@ export const TRANSITIONS: TransitionRule<OnboardingStatus, OnboardingEvent, Onbo
   { from: 'TERMINPLANUNG', event: 'TERMIN_VORSCHLAEGE_BERECHNET', to: 'TERMINPLANUNG' },
   { from: 'TERMINPLANUNG', event: 'TERMIN_AUSGEWAEHLT', to: 'ZUSAMMENFASSUNG' },
   { from: 'TERMINPLANUNG', event: 'ZURUECK', to: 'VERSORGUNGSAUSWAHL' },
+  // Eigenes Event statt ZURUECK wiederzuverwenden: der Selbstzahler-Katalogpfad
+  // erreicht TERMINPLANUNG direkt aus LEISTUNGSUEBERSICHT, ohne je
+  // VERSORGUNGSAUSWAHL zu besuchen — plain ZURUECK bliebe für diesen Pfad
+  // ein Rücksprung ins Leere.
+  { from: 'TERMINPLANUNG', event: 'ZURUECK_KATALOG', to: 'LEISTUNGSUEBERSICHT' },
+  // Eigenes Event aus demselben Grund wie ZURUECK_KATALOG: der
+  // Krankheitsbild-Selbstzahler-Pfad erreicht TERMINPLANUNG direkt aus
+  // KRANKHEITSBILD_EMPFEHLUNG, nie über VERSORGUNGSAUSWAHL.
+  { from: 'TERMINPLANUNG', event: 'ZURUECK_KRANKHEITSBILD', to: 'KRANKHEITSBILD_EMPFEHLUNG' },
   { from: 'ZUSAMMENFASSUNG', event: 'AUFTRAG_BESTAETIGT', to: 'CHECKOUT' },
   { from: 'ZUSAMMENFASSUNG', event: 'ZURUECK', to: 'TERMINPLANUNG' },
   { from: 'CHECKOUT', event: 'KONTAKT_ERFASST', to: 'CHECKOUT' },
@@ -160,6 +218,26 @@ function applyEventData(session: OnboardingSession, event: OnboardingEvent): Onb
       return { ...session, krankenkasseUebersprungen: true, verfügbareProdukte: event.produkte };
     case 'SUPPLY_AUSGEWAEHLT':
       return { ...session, selectedSupply: event.produkt };
+    case 'KATALOG_PRODUKT_VORGEMERKT':
+      return { ...session, vorausgewaehltesProduktId: event.produktId };
+    case 'KATALOG_PRODUKT_SELBSTZAHLER_GEWAEHLT':
+      return { ...session, selectedSupply: event.produkt, eintrittspfad: 'KATALOG_SELBSTZAHLER' };
+    case 'ZURUECK_KATALOG':
+      return session;
+    case 'KRANKHEITSBILD_STARTEN':
+      return session;
+    case 'KRANKHEITSBILD_AUSGEWAEHLT':
+      return {
+        ...session,
+        ausgewaehltesKrankheitsbildId: event.krankheitsbildId,
+        verfügbareProdukte: event.produkte,
+      };
+    case 'KRANKHEITSBILD_PRODUKT_VORGEMERKT':
+      return { ...session, vorausgewaehltesProduktId: event.produktId };
+    case 'KRANKHEITSBILD_PRODUKT_SELBSTZAHLER_GEWAEHLT':
+      return { ...session, selectedSupply: event.produkt, eintrittspfad: 'KRANKHEITSBILD_SELBSTZAHLER' };
+    case 'ZURUECK_KRANKHEITSBILD':
+      return session;
     case 'TERMIN_VORSCHLAEGE_BERECHNET':
       return { ...session, terminVorschläge: event.vorschläge };
     case 'TERMIN_AUSGEWAEHLT':
@@ -214,6 +292,9 @@ export function erstelleLeereSession(id: string): OnboardingSession {
     ocrBearbeitet: false,
     verfügbareProdukte: [],
     selectedSupply: null,
+    vorausgewaehltesProduktId: null,
+    ausgewaehltesKrankheitsbildId: null,
+    eintrittspfad: 'REZEPT',
     terminVorschläge: [],
     selectedAppointment: null,
     verbindlicheBestätigung: false,

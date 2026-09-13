@@ -11,7 +11,7 @@ import { ScrollContainer } from '../../components/ui/ScrollContainer';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { StepCounter } from '../../components/onboarding/StepCounter';
 import { MiniKalender } from '../../components/onboarding/MiniKalender';
-import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
+import { useOnboardingStore, STATUS_META, schrittInfo } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { terminAusKalenderdatum, terminAusVorschlag } from '../../lib/terminplanung';
@@ -58,7 +58,19 @@ export default function TerminplanungScreen() {
   if (!ready || !session) return <OnboardingLoadingView />;
 
   const handleZurück = async () => {
-    const result = await dispatch({ type: 'ZURUECK' });
+    // Die beiden Selbstzahler-Pfade erreichen TERMINPLANUNG direkt aus
+    // LEISTUNGSUEBERSICHT bzw. KRANKHEITSBILD_EMPFEHLUNG (nie über
+    // VERSORGUNGSAUSWAHL) — plain ZURUECK hat zwar auch dort eine gültige
+    // (unbedingte) FSM-Regel, würde aber auf eine VERSORGUNGSAUSWAHL mit
+    // leerer Produktliste führen. Das richtige Event zu wählen ist hier
+    // Aufgabe des Screens, nicht der FSM (siehe onboarding.test.ts).
+    const event =
+      session.eintrittspfad === 'KATALOG_SELBSTZAHLER'
+        ? { type: 'ZURUECK_KATALOG' as const }
+        : session.eintrittspfad === 'KRANKHEITSBILD_SELBSTZAHLER'
+          ? { type: 'ZURUECK_KRANKHEITSBILD' as const }
+          : { type: 'ZURUECK' as const };
+    const result = await dispatch(event);
     if (result.ok) {
       router.replace(STATUS_META[result.session.status].route as any);
     } else {
@@ -86,6 +98,8 @@ export default function TerminplanungScreen() {
     await bestätigen(terminAusKalenderdatum(session, datum));
   };
 
+  const { aktuell, gesamt } = schrittInfo(session);
+
   return (
     <Screen edges={['top', 'bottom']}>
         <ScreenHeader
@@ -93,10 +107,10 @@ export default function TerminplanungScreen() {
           onBack={handleZurück}
           right={
             <StepCounter
-              aktuellerSchritt={STATUS_META.TERMINPLANUNG.schritt}
-              gesamtSchritte={11}
+              aktuellerSchritt={aktuell}
+              gesamtSchritte={gesamt}
               variant="light"
-              label={`${STATUS_META.TERMINPLANUNG.schritt}/11`}
+              label={`${aktuell}/${gesamt}`}
             />
           }
         />

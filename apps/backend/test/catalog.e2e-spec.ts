@@ -40,17 +40,34 @@ describe('Catalog (e2e)', () => {
     expect(res.body.length).toBeGreaterThan(0);
   });
 
-  it('lists active products with category/manufacturer names joined in', async () => {
+  it('lists active products mapped to the domain Produkt shape', async () => {
     const res = await request(app.getHttpServer())
       .get('/api/v1/products')
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
     expect(res.body.length).toBeGreaterThan(0);
-    expect(res.body[0]).toHaveProperty('categoryName');
-    expect(res.body[0]).toHaveProperty('manufacturerName');
+    expect(res.body[0]).toHaveProperty('kategorie');
+    expect(res.body[0]).toHaveProperty('hersteller');
   });
 
-  it('gets a single product with supplier offers', async () => {
+  it('filters products by categoryId and free-text query', async () => {
+    const all = await request(app.getHttpServer())
+      .get('/api/v1/products')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(all.body.length).toBeGreaterThan(1);
+
+    const selbstzahler = all.body.find((p: { hilfsmittelNr?: string }) => !p.hilfsmittelNr);
+    expect(selbstzahler).toBeDefined();
+
+    const byQuery = await request(app.getHttpServer())
+      .get(`/api/v1/products?q=${encodeURIComponent(selbstzahler.name.split(' ')[0])}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(byQuery.body.some((p: { id: string }) => p.id === selbstzahler.id)).toBe(true);
+  });
+
+  it('gets a single product with a computed eigenanteil/lieferzeit from its primary offer', async () => {
     const list = await request(app.getHttpServer())
       .get('/api/v1/products')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -62,8 +79,8 @@ describe('Catalog (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
     expect(res.body.id).toBe(id);
-    expect(Array.isArray(res.body.offers)).toBe(true);
-    expect(res.body.offers[0]).toHaveProperty('deliveryTimeDays');
+    expect(typeof res.body.eigenanteil).toBe('number');
+    expect(typeof res.body.lieferzeit).toBe('string');
   });
 
   it('404s for an unknown product id', async () => {

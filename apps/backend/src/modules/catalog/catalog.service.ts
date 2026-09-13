@@ -16,8 +16,19 @@ export class CatalogService {
     return this.categories.listAll(tenant);
   }
 
-  listProducts(tenant: TenantContext) {
-    return this.products.listActive(tenant);
+  listProducts(tenant: TenantContext, filters?: { categoryId?: string; query?: string }) {
+    return this.products.listActive(tenant, filters);
+  }
+
+  // Used by OnboardingService on KRANKHEITSBILD_AUSGEWAEHLT — resolves the
+  // Krankheitsbild id to its tagged categories, then lists active products in
+  // those categories. Empty when nothing is tagged yet (placeholder seed data
+  // stage) rather than falling back to "everything," matching the intent of
+  // a Krankheitsbild-scoped recommendation.
+  async listProductsForKrankheitsbild(tenant: TenantContext, krankheitsbildId: string) {
+    const categories = await this.categories.findByKrankheitsbildId(tenant, krankheitsbildId);
+    if (categories.length === 0) return [];
+    return this.products.listActive(tenant, { categoryIds: categories.map((c) => c.id) });
   }
 
   async getProduct(tenant: TenantContext, id: string) {

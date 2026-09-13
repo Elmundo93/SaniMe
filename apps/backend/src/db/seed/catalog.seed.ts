@@ -6,6 +6,7 @@ import { DEFAULT_ORGANIZATION_ID } from '../../common/repository/tenant-context'
 // Placeholder catalog data for the pilot — per CLAUDE.md, never hardcode real
 // manufacturer/pricing/Hilfsmittelnummer data as if it were production.
 const CATEGORY_ID = '10000000-0000-0000-0000-000000000001';
+const SELBSTZAHLER_CATEGORY_ID = '10000000-0000-0000-0000-000000000002';
 const MANUFACTURER_IDS = {
   mobiltech: '20000000-0000-0000-0000-000000000001',
   aktivcare: '20000000-0000-0000-0000-000000000002',
@@ -14,6 +15,9 @@ const SUPPLIER_ID = '30000000-0000-0000-0000-000000000001';
 const PRODUCT_IDS = {
   p1: '40000000-0000-0000-0000-000000000001',
   p2: '40000000-0000-0000-0000-000000000002',
+};
+const SELBSTZAHLER_PRODUCT_IDS = {
+  p1: '40000000-0000-0000-0000-000000000003',
 };
 
 async function main() {
@@ -26,7 +30,18 @@ async function main() {
 
   await db
     .insert(catalogCategories)
-    .values({ id: CATEGORY_ID, organizationId: DEFAULT_ORGANIZATION_ID, name: 'Rollstuhl' })
+    .values([
+      // krankheitsbildId 'mobilitaet' matcht @sanime/domain's
+      // KRANKHEITSBILD_KATALOG — beide Kategorien werden für die
+      // Krankheitsbild-Empfehlung "Mobilität & Gehen" vorgeschlagen.
+      { id: CATEGORY_ID, organizationId: DEFAULT_ORGANIZATION_ID, name: 'Rollstuhl', krankheitsbildId: 'mobilitaet' },
+      {
+        id: SELBSTZAHLER_CATEGORY_ID,
+        organizationId: DEFAULT_ORGANIZATION_ID,
+        name: 'Selbstzahler-Hilfsmittel (Platzhalter)',
+        krankheitsbildId: 'mobilitaet',
+      },
+    ])
     .onConflictDoNothing();
 
   await db
@@ -67,6 +82,19 @@ async function main() {
         features: ['Faltbar', 'Ergonomische Rückenlehne', 'Anti-Dekubituspolsterung'],
         requiresApproval: true,
       },
+      {
+        id: SELBSTZAHLER_PRODUCT_IDS.p1,
+        organizationId: DEFAULT_ORGANIZATION_ID,
+        categoryId: SELBSTZAHLER_CATEGORY_ID,
+        manufacturerId: MANUFACTURER_IDS.aktivcare,
+        name: 'Gehstock Basic (Platzhalter)',
+        // Kein hilfsmittelnummer: Selbstzahler-Artikel, keine
+        // Krankenkassen-Beteiligung — siehe istAbschlussfaehig in @sanime/domain.
+        hilfsmittelnummer: null,
+        description: 'Einfacher, höhenverstellbarer Gehstock ohne Rezeptpflicht.',
+        features: ['Höhenverstellbar', 'Rutschfester Griff'],
+        requiresApproval: false,
+      },
     ])
     .onConflictDoNothing();
 
@@ -87,6 +115,15 @@ async function main() {
         productId: PRODUCT_IDS.p2,
         deliveryTimeDays: 5,
         customerCopayCents: 1000,
+        availability: 'available',
+      },
+      {
+        organizationId: DEFAULT_ORGANIZATION_ID,
+        supplierId: SUPPLIER_ID,
+        productId: SELBSTZAHLER_PRODUCT_IDS.p1,
+        deliveryTimeDays: 3,
+        // Full self-pay price (no statutory Festbetrag split) — Platzhalter.
+        customerCopayCents: 2490,
         availability: 'available',
       },
     ])

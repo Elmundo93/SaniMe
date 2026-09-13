@@ -29,6 +29,8 @@ export interface StatusMeta {
 export const STATUS_META: Record<OnboardingStatus, StatusMeta> = {
   WILLKOMMEN: { route: '/onboarding', schritt: 1 },
   LEISTUNGSUEBERSICHT: { route: '/onboarding/leistungsuebersicht', schritt: 2 },
+  KRANKHEITSBILD_ERFASSUNG: { route: '/scan/krankheitsbild', schritt: 3 },
+  KRANKHEITSBILD_EMPFEHLUNG: { route: '/scan/krankheitsbild-empfehlung', schritt: 4 },
   REZEPT_AUFNAHME: { route: '/scan/rezept', schritt: 3 },
   REZEPT_PRUEFUNG: { route: '/scan/review', schritt: 4 },
   KRANKENKASSE_AUFNAHME: { route: '/scan/krankenkasse', schritt: 5 },
@@ -41,13 +43,59 @@ export const STATUS_META: Record<OnboardingStatus, StatusMeta> = {
   ABGESCHLOSSEN: { route: '/(app)/dashboard', schritt: 11 },
 };
 
+// STATUS_META.schritt ist eine globale 1-11-Nummerierung entlang der
+// klassischen Rezept-Kette — für TERMINPLANUNG/ZUSAMMENFASSUNG/CHECKOUT, die
+// von allen drei Eintrittspfaden gemeinsam genutzt werden, würde sie bei den
+// kürzeren Selbstzahler-Pfaden "Schritt 8 von 11" zeigen, obwohl deren Pfad
+// nur 6 bzw. 8 Schritte hat. schrittInfo() berechnet Position/Gesamtzahl
+// stattdessen aus der tatsächlichen Reihenfolge des jeweiligen eintrittspfad.
+const SCHRITT_REIHENFOLGE: Record<OnboardingSession['eintrittspfad'], OnboardingStatus[]> = {
+  REZEPT: [
+    'WILLKOMMEN', 'LEISTUNGSUEBERSICHT', 'REZEPT_AUFNAHME', 'REZEPT_PRUEFUNG',
+    'KRANKENKASSE_AUFNAHME', 'DATENPRUEFUNG', 'VERSORGUNGSAUSWAHL',
+    'TERMINPLANUNG', 'ZUSAMMENFASSUNG', 'CHECKOUT', 'ABGESCHLOSSEN',
+  ],
+  KATALOG_SELBSTZAHLER: [
+    'WILLKOMMEN', 'LEISTUNGSUEBERSICHT', 'TERMINPLANUNG', 'ZUSAMMENFASSUNG', 'CHECKOUT', 'ABGESCHLOSSEN',
+  ],
+  KRANKHEITSBILD_SELBSTZAHLER: [
+    'WILLKOMMEN', 'LEISTUNGSUEBERSICHT', 'KRANKHEITSBILD_ERFASSUNG', 'KRANKHEITSBILD_EMPFEHLUNG',
+    'TERMINPLANUNG', 'ZUSAMMENFASSUNG', 'CHECKOUT', 'ABGESCHLOSSEN',
+  ],
+};
+
+export function schrittInfo(session: OnboardingSession): { aktuell: number; gesamt: number } {
+  const reihenfolge = SCHRITT_REIHENFOLGE[session.eintrittspfad] ?? SCHRITT_REIHENFOLGE.REZEPT;
+  // CHECKOUT_FEHLGESCHLAGEN ist derselbe Schritt wie CHECKOUT (ein Retry-
+  // Zustand, kein Fortschritt) — genau wie STATUS_META beide auf dieselbe
+  // Route mit derselben schritt-Zahl mappt.
+  const status = session.status === 'CHECKOUT_FEHLGESCHLAGEN' ? 'CHECKOUT' : session.status;
+  const index = reihenfolge.indexOf(status);
+  if (index === -1) {
+    // Ein per Katalog/Krankheitsbild vorgemerktes HiMi-Produkt lässt den
+    // Selbstzahler-eintrittspfad zurück, während der Status schon wieder in
+    // der klassischen Kette ist — auf REZEPT zurückfallen.
+    const rezeptIndex = SCHRITT_REIHENFOLGE.REZEPT.indexOf(status);
+    if (rezeptIndex !== -1) return { aktuell: rezeptIndex + 1, gesamt: SCHRITT_REIHENFOLGE.REZEPT.length };
+    return { aktuell: 1, gesamt: reihenfolge.length };
+  }
+  return { aktuell: index + 1, gesamt: reihenfolge.length };
+}
+
 interface OnboardingState {
   session: OnboardingSession | null;
   isLoading: boolean;
+  // Client-only, nie an AsyncStorage/Backend gereicht: eine Katalog-/
+  // Krankheitsbild-Produktwahl, die getroffen wurde, bevor AGB/Datenschutz für
+  // die aktuelle (immer frische) Session erteilt sind. leistungsuebersicht.tsx
+  // dispatcht dieses Event anstelle von WEITER, sobald beide Einwilligungen
+  // vorliegen — siehe useProduktAuswahlDispatch.
+  pendingEinstiegEvent: OnboardingEvent | null;
 
   starten: () => Promise<OnboardingSession>;
   laden: () => Promise<void>;
   dispatch: (event: OnboardingEvent, code?: string) => Promise<TransitionResult & { devCode?: string }>;
+  setPendingEinstiegEvent: (event: OnboardingEvent | null) => void;
   abschliessen: () => Promise<void>;
 }
 
@@ -86,6 +134,8 @@ function emitAnalyticsForTransition(before: OnboardingSession, after: Onboarding
       trackOnboarding({ name: 'ocr_corrected' });
       break;
     case 'SUPPLY_AUSGEWAEHLT':
+    case 'KATALOG_PRODUKT_SELBSTZAHLER_GEWAEHLT':
+    case 'KRANKHEITSBILD_PRODUKT_SELBSTZAHLER_GEWAEHLT':
       trackOnboarding({ name: 'supply_chosen', produktKategorie: event.produkt.kategorie });
       break;
     case 'TERMIN_AUSGEWAEHLT':
@@ -108,6 +158,9 @@ function emitAnalyticsForTransition(before: OnboardingSession, after: Onboarding
 export const useOnboardingStore = create<OnboardingState>((set, get) => ({
   session: null,
   isLoading: true,
+  pendingEinstiegEvent: null,
+
+  setPendingEinstiegEvent: (event) => set({ pendingEinstiegEvent: event }),
 
   starten: async () => {
     const bestehende = get().session;
@@ -203,9 +256,14 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
       // onboardingAbschliessen() zu erreichen, denn genau diese Kombination
       // (onboardingAbgeschlossen=true, benutzer=null) schickt jeden künftigen App-Start
       // ohne Ausweg auf den Re-Login-Screen.
-      if (!session.ocrResult || !session.customerContact.telefon) {
-        throw new Error('abschliessen(): OCR-Ergebnis oder Telefonnummer fehlt, kann keinen Benutzer anlegen');
+      // ocrResult ist beim Selbstzahler-Katalogpfad bewusst null (nie ein
+      // Rezept fotografiert) — vorname/nachname/krankenkasse bleiben dann
+      // leer statt hart zu crashen; nur die Telefonnummer ist in jedem Pfad
+      // Pflicht (Checkout verlangt sie unabhängig vom Eintrittspfad).
+      if (!session.customerContact.telefon) {
+        throw new Error('abschliessen(): Telefonnummer fehlt, kann keinen Benutzer anlegen');
       }
+      const vollerName = session.ocrResult?.patient.name ?? '';
       // benutzer is display-only (never used by any ownership check — those
       // key off the bearer secret), so this stays a client-side derivation
       // rather than a new backend endpoint. token is the real sessionSecret
@@ -213,12 +271,12 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
       await useAuthStore.getState().setBenutzer(
         {
           id: session.versorgungId ?? `benutzer-${session.id}`,
-          vorname: session.ocrResult.patient.name.split(' ')[0] ?? '',
-          nachname: session.ocrResult.patient.name.split(' ').slice(1).join(' '),
+          vorname: vollerName.split(' ')[0] ?? '',
+          nachname: vollerName.split(' ').slice(1).join(' '),
           email: session.customerContact.email ?? undefined,
           telefon: session.customerContact.telefon,
-          krankenkasse: session.ocrResult.krankenkasse.name,
-          versichertenNr: session.ocrResult.krankenkasse.versichertenNr,
+          krankenkasse: session.ocrResult?.krankenkasse.name ?? '',
+          versichertenNr: session.ocrResult?.krankenkasse.versichertenNr ?? '',
         },
         useAuthStore.getState().token!,
       );

@@ -5,106 +5,30 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
-import { GlassCard } from '../../components/ui/GlassCard';
 import { Screen } from '../../components/ui/Screen';
 import { ScrollContainer } from '../../components/ui/ScrollContainer';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { ProduktKarte } from '../../components/produkt/ProduktKarte';
 import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { StepCounter } from '../../components/onboarding/StepCounter';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '@sanime/design-system';
-import type { Produkt } from '@sanime/domain';
-
-interface ProduktKarteProps {
-  produkt: Produkt;
-  ausgewählt: boolean;
-  onAuswählen: () => void;
-  index: number;
-}
-
-function ProduktKarte({ produkt, ausgewählt, onAuswählen, index }: ProduktKarteProps) {
-  return (
-    <Animated.View entering={FadeInDown.delay(200 + index * 80).springify().damping(18)}>
-      <TouchableOpacity onPress={onAuswählen} activeOpacity={0.85}>
-        <GlassCard
-          padding={18}
-          radius={D.radius.lg}
-          style={ausgewählt ? styles.cardAusgewählt : undefined}
-        >
-          {ausgewählt && (
-            <LinearGradient
-              colors={['rgba(63,139,255,0.06)', 'rgba(63,139,255,0.02)']}
-              style={StyleSheet.absoluteFill}
-            />
-          )}
-
-          {/* Header */}
-          <View style={styles.produktHeader}>
-            <View style={[styles.produktIcon, ausgewählt && styles.produktIconAktiv]}>
-              <Feather name="activity" size={18} color={D.color.accent} />
-            </View>
-            <View style={styles.produktTitelBlock}>
-              <Text style={styles.produktName}>{produkt.name}</Text>
-              <Text style={styles.produktHersteller}>{produkt.hersteller}</Text>
-            </View>
-            <View style={[styles.auswahlKreis, ausgewählt && styles.auswahlKreisAktiv]}>
-              {ausgewählt && <Feather name="check" size={12} color="#fff" />}
-            </View>
-          </View>
-
-          {/* HiMi-Nummer */}
-          <View style={styles.himiRow}>
-            <Text style={styles.himiLabel}>HiMi-Nr.</Text>
-            <Text style={styles.himiWert}>{produkt.hilfsmittelNr}</Text>
-          </View>
-
-          {/* Beschreibung */}
-          <Text style={styles.beschreibung}>{produkt.beschreibung}</Text>
-
-          {/* Merkmale */}
-          <View style={styles.merkmale}>
-            {produkt.merkmale.map((m) => (
-              <View key={m} style={[styles.merkmalChip, ausgewählt && styles.merkmalChipAktiv]}>
-                <Text style={[styles.merkmalText, ausgewählt && styles.merkmalTextAktiv]}>{m}</Text>
-              </View>
-            ))}
-          </View>
-
-          {/* Footer */}
-          <View style={styles.produktFooter}>
-            <View>
-              <Text style={styles.eigenanteilLabel}>Gesetzlicher Eigenanteil</Text>
-              <Text style={[styles.eigenanteilWert, ausgewählt && styles.eigenanteilWertAktiv]}>
-                {produkt.eigenanteil === 0
-                  ? 'Kein Eigenanteil'
-                  : `${produkt.eigenanteil.toFixed(2).replace('.', ',')} €`}
-              </Text>
-            </View>
-            <View style={styles.lieferzeitChip}>
-              <Feather name="truck" size={12} color={D.color.inkSecondary} />
-              <Text style={styles.lieferzeitText}>{produkt.lieferzeit}</Text>
-            </View>
-          </View>
-        </GlassCard>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-}
 
 export default function VersorgungsauswahlScreen() {
   const router = useRouter();
   const { session, ready } = useOnboardingGuard('VERSORGUNGSAUSWAHL');
   const dispatch = useOnboardingStore((s) => s.dispatch);
 
-  const [ausgewähltId, setAusgewähltId] = useState<string | null>(null);
+  const [ausgewähltId, setAusgewähltId] = useState<string | null>(
+    session?.vorausgewaehltesProduktId ?? null,
+  );
   const [loading, setLoading] = useState(false);
 
   if (!ready || !session) return <OnboardingLoadingView />;
@@ -240,55 +164,6 @@ const styles = StyleSheet.create({
   diagnoseWert: { fontSize: D.font.lg, fontWeight: D.font.bold, color: D.color.ink },
   diagnoseNr: { fontSize: D.font.sm, color: D.color.accent, marginTop: 3, fontWeight: D.font.medium },
   produkteAnzahl: { fontSize: D.font.sm, color: D.color.inkSecondary, fontWeight: D.font.medium, paddingLeft: 4 },
-  cardAusgewählt: {
-    borderWidth: 1.5,
-    borderColor: D.color.accent,
-    overflow: 'hidden',
-    ...D.shadow.card,
-    shadowColor: D.color.accent,
-    shadowOpacity: 0.18,
-  } as object,
-  produktHeader: { flexDirection: 'row', gap: 12, marginBottom: 10, alignItems: 'flex-start' },
-  produktIcon: {
-    width: 44, height: 44, borderRadius: 12,
-    backgroundColor: D.color.accentLight,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  produktIconAktiv: { backgroundColor: 'rgba(63,139,255,0.16)' },
-  produktTitelBlock: { flex: 1 },
-  produktName: { fontSize: D.font.md, fontWeight: D.font.bold, color: D.color.ink, lineHeight: 20 },
-  produktHersteller: { fontSize: D.font.sm, color: D.color.inkSecondary, marginTop: 2 },
-  auswahlKreis: {
-    width: 24, height: 24, borderRadius: 12,
-    borderWidth: 2, borderColor: 'rgba(63,139,255,0.2)',
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  auswahlKreisAktiv: { backgroundColor: D.color.accent, borderColor: D.color.accent },
-  himiRow: { flexDirection: 'row', gap: 6, marginBottom: 8 },
-  himiLabel: { fontSize: 11, color: D.color.inkTertiary, fontWeight: D.font.semibold },
-  himiWert: { fontSize: 11, color: D.color.inkSecondary, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
-  beschreibung: { fontSize: D.font.sm, color: D.color.inkSecondary, lineHeight: 19, marginBottom: 10 },
-  merkmale: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
-  merkmalChip: {
-    backgroundColor: D.color.bgSoft, paddingHorizontal: 10, paddingVertical: 4,
-    borderRadius: 8, borderWidth: 1, borderColor: D.color.glassBorder,
-  },
-  merkmalChipAktiv: { backgroundColor: D.color.accentLight, borderColor: 'rgba(63,139,255,0.25)' },
-  merkmalText: { fontSize: 11, color: D.color.inkSecondary, fontWeight: D.font.medium },
-  merkmalTextAktiv: { color: D.color.accent },
-  produktFooter: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end',
-    borderTopWidth: 0.5, borderTopColor: 'rgba(63,139,255,0.1)', paddingTop: 12,
-  },
-  eigenanteilLabel: { fontSize: 11, color: D.color.inkTertiary },
-  eigenanteilWert: { fontSize: D.font.xl, fontWeight: D.font.heavy, color: D.color.ink },
-  eigenanteilWertAktiv: { color: D.color.accent },
-  lieferzeitChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: D.color.bgSoft, paddingHorizontal: 10, paddingVertical: 6,
-    borderRadius: 8, borderWidth: 1, borderColor: D.color.glassBorder,
-  },
-  lieferzeitText: { fontSize: 11, color: D.color.inkSecondary, fontWeight: D.font.medium },
   hinweisBox: {
     flexDirection: 'row', gap: 10,
     backgroundColor: D.color.accentLight, borderRadius: D.radius.md,

@@ -42,7 +42,9 @@ export interface Produkt {
   id: string;
   name: string;
   hersteller: string;
-  hilfsmittelNr: string;
+  // Fehlt bei Selbstzahler-Artikeln (kein Hilfsmittelnummer-gelistetes
+  // Produkt) — deren Flow überspringt die Krankenkassen-Beteiligung komplett.
+  hilfsmittelNr?: string;
   beschreibung: string;
   eigenanteil: number;
   lieferzeit: string;
@@ -55,6 +57,8 @@ export interface Produkt {
 export type OnboardingStatus =
   | 'WILLKOMMEN'
   | 'LEISTUNGSUEBERSICHT'
+  | 'KRANKHEITSBILD_ERFASSUNG'
+  | 'KRANKHEITSBILD_EMPFEHLUNG'
   | 'REZEPT_AUFNAHME'
   | 'REZEPT_PRUEFUNG'
   | 'KRANKENKASSE_AUFNAHME'
@@ -111,6 +115,20 @@ export interface OnboardingSession {
 
   verfügbareProdukte: Produkt[];
   selectedSupply: Produkt | null;
+
+  // Von einer Katalog-/Krankheitsbild-Vormerkung gesetzt (siehe onboarding.ts's
+  // KATALOG_PRODUKT_VORGEMERKT / KRANKHEITSBILD_PRODUKT_VORGEMERKT) — rein zur
+  // Vorauswahl auf VERSORGUNGSAUSWAHL, keine Guard-Eingabe.
+  vorausgewaehltesProduktId: string | null;
+  // Von KRANKHEITSBILD_AUSGEWAEHLT gesetzt — für spätere Admin-Sichtbarkeit,
+  // keine Guard-Eingabe. Kein FK auf eine DB-Tabelle: die Taxonomie ist
+  // statische Domain-Daten (siehe krankheitsbild.ts), keine eigene Entität.
+  ausgewaehltesKrankheitsbildId: string | null;
+  // Reine Navigations-Buchführung (z.B. welches ZURUECK-Event ein Screen
+  // dispatchen muss) — niemals als Eingabe für einen Business-Guard nutzen,
+  // dafür ist ausschließlich das Fehlen/Vorhandensein von hilfsmittelNr am
+  // gewählten Produkt maßgeblich (siehe istAbschlussfaehig in onboarding.ts).
+  eintrittspfad: 'REZEPT' | 'KATALOG_SELBSTZAHLER' | 'KRANKHEITSBILD_SELBSTZAHLER';
 
   terminVorschläge: TerminSlot[];
   selectedAppointment: TerminSlot | null;

@@ -256,3 +256,216 @@ describe('Onboarding full slice (e2e)', () => {
     expect(res.body.productNameSnapshot).toBeTruthy();
   });
 });
+
+// Catalog-first self-pay path (Phase 1 of the Katalog/Krankheitsbild plan):
+// a customer picks a no-Hilfsmittelnummer product directly, skipping the
+// Rezept/Krankenkasse/Datenpruefung chain entirely, and completes without
+// ever having an ocrResult.
+describe('Onboarding self-pay Katalog path (e2e)', () => {
+  let app: INestApplication;
+  let sessionId: string;
+  let sessionSecret: string;
+  let idempotencyCounter = 0;
+  let himiProduktId: string;
+  let selbstzahlerProdukt: Record<string, unknown>;
+
+  const auth = () => `Bearer ${sessionSecret}`;
+  const nextIdempotencyKey = () => `onboarding-selbstzahler-e2e-${Date.now()}-${idempotencyCounter++}`;
+
+  function patchEvent(event: unknown, code?: string) {
+    return request(app.getHttpServer())
+      .patch(`/api/v1/onboarding-sessions/${sessionId}`)
+      .set('Authorization', auth())
+      .set('Idempotency-Key', nextIdempotencyKey())
+      .send({ event, code });
+  }
+
+  beforeAll(async () => {
+    const moduleRef: TestingModule = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    app = moduleRef.createNestApplication();
+    configureApp(app);
+    await app.init();
+
+    const jwt = app.get(JwtService);
+    const adminToken = await jwt.signAsync(
+      { sub: 'test-admin', email: 'test-admin@example.com' },
+      { secret: process.env.ADMIN_JWT_SECRET, expiresIn: '5m' },
+    );
+    const products = await request(app.getHttpServer())
+      .get('/api/v1/products')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    selbstzahlerProdukt = products.body.find((p: { hilfsmittelNr?: string }) => !p.hilfsmittelNr);
+    himiProduktId = products.body.find((p: { hilfsmittelNr?: string }) => p.hilfsmittelNr).id;
+    expect(selbstzahlerProdukt).toBeDefined();
+
+    const session = await request(app.getHttpServer()).post('/api/v1/onboarding-sessions').expect(201);
+    sessionId = session.body.sessionId;
+    sessionSecret = session.body.sessionSecret;
+    await patchEvent({ type: 'WEITER' }).expect(200);
+    await patchEvent({ type: 'AGB_AKZEPTIERT', version: 'v1' }).expect(200);
+    await patchEvent({ type: 'DATENSCHUTZ_AKZEPTIERT', version: 'v1' }).expect(200);
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('rejects KATALOG_PRODUKT_SELBSTZAHLER_GEWAEHLT for a product that has a Hilfsmittelnummer', async () => {
+    const res = await patchEvent({
+      type: 'KATALOG_PRODUKT_SELBSTZAHLER_GEWAEHLT',
+      produkt: { ...selbstzahlerProdukt, id: himiProduktId, hilfsmittelNr: '00.00.00.0001' },
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects KATALOG_PRODUKT_VORGEMERKT for a product that has no Hilfsmittelnummer', async () => {
+    const res = await patchEvent({ type: 'KATALOG_PRODUKT_VORGEMERKT', produktId: (selbstzahlerProdukt as { id: string }).id });
+    expect(res.status).toBe(400);
+  });
+
+  it('routes straight to TERMINPLANUNG, skipping Rezept/Krankenkasse/Datenpruefung', async () => {
+    const res = await patchEvent({
+      type: 'KATALOG_PRODUKT_SELBSTZAHLER_GEWAEHLT',
+      produkt: selbstzahlerProdukt,
+    }).expect(200);
+    expect(res.body.session.status).toBe('TERMINPLANUNG');
+    expect(res.body.session.ocrResult).toBeNull();
+    expect(res.body.session.selectedSupply.id).toBe((selbstzahlerProdukt as { id: string }).id);
+  });
+
+  it('completes the full flow to ABGESCHLOSSEN without ever supplying an ocrResult', async () => {
+    const slot = { id: 'slot-1', beginn: '2026-08-01T09:00:00.000Z', ende: '2026-08-01T11:00:00.000Z', ort: 'Berlin' };
+    await patchEvent({ type: 'TERMIN_VORSCHLAEGE_BERECHNET', vorschläge: [slot] }).expect(200);
+    await patchEvent({ type: 'TERMIN_AUSGEWAEHLT', termin: slot }).expect(200);
+    await patchEvent({ type: 'AUFTRAG_BESTAETIGT' }).expect(200);
+
+    const kontakt = await patchEvent({ type: 'KONTAKT_ERFASST', email: null, telefon: '+491511234568' }).expect(200);
+    const devCode: string = kontakt.body.devCode;
+    await patchEvent({ type: 'OTP_VERIFIZIERT' }, devCode).expect(200);
+
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/onboarding-sessions/${sessionId}/complete`)
+      .set('Authorization', auth())
+      .set('Idempotency-Key', nextIdempotencyKey())
+      .expect(201);
+    expect(res.body.supplyId).toBeTruthy();
+  });
+});
+
+// Krankheitsbild path (Phase 2): describe a condition instead of scanning a
+// Rezept, get server-computed recommendations, then branch exactly like the
+// Katalog path — HiMi rejoins the classic Rezept chain, self-pay skips
+// straight to Termin.
+describe('Onboarding Krankheitsbild path (e2e)', () => {
+  let app: INestApplication;
+  let idempotencyCounter = 0;
+  let himiProduktId: string;
+  let selbstzahlerProdukt: Record<string, unknown>;
+
+  async function neueSessionBisEmpfehlung() {
+    const session = await request(app.getHttpServer()).post('/api/v1/onboarding-sessions').expect(201);
+    const sessionId: string = session.body.sessionId;
+    const sessionSecret: string = session.body.sessionSecret;
+    const auth = `Bearer ${sessionSecret}`;
+    const patchEvent = (event: unknown) =>
+      request(app.getHttpServer())
+        .patch(`/api/v1/onboarding-sessions/${sessionId}`)
+        .set('Authorization', auth)
+        .set('Idempotency-Key', `krankheitsbild-e2e-${Date.now()}-${idempotencyCounter++}`)
+        .send({ event });
+
+    await patchEvent({ type: 'WEITER' }).expect(200);
+    await patchEvent({ type: 'AGB_AKZEPTIERT', version: 'v1' }).expect(200);
+    await patchEvent({ type: 'DATENSCHUTZ_AKZEPTIERT', version: 'v1' }).expect(200);
+    const started = await patchEvent({ type: 'KRANKHEITSBILD_STARTEN' }).expect(200);
+    expect(started.body.session.status).toBe('KRANKHEITSBILD_ERFASSUNG');
+
+    const empfehlung = await patchEvent({
+      type: 'KRANKHEITSBILD_AUSGEWAEHLT',
+      krankheitsbildId: 'mobilitaet',
+    }).expect(200);
+    expect(empfehlung.body.session.status).toBe('KRANKHEITSBILD_EMPFEHLUNG');
+    expect(empfehlung.body.session.ausgewaehltesKrankheitsbildId).toBe('mobilitaet');
+
+    return { sessionId, patchEvent, empfehlung: empfehlung.body.session };
+  }
+
+  beforeAll(async () => {
+    const moduleRef: TestingModule = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    app = moduleRef.createNestApplication();
+    configureApp(app);
+    await app.init();
+
+    const jwt = app.get(JwtService);
+    const adminToken = await jwt.signAsync(
+      { sub: 'test-admin', email: 'test-admin@example.com' },
+      { secret: process.env.ADMIN_JWT_SECRET, expiresIn: '5m' },
+    );
+    const products = await request(app.getHttpServer())
+      .get('/api/v1/products')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    selbstzahlerProdukt = products.body.find((p: { hilfsmittelNr?: string }) => !p.hilfsmittelNr);
+    himiProduktId = products.body.find((p: { hilfsmittelNr?: string }) => p.hilfsmittelNr).id;
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('recognizes the seeded "mobilitaet" Krankheitsbild and recommends the tagged-category products, ignoring an untrusted produkte payload', async () => {
+    const { empfehlung } = await neueSessionBisEmpfehlung();
+    expect(empfehlung.verfügbareProdukte.length).toBeGreaterThan(0);
+    expect(empfehlung.verfügbareProdukte.some((p: { id: string }) => p.id === selbstzahlerProdukt.id)).toBe(true);
+  });
+
+  it('returns no recommendations for an unknown Krankheitsbild id rather than falling back to everything', async () => {
+    const session = await request(app.getHttpServer()).post('/api/v1/onboarding-sessions').expect(201);
+    const auth = `Bearer ${session.body.sessionSecret}`;
+    const p = (event: unknown) =>
+      request(app.getHttpServer())
+        .patch(`/api/v1/onboarding-sessions/${session.body.sessionId}`)
+        .set('Authorization', auth)
+        .set('Idempotency-Key', `krankheitsbild-e2e-unknown-${Date.now()}-${idempotencyCounter++}`)
+        .send({ event });
+    await p({ type: 'WEITER' }).expect(200);
+    await p({ type: 'AGB_AKZEPTIERT', version: 'v1' }).expect(200);
+    await p({ type: 'DATENSCHUTZ_AKZEPTIERT', version: 'v1' }).expect(200);
+    await p({ type: 'KRANKHEITSBILD_STARTEN' }).expect(200);
+    const res = await p({ type: 'KRANKHEITSBILD_AUSGEWAEHLT', krankheitsbildId: 'nicht-existent' }).expect(200);
+    expect(res.body.session.verfügbareProdukte).toHaveLength(0);
+  });
+
+  it('routes a self-pay pick from the recommendation straight to TERMINPLANUNG, skipping the Rezept/Krankenkasse chain', async () => {
+    const { patchEvent } = await neueSessionBisEmpfehlung();
+    const res = await patchEvent({
+      type: 'KRANKHEITSBILD_PRODUKT_SELBSTZAHLER_GEWAEHLT',
+      produkt: selbstzahlerProdukt,
+    }).expect(200);
+    expect(res.body.session.status).toBe('TERMINPLANUNG');
+    expect(res.body.session.ocrResult).toBeNull();
+
+    const back = await patchEvent({ type: 'ZURUECK_KRANKHEITSBILD' }).expect(200);
+    expect(back.body.session.status).toBe('KRANKHEITSBILD_EMPFEHLUNG');
+  });
+
+  it('rejects picking a HiMi product via the self-pay event, and vice versa', async () => {
+    const { patchEvent } = await neueSessionBisEmpfehlung();
+    const wrongBranch = await patchEvent({
+      type: 'KRANKHEITSBILD_PRODUKT_SELBSTZAHLER_GEWAEHLT',
+      produkt: { ...selbstzahlerProdukt, id: himiProduktId, hilfsmittelNr: '00.00.00.0001' },
+    });
+    expect(wrongBranch.status).toBe(400);
+
+    const alsoWrong = await patchEvent({ type: 'KRANKHEITSBILD_PRODUKT_VORGEMERKT', produktId: selbstzahlerProdukt.id });
+    expect(alsoWrong.status).toBe(400);
+  });
+
+  it('routes a HiMi pick from the recommendation into REZEPT_AUFNAHME, rejoining the classic chain', async () => {
+    const { patchEvent } = await neueSessionBisEmpfehlung();
+    const res = await patchEvent({ type: 'KRANKHEITSBILD_PRODUKT_VORGEMERKT', produktId: himiProduktId }).expect(200);
+    expect(res.body.session.status).toBe('REZEPT_AUFNAHME');
+    expect(res.body.session.vorausgewaehltesProduktId).toBe(himiProduktId);
+  });
+});

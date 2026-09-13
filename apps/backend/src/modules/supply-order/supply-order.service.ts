@@ -25,7 +25,8 @@ export interface CreateSupplyFromOnboardingInput {
   ocrResultId: string | null;
   productNameSnapshot: string;
   manufacturerNameSnapshot: string;
-  hilfsmittelNrSnapshot: string;
+  // Selbstzahler-Produkte (keine Hilfsmittelnummer) haben nichts zu snapshotten.
+  hilfsmittelNrSnapshot: string | null;
   doctorNameSnapshot?: string;
   insurerNameSnapshot?: string;
   customerCopaySnapshotCents: number;

@@ -9,7 +9,7 @@ import { ScrollContainer } from '../../components/ui/ScrollContainer';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { Checkbox } from '../../components/ui/Checkbox';
 import { Section } from '../../components/ui/Section';
-import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
+import { useOnboardingStore, STATUS_META, schrittInfo } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
@@ -27,6 +27,9 @@ function SectionRow({ label, wert }: { label: string; wert: string }) {
 export default function ZusammenfassungScreen() {
   const router = useRouter();
   const { session, ready } = useOnboardingGuard('ZUSAMMENFASSUNG', {
+    // requireOcrResult ist bewusst weiterhin gesetzt: der Guard selbst
+    // überspringt es für den Selbstzahler-Katalogpfad (eintrittspfad), siehe
+    // useOnboardingGuard.ts.
     requireOcrResult: true,
     requireSupply: true,
     requireAppointment: true,
@@ -36,7 +39,8 @@ export default function ZusammenfassungScreen() {
 
   if (!ready || !session) return <OnboardingLoadingView />;
 
-  const ocr = session.ocrResult!;
+  // Beim Selbstzahler-Katalogpfad bewusst null — nie ein Rezept fotografiert.
+  const ocr = session.ocrResult;
   const produkt = session.selectedSupply!;
   const termin = session.selectedAppointment!;
   const terminDatum = new Date(termin.beginn);
@@ -62,6 +66,8 @@ export default function ZusammenfassungScreen() {
     }
   };
 
+  const { aktuell, gesamt } = schrittInfo(session);
+
   return (
     <Screen edges={['top', 'bottom']}>
         <ScreenHeader
@@ -69,29 +75,33 @@ export default function ZusammenfassungScreen() {
           onBack={handleZurück}
           right={
             <StepCounter
-              aktuellerSchritt={STATUS_META.ZUSAMMENFASSUNG.schritt}
-              gesamtSchritte={11}
+              aktuellerSchritt={aktuell}
+              gesamtSchritte={gesamt}
               variant="light"
-              label={`${STATUS_META.ZUSAMMENFASSUNG.schritt}/11`}
+              label={`${aktuell}/${gesamt}`}
             />
           }
         />
 
         <ScrollContainer contentContainerStyle={styles.scrollContent}>
-          <Animated.View entering={FadeInDown.delay(60).springify().damping(18)}>
-            <Section titel="Person & Krankenkasse" aktionLabel="Bearbeiten" onAktion={() => router.push('/scan/datenpruefung' as any)} padding={16}>
-              <SectionRow label="Name" wert={ocr.patient.name} />
-              <SectionRow label="Krankenkasse" wert={ocr.krankenkasse.name} />
-              <SectionRow label="Versichertennummer" wert={ocr.krankenkasse.versichertenNr} />
-            </Section>
-          </Animated.View>
+          {ocr && (
+            <Animated.View entering={FadeInDown.delay(60).springify().damping(18)}>
+              <Section titel="Person & Krankenkasse" aktionLabel="Bearbeiten" onAktion={() => router.push('/scan/datenpruefung' as any)} padding={16}>
+                <SectionRow label="Name" wert={ocr.patient.name} />
+                <SectionRow label="Krankenkasse" wert={ocr.krankenkasse.name} />
+                <SectionRow label="Versichertennummer" wert={ocr.krankenkasse.versichertenNr} />
+              </Section>
+            </Animated.View>
+          )}
 
-          <Animated.View entering={FadeInDown.delay(120).springify().damping(18)}>
-            <Section titel="Rezept" aktionLabel="Bearbeiten" onAktion={() => router.push('/scan/datenpruefung' as any)} padding={16}>
-              <SectionRow label="Diagnose" wert={ocr.diagnose} />
-              <SectionRow label="Hilfsmittel" wert={ocr.hilfsmittel} />
-            </Section>
-          </Animated.View>
+          {ocr && (
+            <Animated.View entering={FadeInDown.delay(120).springify().damping(18)}>
+              <Section titel="Rezept" aktionLabel="Bearbeiten" onAktion={() => router.push('/scan/datenpruefung' as any)} padding={16}>
+                <SectionRow label="Diagnose" wert={ocr.diagnose} />
+                <SectionRow label="Hilfsmittel" wert={ocr.hilfsmittel} />
+              </Section>
+            </Animated.View>
+          )}
 
           <Animated.View entering={FadeInDown.delay(180).springify().damping(18)}>
             <Section titel="Versorgung" aktionLabel="Bearbeiten" onAktion={() => router.push('/scan/versorgungen' as any)} padding={16}>
