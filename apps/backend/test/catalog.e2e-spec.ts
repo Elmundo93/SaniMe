@@ -27,8 +27,14 @@ describe('Catalog (e2e)', () => {
     await app.close();
   });
 
-  it('rejects unauthenticated catalog reads', () => {
-    return request(app.getHttpServer()).get('/api/v1/products').expect(401);
+  // Catalog reads are public — /katalog is browsable before any onboarding
+  // session (and thus any bearer token) exists.
+  it('allows unauthenticated catalog reads', async () => {
+    const products = await request(app.getHttpServer()).get('/api/v1/products').expect(200);
+    expect(products.body.length).toBeGreaterThan(0);
+    await request(app.getHttpServer()).get(`/api/v1/products/${products.body[0].id}`).expect(200);
+    const categories = await request(app.getHttpServer()).get('/api/v1/catalog/categories').expect(200);
+    expect(Object.keys(categories.body[0]).sort()).toEqual(['id', 'name']);
   });
 
   it('lists categories for an authenticated admin', async () => {

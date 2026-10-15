@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { sql } from 'drizzle-orm';
 import { createDatabase, createPool } from '../client';
 import { catalogCategories, manufacturers, products, supplierProducts, suppliers } from '../schema';
 import { DEFAULT_ORGANIZATION_ID } from '../../common/repository/tenant-context';
@@ -42,7 +43,13 @@ async function main() {
         krankheitsbildId: 'mobilitaet',
       },
     ])
-    .onConflictDoNothing();
+    // Upsert statt DoNothing: eine vor dem Krankheitsbild-Feature geseedete
+    // DB hat die Kategorie schon, aber ohne krankheitsbild_id — ohne Update
+    // bliebe die Krankheitsbild-Empfehlung dort dauerhaft leer.
+    .onConflictDoUpdate({
+      target: catalogCategories.id,
+      set: { krankheitsbildId: sql`excluded.krankheitsbild_id` },
+    });
 
   await db
     .insert(manufacturers)

@@ -364,7 +364,13 @@ export class OnboardingService {
         return;
       }
       case 'KRANKHEITSBILD_AUSGEWAEHLT':
-        await this.sessions.update(tenant, row.id, { selectedKrankheitsbildId: event.krankheitsbildId });
+        // availableProductIds must be persisted here too — the response is
+        // re-hydrated from this row, so without it the Empfehlung screen
+        // would always see an empty verfügbareProdukte list.
+        await this.sessions.update(tenant, row.id, {
+          selectedKrankheitsbildId: event.krankheitsbildId,
+          availableProductIds: event.produkte.map((p) => p.id),
+        });
         return;
       case 'KRANKHEITSBILD_PRODUKT_VORGEMERKT':
         await this.sessions.update(tenant, row.id, { preselectedProductId: event.produktId });
