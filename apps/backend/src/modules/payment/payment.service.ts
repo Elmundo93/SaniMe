@@ -78,7 +78,7 @@ export class PaymentService {
   // Idempotent by construction: returns false (do nothing further) if this
   // payment was already marked succeeded by an earlier delivery of the same
   // webhook event — Stripe retries webhooks at-least-once, and the caller
-  // (StripeWebhookController) must only call OnboardingService.complete()
+  // (StripeWebhookController) must only call OnboardingService.abschliessenNachZahlung()
   // once per payment, or the second call hits an illegal FSM transition.
   async markSucceeded(payment: PaymentRow): Promise<boolean> {
     if (payment.status === 'succeeded') return false;

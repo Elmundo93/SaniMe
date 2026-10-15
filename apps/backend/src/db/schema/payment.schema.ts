@@ -6,7 +6,7 @@ import { supplies } from './supply-order.schema';
 // One row per Stripe PaymentIntent — `status` mirrors Stripe's own
 // PaymentIntent.status values directly (no re-mapping), since the webhook
 // handler that writes it is reacting to Stripe's event types 1:1. `supplyId`
-// is null until OnboardingService.complete() actually creates the Supply
+// is null until OnboardingService.abschliessenNachZahlung() actually creates the Supply
 // (which only happens once, driven by the webhook, not this row) — same
 // backfill-after-the-fact pattern as consents/ocr_results' customerId.
 export const payments = pgTable('payments', {

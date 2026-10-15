@@ -54,6 +54,9 @@ describe('Catalog (e2e)', () => {
     expect(res.body.length).toBeGreaterThan(0);
     expect(res.body[0]).toHaveProperty('kategorie');
     expect(res.body[0]).toHaveProperty('hersteller');
+    // The listing carries real offer data (price/delivery time), not the
+    // "Kein Eigenanteil" placeholder a list without offers would produce.
+    expect(res.body.every((p: { eigenanteil: number; lieferzeit: string }) => p.eigenanteil > 0 && p.lieferzeit !== 'unbekannt')).toBe(true);
   });
 
   it('filters products by categoryId and free-text query', async () => {

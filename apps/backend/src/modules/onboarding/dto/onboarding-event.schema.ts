@@ -1,9 +1,10 @@
 import { z } from 'zod';
 
 // Mirrors @sanime/domain's OnboardingEvent discriminated union directly, so
-// validation can't drift from the domain truth. ZAHLUNG_ERFOLGREICH is
-// deliberately excluded — the backend assigns versorgungId/supplyId
-// server-side via POST .../complete, never accepted from a client PATCH.
+// validation can't drift from the domain truth. The two completion events
+// (ZAHLUNG_ERFOLGREICH, AUFTRAG_EINGEREICHT — @sanime/domain's
+// SERVER_EVENT_TYPES) are deliberately excluded: completion only ever happens
+// via POST .../complete or the verified Stripe webhook, never a client PATCH.
 const confidenceLevelSchema = z.enum(['high', 'medium', 'low']);
 
 const ocrResultSchema = z.object({

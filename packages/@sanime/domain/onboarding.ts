@@ -40,9 +40,20 @@ export type OnboardingEvent =
   | { type: 'AUFTRAG_BESTAETIGT' }
   | { type: 'KONTAKT_ERFASST'; email: string | null; telefon: string }
   | { type: 'OTP_VERIFIZIERT' }
-  | { type: 'ZAHLUNG_ERFOLGREICH'; versorgungId: string }
+  // Die beiden Abschluss-Events sind reine Server-Events (siehe
+  // SERVER_EVENT_TYPES): ZAHLUNG_ERFOLGREICH löst nur der verifizierte
+  // Stripe-Webhook aus, AUFTRAG_EINGEREICHT nur POST .../complete — und zwar
+  // jeweils nur für den passenden Fall von zahlungBeimCheckoutFaellig().
+  | { type: 'ZAHLUNG_ERFOLGREICH' }
+  | { type: 'AUFTRAG_EINGEREICHT' }
   | { type: 'ZAHLUNG_FEHLGESCHLAGEN' }
   | { type: 'CHECKOUT_ERNEUT_VERSUCHEN' };
+
+export const SERVER_EVENT_TYPES = ['ZAHLUNG_ERFOLGREICH', 'AUFTRAG_EINGEREICHT'] as const;
+
+// Alles, was ein Client per PATCH schicken darf — die Abschluss-Events sind
+// typseitig ausgeschlossen, damit kein Screen sie versehentlich dispatcht.
+export type ClientOnboardingEvent = Exclude<OnboardingEvent, { type: (typeof SERVER_EVENT_TYPES)[number] }>;
 
 export type TransitionResult =
   | { ok: true; session: OnboardingSession }
@@ -81,6 +92,25 @@ export function consentErteilt(session: OnboardingSession): boolean {
 export function istAbschlussfaehig(session: OnboardingSession): boolean {
   if (session.selectedSupply && !session.selectedSupply.hilfsmittelNr) return true;
   return hatPflichtfelderKomplett(session);
+}
+
+// Wird beim Checkout eine Zahlung fällig? Nur bei Selbstzahler-Artikeln mit
+// Preis > 0 — das ist ein normaler Kauf. Bei GKV-Hilfsmitteln (mit
+// Hilfsmittelnummer) zieht der Leistungserbringer die gesetzliche Zuzahlung
+// erst nach Genehmigung/Lieferung ein (§ 43c SGB V); ihre Höhe hängt u.a. von
+// Befreiung (§ 62 SGB V) und Alter ab, ist beim Bestellen also noch gar nicht
+// sicher bekannt. Bewusst am Produkt festgemacht, nie an eintrittspfad.
+export function zahlungBeimCheckoutFaellig(session: OnboardingSession): boolean {
+  const produkt = session.selectedSupply;
+  return Boolean(produkt && !produkt.hilfsmittelNr && produkt.eigenanteil > 0);
+}
+
+function abschlussMitZahlung(session: OnboardingSession): boolean {
+  return telefonVerifiziert(session) && zahlungBeimCheckoutFaellig(session);
+}
+
+function abschlussOhneZahlung(session: OnboardingSession): boolean {
+  return telefonVerifiziert(session) && !zahlungBeimCheckoutFaellig(session);
 }
 
 export const TRANSITIONS: TransitionRule<OnboardingStatus, OnboardingEvent, OnboardingSession>[] = [
@@ -159,11 +189,20 @@ export const TRANSITIONS: TransitionRule<OnboardingStatus, OnboardingEvent, Onbo
   { from: 'ZUSAMMENFASSUNG', event: 'ZURUECK', to: 'TERMINPLANUNG' },
   { from: 'CHECKOUT', event: 'KONTAKT_ERFASST', to: 'CHECKOUT' },
   { from: 'CHECKOUT', event: 'OTP_VERIFIZIERT', to: 'CHECKOUT' },
+  // Zwei getrennte Abschluss-Events statt eines mit Weiche im Guard — gleiche
+  // Regel wie bei *_SELBSTZAHLER_GEWAEHLT: transition() nimmt nur die erste
+  // passende Zeile, eine fachliche Gabelung muss also ein eigenes Event sein.
   {
     from: 'CHECKOUT',
     event: 'ZAHLUNG_ERFOLGREICH',
     to: 'ABGESCHLOSSEN',
-    guard: telefonVerifiziert,
+    guard: abschlussMitZahlung,
+  },
+  {
+    from: 'CHECKOUT',
+    event: 'AUFTRAG_EINGEREICHT',
+    to: 'ABGESCHLOSSEN',
+    guard: abschlussOhneZahlung,
   },
   { from: 'CHECKOUT', event: 'ZAHLUNG_FEHLGESCHLAGEN', to: 'CHECKOUT_FEHLGESCHLAGEN' },
   { from: 'CHECKOUT_FEHLGESCHLAGEN', event: 'CHECKOUT_ERNEUT_VERSUCHEN', to: 'CHECKOUT' },
@@ -254,8 +293,11 @@ function applyEventData(session: OnboardingSession, event: OnboardingEvent): Onb
         ...session,
         customerContact: { ...session.customerContact, telefonVerifiziert: true },
       };
+    // versorgungId setzt der Server erst nach dem Anlegen der Versorgung
+    // (OnboardingService.abschliessen), nicht dieses Event — so kann die
+    // FSM-Prüfung vor dem Anlegen laufen.
     case 'ZAHLUNG_ERFOLGREICH':
-      return { ...session, versorgungId: event.versorgungId };
+    case 'AUFTRAG_EINGEREICHT':
     case 'ZAHLUNG_FEHLGESCHLAGEN':
     case 'CHECKOUT_ERNEUT_VERSUCHEN':
       return session;

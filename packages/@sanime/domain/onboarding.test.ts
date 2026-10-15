@@ -1,4 +1,4 @@
-import { erstelleLeereSession, istAbschlussfaehig, transition } from './onboarding';
+import { erstelleLeereSession, istAbschlussfaehig, transition, zahlungBeimCheckoutFaellig } from './onboarding';
 import type { OnboardingSession, Produkt } from './types';
 
 const HIMI_PRODUKT: Produkt = {
@@ -200,5 +200,44 @@ describe('istAbschlussfaehig', () => {
   it('still requires hatPflichtfelderKomplett for a HiMi product', () => {
     const session: OnboardingSession = { ...erstelleLeereSession('s8'), selectedSupply: HIMI_PRODUKT };
     expect(istAbschlussfaehig(session)).toBe(false);
+  });
+});
+
+describe('Checkout-Abschluss — Zahlung nur für Selbstzahler', () => {
+  function imCheckout(produkt: Produkt): OnboardingSession {
+    return {
+      ...erstelleLeereSession('s-checkout'),
+      status: 'CHECKOUT',
+      selectedSupply: produkt,
+      customerContact: { email: null, telefon: '+491511234567', telefonVerifiziert: true },
+    };
+  }
+
+  it('verlangt beim Checkout nur für einen kostenpflichtigen Selbstzahler-Artikel eine Zahlung', () => {
+    expect(zahlungBeimCheckoutFaellig(imCheckout(SELBSTZAHLER_PRODUKT))).toBe(true);
+    expect(zahlungBeimCheckoutFaellig(imCheckout(HIMI_PRODUKT))).toBe(false);
+    expect(zahlungBeimCheckoutFaellig(imCheckout({ ...SELBSTZAHLER_PRODUKT, eigenanteil: 0 }))).toBe(false);
+  });
+
+  it('schließt eine Rezept-Versorgung per AUFTRAG_EINGEREICHT ab, nie per ZAHLUNG_ERFOLGREICH', () => {
+    const session = imCheckout(HIMI_PRODUKT);
+    const eingereicht = transition(session, { type: 'AUFTRAG_EINGEREICHT' });
+    expect(eingereicht.ok && eingereicht.session.status).toBe('ABGESCHLOSSEN');
+    expect(transition(session, { type: 'ZAHLUNG_ERFOLGREICH' }).ok).toBe(false);
+  });
+
+  it('schließt einen kostenpflichtigen Selbstzahler-Kauf nur per ZAHLUNG_ERFOLGREICH ab', () => {
+    const session = imCheckout(SELBSTZAHLER_PRODUKT);
+    expect(transition(session, { type: 'AUFTRAG_EINGEREICHT' }).ok).toBe(false);
+    const bezahlt = transition(session, { type: 'ZAHLUNG_ERFOLGREICH' });
+    expect(bezahlt.ok && bezahlt.session.status).toBe('ABGESCHLOSSEN');
+  });
+
+  it('verlangt in beiden Fällen eine bestätigte Telefonnummer', () => {
+    const unbestaetigt: OnboardingSession = {
+      ...imCheckout(HIMI_PRODUKT),
+      customerContact: { email: null, telefon: '+491511234567', telefonVerifiziert: false },
+    };
+    expect(transition(unbestaetigt, { type: 'AUFTRAG_EINGEREICHT' }).ok).toBe(false);
   });
 });

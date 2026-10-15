@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import type { OnboardingEvent, Produkt } from '@sanime/domain';
+import type { ClientOnboardingEvent, Produkt } from '@sanime/domain';
 import { useOnboardingStore, STATUS_META } from '../store/onboardingStore';
 import { zeigeDispatchFehler } from '../lib/onboardingNav';
 
@@ -21,7 +21,7 @@ export function useProduktAuswahlDispatch(herkunft: 'katalog' | 'krankheitsbild'
 
   return async function waehleProdukt(produkt: Produkt): Promise<void> {
     const session = await useOnboardingStore.getState().starten();
-    const event: OnboardingEvent =
+    const event: ClientOnboardingEvent =
       herkunft === 'katalog'
         ? produkt.hilfsmittelNr
           ? { type: 'KATALOG_PRODUKT_VORGEMERKT', produktId: produkt.id }

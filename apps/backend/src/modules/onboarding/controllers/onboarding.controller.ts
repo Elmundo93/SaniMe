@@ -52,6 +52,9 @@ export class OnboardingController {
     });
   }
 
+  // Reicht eine Versorgung ohne Checkout-Zahlung ein (Rezept-Versorgungen).
+  // Zahlungspflichtige Selbstzahler-Käufe lehnt der FSM-Guard hier ab — die
+  // schließt ausschließlich StripeWebhookController ab.
   @Post(':id/complete')
   @UseGuards(CustomerSessionAuthGuard)
   complete(@Param('id') id: string, @CurrentCustomerSession() session: { sessionId: string }, @Req() req: Request) {
@@ -59,7 +62,7 @@ export class OnboardingController {
     if (session.sessionId !== id) {
       throw new BadRequestException('Session-ID stimmt nicht mit dem authentifizierten Bearer-Token überein');
     }
-    return this.onboarding.complete(DEFAULT_TENANT_CONTEXT, id);
+    return this.onboarding.einreichen(DEFAULT_TENANT_CONTEXT, id);
   }
 
   @Get(':id/appointment-slots')

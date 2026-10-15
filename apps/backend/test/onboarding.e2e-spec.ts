@@ -224,6 +224,14 @@ describe('Onboarding full slice (e2e)', () => {
 
   let supplyId: string;
 
+  it('never asks for a payment at checkout for a Rezept-Versorgung — the Zuzahlung is collected later', async () => {
+    await request(app.getHttpServer())
+      .post(`/api/v1/onboarding-sessions/${sessionId}/payment-intent`)
+      .set('Authorization', auth())
+      .set('Idempotency-Key', nextIdempotencyKey())
+      .expect(400);
+  });
+
   it('completes onboarding, creating a real Supply/Order/Timeline/OpenAction/AuditEntry set', async () => {
     const res = await request(app.getHttpServer())
       .post(`/api/v1/onboarding-sessions/${sessionId}/complete`)
@@ -334,7 +342,7 @@ describe('Onboarding self-pay Katalog path (e2e)', () => {
     expect(res.body.session.selectedSupply.id).toBe((selbstzahlerProdukt as { id: string }).id);
   });
 
-  it('completes the full flow to ABGESCHLOSSEN without ever supplying an ocrResult', async () => {
+  it('reaches CHECKOUT without ever supplying an ocrResult, but refuses to complete a paid purchase via /complete', async () => {
     const slot = { id: 'slot-1', beginn: '2026-08-01T09:00:00.000Z', ende: '2026-08-01T11:00:00.000Z', ort: 'Berlin' };
     await patchEvent({ type: 'TERMIN_VORSCHLAEGE_BERECHNET', vorschläge: [slot] }).expect(200);
     await patchEvent({ type: 'TERMIN_AUSGEWAEHLT', termin: slot }).expect(200);
@@ -344,12 +352,17 @@ describe('Onboarding self-pay Katalog path (e2e)', () => {
     const devCode: string = kontakt.body.devCode;
     await patchEvent({ type: 'OTP_VERIFIZIERT' }, devCode).expect(200);
 
-    const res = await request(app.getHttpServer())
+    // A paid self-pay purchase can only be completed by the verified Stripe
+    // webhook (see payment.e2e-spec.ts) — never by the client claiming so.
+    await request(app.getHttpServer())
       .post(`/api/v1/onboarding-sessions/${sessionId}/complete`)
       .set('Authorization', auth())
       .set('Idempotency-Key', nextIdempotencyKey())
-      .expect(201);
-    expect(res.body.supplyId).toBeTruthy();
+      .expect(400);
+
+    const current = await request(app.getHttpServer()).get('/api/v1/onboarding-sessions/current').set('Authorization', auth()).expect(200);
+    expect(current.body.status).toBe('CHECKOUT');
+    expect(current.body.versorgungId).toBeNull();
   });
 });
 

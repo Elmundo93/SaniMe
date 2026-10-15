@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useStripe } from '@stripe/stripe-react-native';
+import { zahlungBeimCheckoutFaellig } from '@sanime/domain';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { FormField } from '../../components/ui/FormField';
 import { Screen } from '../../components/ui/Screen';
@@ -27,7 +28,11 @@ import { D } from '@sanime/design-system';
 const BESTAETIGUNG_POLL_VERSUCHE = 10;
 const BESTAETIGUNG_POLL_INTERVALL_MS = 1200;
 
-type CheckoutSubstep = 'kontakt' | 'otp' | 'zahlung';
+// 'abschluss' ist je nach Produkt entweder die Zahlung (kostenpflichtiger
+// Selbstzahler-Kauf) oder das verbindliche Absenden ohne Zahlung (jede
+// Rezept-Versorgung — die gesetzliche Zuzahlung wird erst nach Genehmigung
+// abgerechnet, siehe zahlungBeimCheckoutFaellig in @sanime/domain).
+type CheckoutSubstep = 'kontakt' | 'otp' | 'abschluss';
 
 export default function CheckoutScreen() {
   const router = useRouter();
@@ -36,6 +41,7 @@ export default function CheckoutScreen() {
     requireOcrResult: true,
   });
   const dispatch = useOnboardingStore((s) => s.dispatch);
+  const einreichen = useOnboardingStore((s) => s.einreichen);
   const abschliessen = useOnboardingStore((s) => s.abschliessen);
   const bereitsEingeloggt = useAuthStore((s) => !!s.benutzer);
   const otpFlow = useOtpVerification(dispatch);
@@ -50,8 +56,8 @@ export default function CheckoutScreen() {
     if (!session || substep) return;
     // One-time initial substep derived from session/auth data, not a reaction to an external system.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (bereitsEingeloggt) { setSubstep('zahlung'); return; }
-    if (session.customerContact.telefonVerifiziert) { setSubstep('zahlung'); return; }
+    if (bereitsEingeloggt) { setSubstep('abschluss'); return; }
+    if (session.customerContact.telefonVerifiziert) { setSubstep('abschluss'); return; }
     if (session.customerContact.telefon) {
       otpFlow.setKontakt(session.customerContact.telefon);
       setSubstep('otp');
@@ -65,6 +71,30 @@ export default function CheckoutScreen() {
 
   const produkt = session.selectedSupply!;
   const eigenanteilText = produkt.eigenanteil === 0 ? 'Kein Eigenanteil' : `${produkt.eigenanteil.toFixed(2).replace('.', ',')} €`;
+  const zahlungFaellig = zahlungBeimCheckoutFaellig(session);
+
+  // Die Versorgung ist nach einem erfolgreichen einreichen() serverseitig
+  // bereits angelegt — scheitert danach nur das lokale Aufräumen, navigieren
+  // wir trotzdem weiter (gleiche Begründung wie in wartenAufAbschluss).
+  const zumDashboard = async () => {
+    try {
+      await abschliessen();
+    } catch {
+      // Best effort: siehe Kommentar oben.
+    }
+    router.replace('/(app)/dashboard');
+  };
+
+  const handleEinreichen = async () => {
+    setZahlungLäuft(true);
+    const result = await einreichen();
+    if (!result.ok) {
+      setZahlungLäuft(false);
+      zeigeDispatchFehler();
+      return;
+    }
+    await zumDashboard();
+  };
 
   const handleKontaktWeiter = async () => {
     const ok = await otpFlow.codeSenden(otpFlow.kontakt, email.trim() || null);
@@ -75,7 +105,7 @@ export default function CheckoutScreen() {
   const handleOtpVerifizieren = async () => {
     const ok = await otpFlow.codeVerifizieren();
     if (!ok) return;
-    setSubstep('zahlung');
+    setSubstep('abschluss');
   };
 
   // Stripe's PaymentSheet is the entire payment UI (card entry, 3D Secure,
@@ -133,16 +163,10 @@ export default function CheckoutScreen() {
       const aktuellerStatus = useOnboardingStore.getState().session?.status;
       if (aktuellerStatus === 'ABGESCHLOSSEN') {
         // Die Versorgung ist zu diesem Zeitpunkt bereits serverseitig angelegt
-        // (der Webhook hat complete() bereits aufgerufen) — bei einem Fehler
-        // danach (z.B. lokales Benutzer-Anlegen) navigieren wir trotzdem
-        // weiter, statt den Nutzer auf einem bereits abgeschlossenen Status
-        // stehen zu lassen.
-        try {
-          await abschliessen();
-        } catch {
-          // Best effort: siehe Kommentar oben.
-        }
-        router.replace('/(app)/dashboard');
+        // (der Webhook hat sie abgeschlossen) — bei einem Fehler danach (z.B.
+        // lokales Benutzer-Anlegen) navigieren wir trotzdem weiter, statt den
+        // Nutzer auf einem bereits abgeschlossenen Status stehen zu lassen.
+        await zumDashboard();
         return;
       }
       if (aktuellerStatus === 'CHECKOUT_FEHLGESCHLAGEN') {
@@ -241,7 +265,46 @@ export default function CheckoutScreen() {
             </Animated.View>
           )}
 
-          {substep === 'zahlung' && (
+          {substep === 'abschluss' && !zahlungFaellig && (
+            <Animated.View entering={FadeInDown.duration(300)} style={{ gap: 20 }}>
+              <Text style={styles.headline}>Fast{'\n'}geschafft.</Text>
+              <Text style={styles.sub}>Letzter Schritt: Sende deine Versorgung verbindlich ab.</Text>
+              <View style={styles.hinweisBox}>
+                <Text style={styles.hinweisTitel}>Jetzt ist nichts zu bezahlen</Text>
+                {produkt.hilfsmittelNr ? (
+                  <>
+                    <Text style={styles.hinweisText}>
+                      Die gesetzliche Zuzahlung (10 % des Preises, mindestens 5 €, höchstens 10 €) wird erst nach der
+                      Genehmigung durch deine Krankenkasse abgerechnet. Bist du von der Zuzahlung befreit oder unter 18,
+                      entfällt sie.
+                    </Text>
+                    {produkt.eigenanteil > 0 && (
+                      <View style={styles.hinweisZeile}>
+                        <Text style={styles.zuzahlungLabel}>Voraussichtliche Zuzahlung</Text>
+                        <Text style={styles.hinweisWert}>{eigenanteilText}</Text>
+                      </View>
+                    )}
+                  </>
+                ) : (
+                  <Text style={styles.hinweisText}>Für diesen Artikel fallen keine Kosten an.</Text>
+                )}
+              </View>
+              <TouchableOpacity
+                style={styles.button}
+                onPress={handleEinreichen}
+                disabled={zahlungLäuft}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="Versorgung verbindlich absenden"
+                accessibilityState={{ disabled: zahlungLäuft, busy: zahlungLäuft }}
+              >
+                <LinearGradient colors={[D.color.gradientTop, D.color.gradientBottom]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
+                {zahlungLäuft ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.buttonLabel}>Verbindlich absenden</Text>}
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+
+          {substep === 'abschluss' && zahlungFaellig && (
             <Animated.View entering={FadeInDown.duration(300)} style={{ gap: 20 }}>
               {session.status === 'CHECKOUT_FEHLGESCHLAGEN' && (
                 <View style={styles.fehlerBanner}>
@@ -255,7 +318,7 @@ export default function CheckoutScreen() {
                 </View>
               )}
               <Text style={styles.headline}>Fast{'\n'}geschafft.</Text>
-              <Text style={styles.sub}>Letzter Schritt: die Zahlung deiner Zuzahlung.</Text>
+              <Text style={styles.sub}>Letzter Schritt: die Bezahlung deiner Bestellung.</Text>
               <View style={styles.zuzahlungBox}>
                 <Text style={styles.zuzahlungLabel}>Zu zahlen</Text>
                 <Text style={styles.zuzahlungWert}>{eigenanteilText}</Text>
@@ -299,6 +362,14 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(63,139,255,0.15)',
   },
   zuzahlungLabel: { fontSize: D.font.sm, color: D.color.inkSecondary, fontWeight: D.font.medium },
+  hinweisBox: {
+    backgroundColor: D.color.accentLight, borderRadius: D.radius.md, padding: 16, gap: 8,
+    borderWidth: 1, borderColor: 'rgba(63,139,255,0.15)',
+  },
+  hinweisTitel: { fontSize: D.font.md, fontWeight: D.font.bold, color: D.color.ink },
+  hinweisText: { fontSize: D.font.sm, color: D.color.inkSecondary, lineHeight: 19 },
+  hinweisZeile: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
+  hinweisWert: { fontSize: D.font.lg, fontWeight: D.font.heavy, color: D.color.accent },
   zuzahlungWert: { fontSize: D.font.xl, fontWeight: D.font.heavy, color: D.color.accent },
   fehlerBanner: {
     backgroundColor: D.color.errorLight, borderRadius: D.radius.md, padding: 16,

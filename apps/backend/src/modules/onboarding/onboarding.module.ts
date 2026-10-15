@@ -18,7 +18,7 @@ import { OnboardingService } from './onboarding.service';
   // customer-facing payment-intent endpoint (OnboardingController) and the
   // Stripe webhook (StripeWebhookController) — the webhook itself lives here,
   // not in PaymentModule, specifically so PaymentModule never needs to import
-  // OnboardingService back (it would otherwise, to call complete()).
+  // OnboardingService back (it would otherwise, to call abschliessenNachZahlung()).
   imports: [AppointmentModule, AuthModule, CatalogModule, HealthDataModule, PaymentModule, SupplyOrderModule, VerificationModule],
   controllers: [OnboardingController, StripeWebhookController],
   providers: [OnboardingSessionsRepository, ConsentsRepository, OnboardingService],

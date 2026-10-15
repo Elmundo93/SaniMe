@@ -66,32 +66,11 @@ describe('Payment flow (e2e)', () => {
     await patchEvent({ type: 'WEITER' }).expect(200);
     await patchEvent({ type: 'AGB_AKZEPTIERT', version: 'v1' }).expect(200);
     await patchEvent({ type: 'DATENSCHUTZ_AKZEPTIERT', version: 'v1' }).expect(200);
-    await patchEvent({ type: 'WEITER' }).expect(200);
-    await patchEvent({
-      type: 'REZEPT_OCR_ABGESCHLOSSEN',
-      uri: 'local://x',
-      result: {
-        patient: { name: 'Max Mustermann', dateOfBirth: '15.03.1972' },
-        arzt: { name: 'Dr. Test' },
-        krankenkasse: { name: '', versichertenNr: '' },
-        diagnose: 'G82.1',
-        hilfsmittel: 'Rollstuhl, faltbar',
-        datum: '01.01.2026',
-      },
-      confidence: { patient: 'high', arzt: 'high', krankenkasse: 'high', diagnose: 'high', hilfsmittel: 'high' },
-    }).expect(200);
-    await patchEvent({ type: 'WEITER' }).expect(200);
-    await patchEvent({
-      type: 'KRANKENKASSE_OCR_ABGESCHLOSSEN',
-      uri: 'local://y',
-      krankenkasse: { name: 'Techniker Krankenkasse', ik: '260940566', versichertenNr: 'Z999999999' },
-      confidence: 'high',
-      produkte: [],
-    }).expect(200);
-    const datenpruefung = await patchEvent({ type: 'WEITER' }).expect(200);
-    const produkt = datenpruefung.body.session.verfügbareProdukte[0];
-
-    await patchEvent({ type: 'SUPPLY_AUSGEWAEHLT', produkt }).expect(200);
+    // Payment at checkout only exists for paid self-pay purchases — a
+    // Rezept-Versorgung is submitted without one (Zuzahlung comes later).
+    const produkte = await request(app.getHttpServer()).get('/api/v1/products').expect(200);
+    const selbstzahler = produkte.body.find((p: { hilfsmittelNr?: string; eigenanteil: number }) => !p.hilfsmittelNr && p.eigenanteil > 0);
+    await patchEvent({ type: 'KATALOG_PRODUKT_SELBSTZAHLER_GEWAEHLT', produkt: selbstzahler }).expect(200);
     const slot = { id: 'slot-1', beginn: '2026-08-01T09:00:00.000Z', ende: '2026-08-01T11:00:00.000Z', ort: 'Berlin' };
     await patchEvent({ type: 'TERMIN_VORSCHLAEGE_BERECHNET', vorschläge: [slot] }).expect(200);
     await patchEvent({ type: 'TERMIN_AUSGEWAEHLT', termin: slot }).expect(200);

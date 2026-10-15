@@ -8,11 +8,8 @@ export interface CatalogProductJoined {
   features: unknown;
   categoryName: string;
   manufacturerName: string;
-  // Only present when fetched via CatalogService.getProduct (a single
-  // product); CatalogService.listProducts's lighter listing query doesn't
-  // join supplier offers, so this is absent there — eigenanteil/lieferzeit
-  // fall back to placeholders in that case, corrected once a specific
-  // product is fetched individually (SUPPLY_AUSGEWAEHLT, complete()).
+  // Loaded by both ProductsRepository.findById and listActive; a product
+  // without any active offer maps to eigenanteil 0 / lieferzeit 'unbekannt'.
   offers?: { deliveryTimeDays: number; customerCopayCents: number }[];
 }
 

@@ -4,6 +4,7 @@ import {
   istAbschlussfaehig,
   telefonVerifiziert,
   transition,
+  zahlungBeimCheckoutFaellig,
   type OcrResult,
   type OnboardingEvent,
   type OnboardingSession,
@@ -83,6 +84,12 @@ export class OnboardingService {
     }
     if (!telefonVerifiziert(domainSession)) {
       throw new BadRequestException('Telefonnummer ist noch nicht bestätigt');
+    }
+    // Rezept-Versorgungen werden ohne Zahlung eingereicht — die gesetzliche
+    // Zuzahlung zieht der Leistungserbringer später ein (siehe
+    // zahlungBeimCheckoutFaellig in @sanime/domain).
+    if (!zahlungBeimCheckoutFaellig(domainSession)) {
+      throw new BadRequestException('Für diese Versorgung ist beim Checkout keine Zahlung fällig');
     }
     if (!row.selectedProductId) {
       throw new BadRequestException('Kein Produkt ausgewählt');
@@ -191,11 +198,21 @@ export class OnboardingService {
     return { session: await this.hydrate(tenant, await this.getRowOrThrow(tenant, sessionId)) };
   }
 
-  complete(tenant: TenantContext, sessionId: string) {
-    return withSpan('OnboardingService.complete', () => this.completeInner(tenant, sessionId));
+  // POST .../complete — der Kunde reicht eine Versorgung ein, für die beim
+  // Checkout keine Zahlung fällig ist (jede Rezept-Versorgung, kostenlose
+  // Selbstzahler-Artikel). Ein zahlungspflichtiger Selbstzahler-Kauf scheitert
+  // hier am FSM-Guard: den kann nur der verifizierte Stripe-Webhook abschließen.
+  einreichen(tenant: TenantContext, sessionId: string) {
+    return withSpan('OnboardingService.einreichen', () => this.abschliessen(tenant, sessionId, 'AUFTRAG_EINGEREICHT'));
   }
 
-  private async completeInner(tenant: TenantContext, sessionId: string) {
+  // Nur von StripeWebhookController nach einem signaturgeprüften
+  // payment_intent.succeeded aufgerufen.
+  abschliessenNachZahlung(tenant: TenantContext, sessionId: string) {
+    return withSpan('OnboardingService.abschliessenNachZahlung', () => this.abschliessen(tenant, sessionId, 'ZAHLUNG_ERFOLGREICH'));
+  }
+
+  private async abschliessen(tenant: TenantContext, sessionId: string, eventType: 'AUFTRAG_EINGEREICHT' | 'ZAHLUNG_ERFOLGREICH') {
     const row = await this.getRowOrThrow(tenant, sessionId);
     const domainSession = await this.hydrate(tenant, row);
 
@@ -206,6 +223,13 @@ export class OnboardingService {
     }
     if (!row.selectedProductId) {
       throw new BadRequestException('Kein Produkt ausgewählt');
+    }
+    // Enforces the actual CHECKOUT->ABGESCHLOSSEN FSM edge (status + the
+    // payment/no-payment guard) *before* any Supply is created — a rejected
+    // completion must never leave an orphaned Supply/Order behind.
+    const result = transition(domainSession, { type: eventType });
+    if (!result.ok) {
+      throw new BadRequestException(result.reason);
     }
 
     const product = await this.catalog.getProduct(tenant, row.selectedProductId);
@@ -231,13 +255,6 @@ export class OnboardingService {
       { type: 'customer', id: row.customerId },
     );
 
-    // Enforces the actual CHECKOUT->ABGESCHLOSSEN FSM edge (not just its
-    // guard predicate in isolation) — fails if the session isn't in
-    // CHECKOUT, exactly like a direct PATCH would.
-    const result = transition(domainSession, { type: 'ZAHLUNG_ERFOLGREICH', versorgungId: supplyId });
-    if (!result.ok) {
-      throw new BadRequestException(result.reason);
-    }
 
     await this.sessions.update(tenant, row.id, {
       status: result.session.status,
@@ -342,7 +359,7 @@ export class OnboardingService {
       case 'SUPPLY_AUSGEWAEHLT': {
         // Full product (with offers), not just assertProductExists's raw-row
         // check — needed to persist selectedSupplierProductId, the column
-        // proposeAppointmentSlots and complete() both read as the single
+        // proposeAppointmentSlots and abschliessen() both read as the single
         // source of truth for "which supplier is fulfilling this order."
         const product = await this.catalog.getProduct(tenant, event.produkt.id);
         await this.sessions.update(tenant, row.id, {

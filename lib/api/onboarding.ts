@@ -1,4 +1,4 @@
-import type { OnboardingEvent, OnboardingSession } from '@sanime/domain';
+import type { ClientOnboardingEvent, OnboardingSession } from '@sanime/domain';
 import { request } from './client';
 
 export interface ProposedSlot {
@@ -18,12 +18,14 @@ export function getCurrent(): Promise<OnboardingSession> {
 
 export function patch(
   sessionId: string,
-  event: OnboardingEvent,
+  event: ClientOnboardingEvent,
   code?: string,
 ): Promise<{ session: OnboardingSession; devCode?: string }> {
   return request('PATCH', `/onboarding-sessions/${sessionId}`, { body: { event, code }, idempotent: true });
 }
 
+// Reicht eine Versorgung ohne Checkout-Zahlung ein — nur für Rezept-
+// Versorgungen; zahlungspflichtige Selbstzahler-Käufe lehnt der Server ab.
 export function complete(sessionId: string): Promise<{ supplyId: string }> {
   return request('POST', `/onboarding-sessions/${sessionId}/complete`, { idempotent: true });
 }

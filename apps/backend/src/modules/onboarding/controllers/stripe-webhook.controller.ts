@@ -10,7 +10,7 @@ import { OnboardingService } from '../onboarding.service';
 // signature (verified against STRIPE_WEBHOOK_SECRET, never against anything
 // client-controlled) is the entire trust boundary for this route. This is
 // also why it lives in OnboardingModule rather than PaymentModule: it needs
-// OnboardingService.complete(), and PaymentModule must never import
+// OnboardingService.abschliessenNachZahlung(), and PaymentModule must never import
 // OnboardingModule back (see onboarding.module.ts's comment).
 @Controller('webhooks/stripe')
 export class StripeWebhookController {
@@ -63,7 +63,7 @@ export class StripeWebhookController {
     if (!shouldComplete) return; // already processed by an earlier delivery of this event
 
     try {
-      const { supplyId } = await this.onboarding.complete(DEFAULT_TENANT_CONTEXT, payment.onboardingSessionId);
+      const { supplyId } = await this.onboarding.abschliessenNachZahlung(DEFAULT_TENANT_CONTEXT, payment.onboardingSessionId);
       await this.payment.attachSupply(payment, supplyId);
     } catch (err) {
       // The session may already be ABGESCHLOSSEN (e.g. a race with a
@@ -71,7 +71,7 @@ export class StripeWebhookController {
       // retry a webhook that can never succeed differently. A genuinely
       // stuck session here is a real-world edge case for an admin to
       // investigate, not something retrying this handler can fix.
-      this.logger.error(`OnboardingService.complete() nach Zahlung "${intent.id}" fehlgeschlagen: ${err instanceof Error ? err.message : err}`);
+      this.logger.error(`OnboardingService.abschliessenNachZahlung() nach Zahlung "${intent.id}" fehlgeschlagen: ${err instanceof Error ? err.message : err}`);
     }
   }
 

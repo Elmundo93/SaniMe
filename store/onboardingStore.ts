@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { transition } from '@sanime/domain';
-import type { CustomerContact, OcrResult, OnboardingEvent, OnboardingSession, OnboardingStatus, TransitionResult } from '@sanime/domain';
+import type { ClientOnboardingEvent, CustomerContact, OcrResult, OnboardingSession, OnboardingStatus, TransitionResult } from '@sanime/domain';
 import { useAuthStore } from './authStore';
 import * as onboardingApi from '../lib/api/onboarding';
 import { trackOnboarding } from '../lib/analytics';
@@ -90,12 +90,13 @@ interface OnboardingState {
   // die aktuelle (immer frische) Session erteilt sind. leistungsuebersicht.tsx
   // dispatcht dieses Event anstelle von WEITER, sobald beide Einwilligungen
   // vorliegen — siehe useProduktAuswahlDispatch.
-  pendingEinstiegEvent: OnboardingEvent | null;
+  pendingEinstiegEvent: ClientOnboardingEvent | null;
 
   starten: () => Promise<OnboardingSession>;
   laden: () => Promise<void>;
-  dispatch: (event: OnboardingEvent, code?: string) => Promise<TransitionResult & { devCode?: string }>;
-  setPendingEinstiegEvent: (event: OnboardingEvent | null) => void;
+  dispatch: (event: ClientOnboardingEvent, code?: string) => Promise<TransitionResult & { devCode?: string }>;
+  setPendingEinstiegEvent: (event: ClientOnboardingEvent | null) => void;
+  einreichen: () => Promise<TransitionResult>;
   abschliessen: () => Promise<void>;
 }
 
@@ -119,7 +120,7 @@ async function persistSession(session: OnboardingSession) {
 // Zentrale Instrumentierung: genau ein Analytics-Event pro echtem Übergang, ausgelöst
 // vom dispatch() selbst statt von einzelnen Screens — verhindert Doppel-Feuern bei
 // Remounts/Guard-Redirects und hält die "keine Gesundheitsdaten"-Prüffläche an einer Stelle.
-function emitAnalyticsForTransition(before: OnboardingSession, after: OnboardingSession, event: OnboardingEvent) {
+function emitAnalyticsForTransition(before: OnboardingSession, after: OnboardingSession, event: ClientOnboardingEvent) {
   if (before.status !== after.status) {
     trackOnboarding({ name: 'screen_opened', status: after.status });
   }
@@ -144,15 +145,17 @@ function emitAnalyticsForTransition(before: OnboardingSession, after: Onboarding
     case 'AUFTRAG_BESTAETIGT':
       trackOnboarding({ name: 'checkout_started' });
       break;
-    case 'ZAHLUNG_ERFOLGREICH': {
-      trackOnboarding({ name: 'checkout_completed' });
-      const dauerSekunden = Math.round(
-        (new Date(after.aktualisiert).getTime() - new Date(after.erstellt).getTime()) / 1000,
-      );
-      trackOnboarding({ name: 'onboarding_completed', dauerSekunden });
-      break;
-    }
   }
+}
+
+// Der Abschluss läuft nie über dispatch() (die beiden Abschluss-Events sind
+// reine Server-Events) — deshalb feuern die Abschluss-Events hier, aus
+// abschliessen(), das nach beiden Abschlusswegen (einreichen() bzw. dem
+// Stripe-Webhook) genau einmal aufgerufen wird.
+function emitAnalyticsForAbschluss(session: OnboardingSession) {
+  trackOnboarding({ name: 'checkout_completed' });
+  const dauerSekunden = Math.round((Date.now() - new Date(session.erstellt).getTime()) / 1000);
+  trackOnboarding({ name: 'onboarding_completed', dauerSekunden });
 }
 
 export const useOnboardingStore = create<OnboardingState>((set, get) => ({
@@ -225,18 +228,7 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     if (!localCheck.ok) return localCheck;
 
     try {
-      let fresh: OnboardingSession;
-      let devCode: string | undefined;
-      if (event.type === 'ZAHLUNG_ERFOLGREICH') {
-        // Completion is its own endpoint, excluded from the PATCH schema by
-        // design — the server builds the real Supply/Order here, not the client.
-        await onboardingApi.complete(session.id);
-        fresh = await onboardingApi.getCurrent();
-      } else {
-        const result = await onboardingApi.patch(session.id, event, code);
-        fresh = result.session;
-        devCode = result.devCode;
-      }
+      const { session: fresh, devCode } = await onboardingApi.patch(session.id, event, code);
       await persistSession(fresh);
       set({ session: fresh });
       emitAnalyticsForTransition(session, fresh, event);
@@ -246,9 +238,34 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     }
   },
 
+  // Reicht eine Versorgung ohne Checkout-Zahlung ein (jede Rezept-Versorgung).
+  // Eigener Endpoint statt PATCH: erst der Server legt die echte
+  // Versorgung/Bestellung an. Ein zahlungspflichtiger Selbstzahler-Kauf wird
+  // hier lokal wie serverseitig vom FSM-Guard abgelehnt — den schließt nur der
+  // Stripe-Webhook ab (siehe checkout.tsx's wartenAufAbschluss).
+  einreichen: async () => {
+    const session = get().session;
+    if (!session) {
+      return { ok: false, reason: 'Keine aktive OnboardingSession' };
+    }
+    const localCheck = transition(session, { type: 'AUFTRAG_EINGEREICHT' });
+    if (!localCheck.ok) return localCheck;
+
+    try {
+      await onboardingApi.complete(session.id);
+      const fresh = await onboardingApi.getCurrent();
+      await persistSession(fresh);
+      set({ session: fresh });
+      return { ok: true, session: fresh };
+    } catch (e) {
+      return { ok: false, reason: e instanceof Error ? e.message : 'Netzwerkfehler' };
+    }
+  },
+
   abschliessen: async () => {
     const session = get().session;
     if (!session) return;
+    emitAnalyticsForAbschluss(session);
 
     if (!useAuthStore.getState().benutzer) {
       // Darf nie fehlschlagen, solange die Guard-Kette (Datenprüfung, useOnboardingGuard

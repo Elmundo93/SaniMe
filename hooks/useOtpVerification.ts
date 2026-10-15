@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
 import { TextInput } from 'react-native';
-import type { OnboardingEvent, TransitionResult } from '@sanime/domain';
+import type { ClientOnboardingEvent, TransitionResult } from '@sanime/domain';
 
-type Dispatch = (event: OnboardingEvent, code?: string) => Promise<TransitionResult & { devCode?: string }>;
+type Dispatch = (event: ClientOnboardingEvent, code?: string) => Promise<TransitionResult & { devCode?: string }>;
 
 // OTP-Sende-/Verifizierungs-Mechanik. codeSenden/codeVerifizieren SIND die
 // dispatch()-Aufrufe (KONTAKT_ERFASST löst den Code-Versand serverseitig aus,

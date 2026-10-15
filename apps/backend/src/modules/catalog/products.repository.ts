@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, ilike, inArray, or } from 'drizzle-orm';
+import { and, eq, ilike, inArray, or, type SQL } from 'drizzle-orm';
 import { DRIZZLE, type Database } from '../../db/client';
 import { catalogCategories, manufacturers, products, supplierProducts, suppliers } from '../../db/schema';
 import { TenantScopedRepository } from '../../common/repository/tenant-scoped.repository';
@@ -22,7 +22,7 @@ export class ProductsRepository extends TenantScopedRepository {
     super(db);
   }
 
-  listActive(tenant: TenantContext, filters?: { categoryId?: string; categoryIds?: string[]; query?: string }) {
+  async listActive(tenant: TenantContext, filters?: { categoryId?: string; categoryIds?: string[]; query?: string }) {
     const conditions = [this.tenantFilter(products.organizationId, tenant), eq(products.isActive, true)];
     if (filters?.categoryId) conditions.push(eq(products.categoryId, filters.categoryId));
     // Used by CatalogService.listProductsForKrankheitsbild — a Krankheitsbild
@@ -33,12 +33,19 @@ export class ProductsRepository extends TenantScopedRepository {
     if (filters?.query) {
       conditions.push(or(ilike(products.name, `%${filters.query}%`), ilike(products.description, `%${filters.query}%`))!);
     }
-    return this.db
+    const rows = await this.db
       .select(PRODUCT_COLUMNS)
       .from(products)
       .innerJoin(catalogCategories, eq(products.categoryId, catalogCategories.id))
       .innerJoin(manufacturers, eq(products.manufacturerId, manufacturers.id))
       .where(and(...conditions));
+    if (rows.length === 0) return [];
+
+    // Offers for all listed products in one query (no N+1) — without them
+    // toProdukt() would show every product as "Kein Eigenanteil" in the
+    // catalog and in Krankheitsbild recommendations.
+    const offers = await this.selectOffers(inArray(supplierProducts.productId, rows.map((r) => r.id)));
+    return rows.map((row) => ({ ...row, offers: offers.filter((o) => o.productId === row.id) }));
   }
 
   async findById(tenant: TenantContext, id: string) {
@@ -51,9 +58,15 @@ export class ProductsRepository extends TenantScopedRepository {
       .limit(1);
     if (!product) return null;
 
-    const offers = await this.db
+    const offers = await this.selectOffers(eq(supplierProducts.productId, id));
+    return { ...product, offers };
+  }
+
+  private selectOffers(productFilter: SQL) {
+    return this.db
       .select({
         id: supplierProducts.id,
+        productId: supplierProducts.productId,
         supplierId: suppliers.id,
         supplierName: suppliers.name,
         deliveryTimeDays: supplierProducts.deliveryTimeDays,
@@ -62,9 +75,7 @@ export class ProductsRepository extends TenantScopedRepository {
       })
       .from(supplierProducts)
       .innerJoin(suppliers, eq(supplierProducts.supplierId, suppliers.id))
-      .where(and(eq(supplierProducts.productId, id), eq(supplierProducts.isActive, true)));
-
-    return { ...product, offers };
+      .where(and(productFilter, eq(supplierProducts.isActive, true)));
   }
 
   // Used by Onboarding/Supply-Order to validate a selection exists, without

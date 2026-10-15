@@ -120,7 +120,14 @@ export default function ZusammenfassungScreen() {
 
           <Animated.View entering={FadeInDown.delay(300).springify().damping(18)}>
             <View style={styles.zuzahlungBox}>
-              <Text style={styles.zuzahlungLabel}>Eigenleistung / Zuzahlung</Text>
+              <View style={styles.zuzahlungTexte}>
+                <Text style={styles.zuzahlungLabel}>
+                  {produkt.hilfsmittelNr ? 'Gesetzliche Zuzahlung (voraussichtlich)' : 'Preis'}
+                </Text>
+                {produkt.hilfsmittelNr && (
+                  <Text style={styles.zuzahlungHinweis}>Wird erst nach Genehmigung durch deine Krankenkasse abgerechnet.</Text>
+                )}
+              </View>
               <Text style={styles.zuzahlungWert}>{eigenanteilText}</Text>
             </View>
           </Animated.View>
@@ -171,7 +178,9 @@ const styles = StyleSheet.create({
     padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     borderWidth: 1, borderColor: 'rgba(63,139,255,0.15)',
   },
+  zuzahlungTexte: { flex: 1, gap: 2, paddingRight: 12 },
   zuzahlungLabel: { fontSize: D.font.sm, color: D.color.inkSecondary, fontWeight: D.font.medium },
+  zuzahlungHinweis: { fontSize: D.font.xs, color: D.color.inkTertiary, lineHeight: 16 },
   zuzahlungWert: { fontSize: D.font.xl, fontWeight: D.font.heavy, color: D.color.accent },
   confirmBox: {
     backgroundColor: D.color.bgSoft, borderRadius: D.radius.md, padding: 16,

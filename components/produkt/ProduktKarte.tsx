@@ -77,7 +77,7 @@ export function ProduktKarte({ produkt, ausgewählt, onAuswählen, index }: Prod
           <View style={styles.produktFooter}>
             <View>
               <Text style={styles.eigenanteilLabel}>
-                {produkt.hilfsmittelNr ? 'Gesetzlicher Eigenanteil' : 'Preis'}
+                {produkt.hilfsmittelNr ? 'Gesetzl. Zuzahlung' : 'Preis'}
               </Text>
               <Text style={[styles.eigenanteilWert, ausgewählt && styles.eigenanteilWertAktiv]}>
                 {produkt.eigenanteil === 0
