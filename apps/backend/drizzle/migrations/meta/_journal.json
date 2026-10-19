@@ -127,6 +127,41 @@
       "when": 1789235169060,
       "tag": "0017_tricky_expediter",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792402247941,
+      "tag": "0018_katalog_ausbau",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792402984281,
+      "tag": "0019_krankheitsbild_pfad_entfernen",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792436312126,
+      "tag": "0020_warenkorb_positionen",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792436331808,
+      "tag": "0021_onboarding_einzelprodukt_entfernen",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792437896506,
+      "tag": "0022_selbstzahlerpreis_ohne_rezept",
+      "breakpoints": true
     }
   ]
 }

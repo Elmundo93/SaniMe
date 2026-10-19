@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { einblenden } from '../../lib/einblenden';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { GlassCard } from '../ui/GlassCard';
@@ -20,7 +21,7 @@ interface ProduktKarteProps {
 // die HiMi-Nr.-Zeile wird dann komplett ausgeblendet statt "undefined" zu zeigen.
 export function ProduktKarte({ produkt, ausgewählt, onAuswählen, index }: ProduktKarteProps) {
   return (
-    <Animated.View entering={FadeInDown.delay(200 + index * 80).springify().damping(18)}>
+    <Animated.View entering={einblenden(200 + index * 80)}>
       <TouchableOpacity onPress={onAuswählen} activeOpacity={0.85}>
         <GlassCard
           padding={18}

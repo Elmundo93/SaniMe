@@ -1,41 +1,29 @@
 import React from 'react';
 import { Text, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { einblenden } from '../../lib/einblenden';
 import { Screen } from '../../components/ui/Screen';
 import { ScrollContainer } from '../../components/ui/ScrollContainer';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { EinstiegOption } from '../../components/ui/EinstiegOption';
-import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
+import { useOnboardingStore } from '../../store/onboardingStore';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '@sanime/design-system';
 
 // Ersetzt den früheren Direkt-Sprung des "+"-Buttons zu /scan/rezept — der
-// Nutzer wählt hier den Einstieg.
+// Nutzer wählt hier den Einstieg. Nur „Rezept scannen“ startet einen Prozess;
+// „Beschreiben“ und „Katalog“ führen in die sessionlose Discovery (/katalog
+// ist eine eigene Route, weil aus diesem Vollbild-Modal nicht sauber in den
+// Entdecken-Tab gesprungen werden kann).
 export default function EinstiegScreen() {
   const router = useRouter();
-  const starten = useOnboardingStore((s) => s.starten);
-  const dispatch = useOnboardingStore((s) => s.dispatch);
+  const prozessStarten = useOnboardingStore((s) => s.prozessStarten);
 
-  const handleKrankheitsbild = async () => {
-    const session = await starten();
-    // Anders als "Rezept scannen": REZEPT_AUFNAHME ist die WEITER-Standard-
-    // Route ab LEISTUNGSUEBERSICHT, KRANKHEITSBILD_ERFASSUNG braucht dagegen
-    // das explizite KRANKHEITSBILD_STARTEN-Event — bei einer frischen Session
-    // (WILLKOMMEN/LEISTUNGSUEBERSICHT, Einwilligung noch nicht erteilt) also
-    // dieselbe Vormerkung wie useProduktAuswahlDispatch, statt sich auf den
-    // Guard-Bounce zu verlassen.
-    if (session.status === 'WILLKOMMEN' || session.status === 'LEISTUNGSUEBERSICHT') {
-      useOnboardingStore.getState().setPendingEinstiegEvent({ type: 'KRANKHEITSBILD_STARTEN' });
-      router.push(STATUS_META[session.status].route as any);
-      return;
-    }
-    const result = await dispatch({ type: 'KRANKHEITSBILD_STARTEN' });
-    if (result.ok) {
-      router.push(STATUS_META[result.session.status].route as any);
-    } else {
-      zeigeDispatchFehler();
-    }
+  const handleRezept = async () => {
+    const result = await prozessStarten('REZEPT');
+    if (result.ok) router.push(result.route as any);
+    else zeigeDispatchFehler();
   };
 
   return (
@@ -43,7 +31,7 @@ export default function EinstiegScreen() {
       <ScreenHeader title="Wie möchtest du starten?" onBack={() => router.back()} />
 
       <ScrollContainer contentContainerStyle={styles.scrollContent}>
-        <Animated.View entering={FadeInDown.delay(20).springify()}>
+        <Animated.View entering={einblenden(20)}>
           <Text style={styles.sub}>
             Wähle, wie wir deine Versorgung am besten für dich finden.
           </Text>
@@ -54,18 +42,15 @@ export default function EinstiegScreen() {
           icon="camera"
           titel="Rezept scannen"
           beschreibung="Fotografiere dein Rezept, den Rest übernehmen wir."
-          onPress={async () => {
-            await starten();
-            router.push('/scan/rezept');
-          }}
+          onPress={handleRezept}
         />
 
         <EinstiegOption
           index={1}
           icon="message-circle"
-          titel="Krankheitsbild beschreiben"
-          beschreibung="Sag uns, was dir fehlt — wir schlagen passende Hilfsmittel vor."
-          onPress={handleKrankheitsbild}
+          titel="Beschreiben, wobei du Hilfe brauchst"
+          beschreibung="Im Alltag oder bei einer Erkrankung — per Text oder Sprache. Wir zeigen dir passende Hilfsmittel."
+          onPress={() => router.push('/katalog/hilfe')}
         />
 
         <EinstiegOption

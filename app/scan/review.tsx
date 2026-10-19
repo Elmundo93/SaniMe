@@ -7,7 +7,8 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { einblenden } from '../../lib/einblenden';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { GlassCard } from '../../components/ui/GlassCard';
@@ -15,19 +16,20 @@ import { Screen } from '../../components/ui/Screen';
 import { ScrollContainer } from '../../components/ui/ScrollContainer';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { DatenFeld, DatenFeldGruppenTitel } from '../../components/onboarding/DatenFeld';
-import { StepCounter } from '../../components/onboarding/StepCounter';
+import { ScanSchrittZaehler } from '../../components/onboarding/ScanSchrittZaehler';
 import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
+import { useFeldKorrektur } from '../../hooks/useFeldKorrektur';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '@sanime/design-system';
 import { hatPflichtfelderRezept } from '@sanime/domain';
-import type { OcrResult } from '@sanime/domain';
 
 export default function ReviewScreen() {
   const router = useRouter();
   const { session, ready } = useOnboardingGuard('REZEPT_PRUEFUNG', { requireOcrResult: true });
   const dispatch = useOnboardingStore((s) => s.dispatch);
+  const { feldKorrigiert, abwarten: korrekturenAbwarten } = useFeldKorrektur();
 
   if (!ready || !session) return <OnboardingLoadingView />;
 
@@ -35,12 +37,11 @@ export default function ReviewScreen() {
   const confidence = session.ocrConfidence;
   const vollständig = hatPflichtfelderRezept(session);
 
-  const feldKorrigiert = (patch: Partial<OcrResult>) => {
-    dispatch({ type: 'FELD_KORRIGIERT', patch });
-  };
-
   const handleWeiter = async () => {
-    const result = await dispatch({ type: 'WEITER' });
+    await korrekturenAbwarten();
+    // Ist die Krankenkasse aus einem früheren Rezept dieser Bestellung schon
+    // bekannt, muss die Karte nicht noch einmal fotografiert werden.
+    const result = await dispatch(session.krankenkasse ? { type: 'WEITER_KRANKENKASSE_BEKANNT' } : { type: 'WEITER' });
     if (result.ok) {
       router.push(STATUS_META[result.session.status].route as any);
     } else {
@@ -54,6 +55,7 @@ export default function ReviewScreen() {
       {
         text: 'Neu scannen',
         onPress: async () => {
+          await korrekturenAbwarten();
           const result = await dispatch({ type: 'ZURUECK' });
           if (result.ok) {
             router.replace(STATUS_META[result.session.status].route as any);
@@ -66,6 +68,7 @@ export default function ReviewScreen() {
   };
 
   const handleZurück = async () => {
+    await korrekturenAbwarten();
     const result = await dispatch({ type: 'ZURUECK' });
     if (result.ok) {
       router.replace(STATUS_META[result.session.status].route as any);
@@ -80,19 +83,12 @@ export default function ReviewScreen() {
         <ScreenHeader
           title="Daten prüfen"
           onBack={handleZurück}
-          right={
-            <StepCounter
-              aktuellerSchritt={STATUS_META.REZEPT_PRUEFUNG.schritt}
-              gesamtSchritte={11}
-              variant="light"
-              label={`${STATUS_META.REZEPT_PRUEFUNG.schritt}/11`}
-            />
-          }
+          right={<ScanSchrittZaehler session={session} />}
         />
 
         <ScrollContainer contentContainerStyle={styles.scrollContent}>
           {/* Erfolgs-Banner */}
-          <Animated.View entering={FadeInDown.delay(60).springify().damping(18)}>
+          <Animated.View entering={einblenden(60)}>
             <View style={styles.successBanner}>
               <View style={styles.successIcon}>
                 <Feather name="check" size={16} color="#fff" />
@@ -115,60 +111,60 @@ export default function ReviewScreen() {
           </Animated.View>
 
           {/* Patient */}
-          <Animated.View entering={FadeInDown.delay(130).springify().damping(18)}>
+          <Animated.View entering={einblenden(130)}>
             <GlassCard padding={0} radius={D.radius.md}>
               <DatenFeldGruppenTitel title="Patient" />
               <DatenFeld
                 label="Name"
                 wert={ocr.patient.name}
                 confidence={confidence?.patient}
-                onEdit={(w) => feldKorrigiert({ patient: { ...ocr.patient, name: w } })}
+                onEdit={(w) => feldKorrigiert((o) => ({ patient: { ...o.patient, name: w } }))}
               />
               <DatenFeld
                 label="Geburtsdatum"
                 wert={ocr.patient.dateOfBirth}
                 confidence={confidence?.patient}
-                onEdit={(w) => feldKorrigiert({ patient: { ...ocr.patient, dateOfBirth: w } })}
+                onEdit={(w) => feldKorrigiert((o) => ({ patient: { ...o.patient, dateOfBirth: w } }))}
               />
             </GlassCard>
           </Animated.View>
 
           {/* Arzt */}
-          <Animated.View entering={FadeInDown.delay(190).springify().damping(18)}>
+          <Animated.View entering={einblenden(190)}>
             <GlassCard padding={0} radius={D.radius.md}>
               <DatenFeldGruppenTitel title="Verschreibender Arzt" />
               <DatenFeld
                 label="Name"
                 wert={ocr.arzt.name}
                 confidence={confidence?.arzt}
-                onEdit={(w) => feldKorrigiert({ arzt: { ...ocr.arzt, name: w } })}
+                onEdit={(w) => feldKorrigiert((o) => ({ arzt: { ...o.arzt, name: w } }))}
               />
               {ocr.arzt.lanr && <DatenFeld label="LANR" wert={ocr.arzt.lanr} confidence="high" />}
             </GlassCard>
           </Animated.View>
 
           {/* Verordnung */}
-          <Animated.View entering={FadeInDown.delay(250).springify().damping(18)}>
+          <Animated.View entering={einblenden(250)}>
             <GlassCard padding={0} radius={D.radius.md}>
               <DatenFeldGruppenTitel title="Verordnung" />
               <DatenFeld
                 label="Diagnose"
                 wert={ocr.diagnose}
                 confidence={confidence?.diagnose}
-                onEdit={(w) => feldKorrigiert({ diagnose: w })}
+                onEdit={(w) => feldKorrigiert(() => ({ diagnose: w }))}
               />
               <DatenFeld
                 label="Hilfsmittel"
                 wert={ocr.hilfsmittel}
                 confidence={confidence?.hilfsmittel}
-                onEdit={(w) => feldKorrigiert({ hilfsmittel: w })}
+                onEdit={(w) => feldKorrigiert(() => ({ hilfsmittel: w }))}
               />
               {ocr.hilfsmittelNr && <DatenFeld label="Hilfsmittel-Nr." wert={ocr.hilfsmittelNr} confidence="high" />}
               <DatenFeld label="Ausstellungsdatum" wert={ocr.datum} confidence="high" />
             </GlassCard>
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(320).springify()}>
+          <Animated.View entering={einblenden(320)}>
             <TouchableOpacity onPress={handleNeuScannen} style={styles.neuScannenBtn} accessibilityRole="button">
               <Feather name="camera" size={16} color={D.color.accent} />
               <Text style={styles.neuScannenText}>Rezept erneut scannen</Text>

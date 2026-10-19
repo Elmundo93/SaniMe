@@ -20,6 +20,7 @@ import {
 } from '../../db/schema';
 import type { TenantContext } from '../../common/repository/tenant-context';
 import { ConsentsRepository } from '../consents/consents.repository';
+import { ConsentGrantsRepository } from '../consents/consent-grants.repository';
 
 // One dedicated, read-only cross-table reader for the Art. 15/20 export
 // bundle — kept out of each business module's own repository, since these
@@ -30,6 +31,7 @@ export class DataExportPayloadBuilder {
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly consents: ConsentsRepository,
+    private readonly consentGrants: ConsentGrantsRepository,
   ) {}
 
   async build(tenant: TenantContext, customerId: string) {
@@ -73,6 +75,7 @@ export class DataExportPayloadBuilder {
       : [];
 
     const consentRows = await this.consents.findHistoryForCustomer(tenant, customerId);
+    const consentGrantRows = await this.consentGrants.listForCustomer(tenant, customerId);
 
     // Two distinct queries, both included deliberately: "what did I do"
     // (actor) vs. "who accessed my data" (resource) — the second is the
@@ -109,6 +112,7 @@ export class DataExportPayloadBuilder {
       documents: documentRows,
       documentVersions: documentVersionRows,
       consents: consentRows,
+      consentGrants: consentGrantRows,
       auditTrail: { byActor: auditByActor, byResource: auditByResource },
       accessLog: { byActor: accessByActor, byResource: accessByResource },
     };

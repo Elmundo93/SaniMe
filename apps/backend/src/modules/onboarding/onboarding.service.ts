@@ -1,14 +1,20 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
 import {
+  consentErteilt,
+  einwilligungAktuell,
+  findeKrankheitsbild,
   istAbschlussfaehig,
+  istKassenartikel,
   telefonVerifiziert,
   transition,
   zahlungBeimCheckoutFaellig,
+  type OcrKrankenkasse,
   type OcrResult,
   type OnboardingEvent,
   type OnboardingSession,
   type OnboardingStatus,
+  type WarenkorbPosition,
 } from '@sanime/domain';
 import type { TenantContext } from '../../common/repository/tenant-context';
 import { AppointmentsService } from '../appointment/appointments.service';
@@ -20,11 +26,14 @@ import { PaymentService } from '../payment/payment.service';
 import { SupplyOrderService } from '../supply-order/supply-order.service';
 import { VERIFICATION_PROVIDER, type VerificationProvider } from '../verification/ports/verification-provider.port';
 import { ConsentsRepository } from '../consents/consents.repository';
+import { ConsentGrantsRepository } from '../consents/consent-grants.repository';
+import { istVerfuegbar } from '../catalog/catalog.mapper';
 import { toOcrConfidence, toOcrResult, toProdukt } from './onboarding-session.mapper';
+import { OnboardingSessionPositionsRepository } from './onboarding-session-positions.repository';
 import { OnboardingSessionsRepository } from './onboarding-sessions.repository';
 import { InsurancePoliciesRepository } from '../health-data/insurance-policies.repository';
 import { OcrResultsRepository } from '../health-data/ocr-results.repository';
-import type { NewOcrResultRow, OnboardingSessionRow } from '../../db/schema';
+import type { InsurancePolicy, NewOcrResultRow, OnboardingSessionRow } from '../../db/schema';
 
 const VERIFICATION_PURPOSE = 'onboarding_phone';
 
@@ -32,7 +41,9 @@ const VERIFICATION_PURPOSE = 'onboarding_phone';
 export class OnboardingService {
   constructor(
     private readonly sessions: OnboardingSessionsRepository,
+    private readonly positions: OnboardingSessionPositionsRepository,
     private readonly consents: ConsentsRepository,
+    private readonly consentGrants: ConsentGrantsRepository,
     private readonly ocrResults: OcrResultsRepository,
     private readonly insurancePolicies: InsurancePoliciesRepository,
     private readonly catalog: CatalogService,
@@ -45,9 +56,21 @@ export class OnboardingService {
 
   async createSession(tenant: TenantContext) {
     const secret = randomBytes(32).toString('base64url');
-    const hash = createHash('sha256').update(secret).digest('hex');
-    const row = await this.sessions.create(tenant, hash);
+    const row = await this.sessions.create(tenant, sha256(secret));
     return { sessionId: row.id, sessionSecret: secret };
+  }
+
+  // Widerruf der dauerhaften Einwilligung. Der Token selbst ist der Nachweis
+  // (wer ihn hat, durfte die Einwilligung übernehmen — darf sie also auch
+  // widerrufen). Gehört der Grant einem erkannten Kunden, werden alle seine
+  // Grants widerrufen. Bereits laufende Sessions behalten ihre Zustimmung;
+  // nur künftige Versorgungen fragen wieder nach. Ein unbekannter Token ist
+  // kein Fehler (idempotent, verrät nichts über fremde Tokens).
+  async einwilligungWiderrufen(tenant: TenantContext, einwilligungsToken: string) {
+    const grant = await this.consentGrants.findActiveByTokenHash(tenant, sha256(einwilligungsToken));
+    if (!grant) return;
+    await this.consentGrants.revokeById(tenant, grant.id);
+    if (grant.customerId) await this.consentGrants.revokeForCustomer(tenant, grant.customerId);
   }
 
   async getCurrent(tenant: TenantContext, sessionId: string) {
@@ -55,27 +78,27 @@ export class OnboardingService {
     return this.hydrate(tenant, row);
   }
 
-  // supplierId/productId are derived entirely from the persisted session row
-  // (never from client input) — the client can't request slots for an
-  // arbitrary supplier/product pair, only for whatever it already selected
-  // via a prior SUPPLY_AUSGEWAEHLT PATCH.
+  // supplierId/productId are derived entirely from the persisted positions
+  // (never from client input). Ein Termin gilt für die ganze Bestellung — im
+  // Pilot liefert ein Lieferant alles; maßgeblich ist die erste Position.
   async proposeAppointmentSlots(tenant: TenantContext, sessionId: string) {
-    const row = await this.getRowOrThrow(tenant, sessionId);
-    if (!row.selectedProductId) {
-      throw new BadRequestException('Kein Produkt ausgewählt');
+    await this.getRowOrThrow(tenant, sessionId);
+    const [erste] = await this.positions.listForSession(tenant, sessionId);
+    if (!erste) {
+      throw new BadRequestException('Der Warenkorb ist leer');
     }
-    const product = await this.catalog.getProduct(tenant, row.selectedProductId);
+    const product = await this.catalog.getProduct(tenant, erste.productId);
     const primaryOffer = product.offers[0];
     if (!primaryOffer) {
       throw new BadRequestException('Für dieses Produkt ist aktuell kein Lieferant verfügbar');
     }
-    return this.appointments.proposeSlots(tenant, primaryOffer.supplierId, row.selectedProductId);
+    return this.appointments.proposeSlots(tenant, primaryOffer.supplierId, erste.productId);
   }
 
-  // The Eigenanteil amount is read from the persisted session's selected
-  // product server-side (never trusted from the client) — same reasoning as
-  // proposeAppointmentSlots. Callable from CHECKOUT or CHECKOUT_FEHLGESCHLAGEN
-  // (a retry after a failed payment needs a fresh PaymentIntent).
+  // Der Betrag ist die Summe der Selbstzahler-Positionen, serverseitig aus den
+  // Katalog-Angeboten berechnet (nie vom Client übernommen). Callable from
+  // CHECKOUT or CHECKOUT_FEHLGESCHLAGEN (a retry after a failed payment needs a
+  // fresh PaymentIntent).
   async createPaymentIntent(tenant: TenantContext, sessionId: string) {
     const row = await this.getRowOrThrow(tenant, sessionId);
     const domainSession = await this.hydrate(tenant, row);
@@ -85,18 +108,29 @@ export class OnboardingService {
     if (!telefonVerifiziert(domainSession)) {
       throw new BadRequestException('Telefonnummer ist noch nicht bestätigt');
     }
-    // Rezept-Versorgungen werden ohne Zahlung eingereicht — die gesetzliche
+    // Kassenartikel werden ohne Zahlung eingereicht — die gesetzliche
     // Zuzahlung zieht der Leistungserbringer später ein (siehe
     // zahlungBeimCheckoutFaellig in @sanime/domain).
     if (!zahlungBeimCheckoutFaellig(domainSession)) {
-      throw new BadRequestException('Für diese Versorgung ist beim Checkout keine Zahlung fällig');
+      throw new BadRequestException('Für diese Bestellung ist beim Checkout keine Zahlung fällig');
     }
-    if (!row.selectedProductId) {
-      throw new BadRequestException('Kein Produkt ausgewählt');
+    // Erst zahlen, wenn alles andere stimmt — sonst wäre bezahlt, was der
+    // Abschluss danach ablehnt (z.B. ein fehlendes Rezept).
+    if (!istAbschlussfaehig(domainSession)) {
+      throw new BadRequestException('Bitte vervollständige zuerst deine Bestellung (Rezepte und Termin)');
     }
-    const product = await this.catalog.getProduct(tenant, row.selectedProductId);
-    const amountCents = product.offers[0]?.customerCopayCents ?? 0;
-    return this.payment.createOrReuseIntent(tenant, sessionId, amountCents);
+    return this.payment.createOrReuseIntent(tenant, sessionId, await this.betragBeimCheckoutCents(tenant, sessionId));
+  }
+
+  // Selbstzahler-Artikel kosten ihren Angebotspreis, Kassenartikel ohne Rezept
+  // unseren Selbstzahlerpreis, Kassenartikel mit Rezept beim Checkout nichts.
+  private async betragBeimCheckoutCents(tenant: TenantContext, sessionId: string): Promise<number> {
+    const rows = await this.positions.listForSession(tenant, sessionId);
+    let summe = 0;
+    for (const position of rows) {
+      summe += selbstGezahltCents(await this.catalog.getProduct(tenant, position.productId), position.withoutPrescription);
+    }
+    return summe;
   }
 
   // Called only by StripeWebhookController on a payment_intent.payment_failed
@@ -142,41 +176,55 @@ export class OnboardingService {
     }
 
     let augmentedEvent = event;
-    if (event.type === 'KRANKENKASSE_OCR_ABGESCHLOSSEN' || event.type === 'KRANKENKASSE_UEBERSPRUNGEN') {
+    let uebernommenerGrantId: string | null = null;
+    if (event.type === 'EINWILLIGUNG_UEBERNOMMEN') {
+      // Der Client behauptet nur — maßgeblich ist der Grant: per Token (auch
+      // für Gäste) oder, bei einer bereits zugeordneten Session, per Kunde.
+      const grant = event.einwilligungsToken
+        ? await this.consentGrants.findActiveByTokenHash(tenant, sha256(event.einwilligungsToken))
+        : row.customerId
+          ? await this.consentGrants.findLatestActiveForCustomer(tenant, row.customerId)
+          : null;
+      if (!grant) {
+        throw new BadRequestException('Keine gültige Einwilligung zum Übernehmen vorhanden');
+      }
+      if (!einwilligungAktuell(grant)) {
+        throw new BadRequestException('Die Rechtstexte haben sich geändert — bitte stimme erneut zu');
+      }
+      uebernommenerGrantId = grant.id;
+      augmentedEvent = { ...event, agbVersion: grant.agbVersion, datenschutzVersion: grant.datenschutzVersion };
+    } else if (event.type === 'KRANKENKASSE_OCR_ABGESCHLOSSEN' || event.type === 'KRANKENKASSE_UEBERSPRUNGEN') {
       // Available products are computed server-side (CatalogService), never
       // trusted from the client's event payload — the client's own value is
-      // discarded here regardless of what it sent.
-      const products = await this.catalog.listProducts(tenant);
+      // discarded here regardless of what it sent. Nur Kassenprodukte: auf dem
+      // Rezept-Weg wählt man eine Versorgung, kein Zubehör/Selbstzahler-Artikel.
+      const products = await this.catalog.listProducts(tenant, { nurHilfsmittel: true });
       const produkte = products.map(toProdukt);
       augmentedEvent = { ...event, produkte };
-    } else if (event.type === 'KATALOG_PRODUKT_VORGEMERKT') {
-      // Never trust the client's branch choice: a self-pay product (no
-      // Hilfsmittelnummer) has no business entering the Rezept/Krankenkasse
-      // insurance chain this event routes into.
-      const product = await this.catalog.assertProductExists(tenant, event.produktId);
-      if (!product.hilfsmittelnummer) {
-        throw new BadRequestException('Dieses Produkt hat keine Hilfsmittelnummer und kann nicht vorgemerkt werden');
+    } else if (event.type === 'WARENKORB_UEBERNOMMEN') {
+      // Die Produkte kommen ausschließlich aus dem Katalog — der Client
+      // schickt nur IDs. Ob ein Artikel ein Rezept braucht, entscheidet allein
+      // die Hilfsmittelnummer des Katalogprodukts.
+      const produkte = [];
+      for (const artikel of event.artikel) {
+        if (artikel.krankheitsbildId && !findeKrankheitsbild(artikel.krankheitsbildId)) {
+          throw new BadRequestException('Unbekanntes Krankheitsbild');
+        }
+        const product = await this.catalog.getProduct(tenant, artikel.produktId);
+        // Die App deaktiviert die CTA bei „Derzeit nicht bestellbar“ — der
+        // Server erzwingt es trotzdem.
+        if (!istVerfuegbar(product)) {
+          throw new BadRequestException(`„${product.name}“ ist derzeit nicht bestellbar`);
+        }
+        produkte.push(toProdukt(product));
       }
-    } else if (event.type === 'KATALOG_PRODUKT_SELBSTZAHLER_GEWAEHLT') {
+      augmentedEvent = { ...event, produkte };
+    } else if (event.type === 'SUPPLY_AUSGEWAEHLT') {
+      // Never trust the client's product data: the FSM guard branches on
+      // hilfsmittelNr, so the catalog's own product is what it must see.
       const product = await this.catalog.getProduct(tenant, event.produkt.id);
-      if (product.hilfsmittelnummer) {
-        throw new BadRequestException('Dieses Produkt hat eine Hilfsmittelnummer und ist kein Selbstzahler-Artikel');
-      }
-      augmentedEvent = { ...event, produkt: toProdukt(product) };
-    } else if (event.type === 'KRANKHEITSBILD_AUSGEWAEHLT') {
-      // Recommendations are always computed server-side from the
-      // Krankheitsbild id — never trusted from the client's own event payload.
-      const products = await this.catalog.listProductsForKrankheitsbild(tenant, event.krankheitsbildId);
-      augmentedEvent = { ...event, produkte: products.map(toProdukt) };
-    } else if (event.type === 'KRANKHEITSBILD_PRODUKT_VORGEMERKT') {
-      const product = await this.catalog.assertProductExists(tenant, event.produktId);
-      if (!product.hilfsmittelnummer) {
-        throw new BadRequestException('Dieses Produkt hat keine Hilfsmittelnummer und kann nicht vorgemerkt werden');
-      }
-    } else if (event.type === 'KRANKHEITSBILD_PRODUKT_SELBSTZAHLER_GEWAEHLT') {
-      const product = await this.catalog.getProduct(tenant, event.produkt.id);
-      if (product.hilfsmittelnummer) {
-        throw new BadRequestException('Dieses Produkt hat eine Hilfsmittelnummer und ist kein Selbstzahler-Artikel');
+      if (!istVerfuegbar(product)) {
+        throw new BadRequestException('Dieses Produkt ist derzeit nicht bestellbar');
       }
       augmentedEvent = { ...event, produkt: toProdukt(product) };
     }
@@ -187,82 +235,117 @@ export class OnboardingService {
     }
     recordOnboardingTransition(event.type);
 
-    await this.applySideEffects(tenant, row, augmentedEvent, extra.ipAddress);
+    await this.applySideEffects(tenant, row, augmentedEvent, extra.ipAddress, uebernommenerGrantId);
     await this.sessions.update(tenant, row.id, { status: result.session.status });
+
+    // Erste vollständige Zustimmung dieser Session → dauerhafter Grant. Der
+    // Token wird genau einmal zurückgegeben (die App legt ihn in SecureStore
+    // ab); gespeichert wird nur sein Hash.
+    let einwilligungsToken: string | undefined;
+    if (
+      (event.type === 'AGB_AKZEPTIERT' || event.type === 'DATENSCHUTZ_AKZEPTIERT') &&
+      consentErteilt(result.session) &&
+      einwilligungAktuell({
+        agbVersion: result.session.consent.agb.version,
+        datenschutzVersion: result.session.consent.datenschutz.version,
+      }) &&
+      !(await this.consentGrants.existsForSession(tenant, row.id))
+    ) {
+      einwilligungsToken = randomBytes(32).toString('base64url');
+      await this.consentGrants.create(tenant, {
+        tokenHash: sha256(einwilligungsToken),
+        onboardingSessionId: row.id,
+        customerId: row.customerId,
+        agbVersion: result.session.consent.agb.version,
+        datenschutzVersion: result.session.consent.datenschutz.version,
+      });
+    }
 
     if (event.type === 'KONTAKT_ERFASST') {
       const sendResult = await this.verification.sendCode(event.telefon, VERIFICATION_PURPOSE);
       return { session: await this.hydrate(tenant, await this.getRowOrThrow(tenant, sessionId)), devCode: sendResult.devCode };
     }
 
-    return { session: await this.hydrate(tenant, await this.getRowOrThrow(tenant, sessionId)) };
+    return { session: await this.hydrate(tenant, await this.getRowOrThrow(tenant, sessionId)), einwilligungsToken };
   }
 
-  // POST .../complete — der Kunde reicht eine Versorgung ein, für die beim
-  // Checkout keine Zahlung fällig ist (jede Rezept-Versorgung, kostenlose
-  // Selbstzahler-Artikel). Ein zahlungspflichtiger Selbstzahler-Kauf scheitert
-  // hier am FSM-Guard: den kann nur der verifizierte Stripe-Webhook abschließen.
+  // POST .../complete — der Kunde reicht eine Bestellung ein, für die beim
+  // Checkout keine Zahlung fällig ist (nur Kassenartikel, kostenlose
+  // Selbstzahler-Artikel). Eine Bestellung mit zahlungspflichtigem Anteil
+  // scheitert hier am FSM-Guard: die kann nur der verifizierte Stripe-Webhook
+  // abschließen.
   einreichen(tenant: TenantContext, sessionId: string) {
     return withSpan('OnboardingService.einreichen', () => this.abschliessen(tenant, sessionId, 'AUFTRAG_EINGEREICHT'));
   }
 
   // Nur von StripeWebhookController nach einem signaturgeprüften
-  // payment_intent.succeeded aufgerufen.
-  abschliessenNachZahlung(tenant: TenantContext, sessionId: string) {
-    return withSpan('OnboardingService.abschliessenNachZahlung', () => this.abschliessen(tenant, sessionId, 'ZAHLUNG_ERFOLGREICH'));
+  // payment_intent.succeeded aufgerufen. bezahltCents ist der Betrag der
+  // Zahlung — weicht er vom aktuellen Warenkorb ab (der Kunde hat nach dem
+  // Anlegen der Zahlung noch etwas geändert), wird nicht abgeschlossen. Nur
+  // der Dev-Zahlungssimulator (ohne echte Zahlung) lässt ihn weg.
+  abschliessenNachZahlung(tenant: TenantContext, sessionId: string, bezahltCents?: number) {
+    return withSpan('OnboardingService.abschliessenNachZahlung', async () => {
+      const erwartet = await this.betragBeimCheckoutCents(tenant, sessionId);
+      if (bezahltCents !== undefined && erwartet !== bezahltCents) {
+        throw new BadRequestException(`Bezahlter Betrag (${bezahltCents}) passt nicht zur Bestellung (${erwartet})`);
+      }
+      return this.abschliessen(tenant, sessionId, 'ZAHLUNG_ERFOLGREICH');
+    });
   }
 
+  // Legt je Position eine eigene Versorgung an — jede durchläuft ihre eigene
+  // Genehmigung/Lieferung. Liefert die ID der ersten (für Zahlung/Session).
   private async abschliessen(tenant: TenantContext, sessionId: string, eventType: 'AUFTRAG_EINGEREICHT' | 'ZAHLUNG_ERFOLGREICH') {
     const row = await this.getRowOrThrow(tenant, sessionId);
     const domainSession = await this.hydrate(tenant, row);
 
-    // Defense in depth: re-validate independently of whatever the client did
-    // on the way here, against the persisted session server-side.
-    if (!istAbschlussfaehig(domainSession) || !telefonVerifiziert(domainSession)) {
-      throw new BadRequestException('Onboarding-Session ist nicht vollständig für den Abschluss');
-    }
-    if (!row.selectedProductId) {
-      throw new BadRequestException('Kein Produkt ausgewählt');
-    }
-    // Enforces the actual CHECKOUT->ABGESCHLOSSEN FSM edge (status + the
-    // payment/no-payment guard) *before* any Supply is created — a rejected
-    // completion must never leave an orphaned Supply/Order behind.
+    // Enforces the actual CHECKOUT->ABGESCHLOSSEN FSM edge (status, Rezepte,
+    // Termin, Telefon, Zahlung ja/nein) *before* any Supply is created — a
+    // rejected completion must never leave an orphaned Supply/Order behind.
     const result = transition(domainSession, { type: eventType });
     if (!result.ok) {
       throw new BadRequestException(result.reason);
     }
 
-    const product = await this.catalog.getProduct(tenant, row.selectedProductId);
-    const primaryOffer = product.offers[0];
-
-    const { supplyId } = await this.supplyOrder.createFromOnboarding(
-      tenant,
-      {
-        onboardingSessionId: row.id,
-        customerId: row.customerId,
-        productId: row.selectedProductId,
-        supplierProductId: row.selectedSupplierProductId,
-        ocrResultId: row.ocrResultId,
-        productNameSnapshot: product.name,
-        manufacturerNameSnapshot: product.manufacturerName,
-        hilfsmittelNrSnapshot: product.hilfsmittelnummer,
-        doctorNameSnapshot: domainSession.ocrResult?.arzt.name ?? '',
-        insurerNameSnapshot: domainSession.ocrResult?.krankenkasse.name ?? '',
-        customerCopaySnapshotCents: primaryOffer?.customerCopayCents ?? 0,
-        deliveryTimeLabelSnapshot: primaryOffer ? `${primaryOffer.deliveryTimeDays} Werktage` : 'unbekannt',
-        deliveryAddressId: null,
-      },
-      { type: 'customer', id: row.customerId },
-    );
-
+    const rows = await this.positions.listForSession(tenant, row.id);
+    const supplyIds: string[] = [];
+    for (const position of rows) {
+      const product = await this.catalog.getProduct(tenant, position.productId);
+      const primaryOffer = product.offers[0];
+      // Ohne Rezept gekauft = Selbstzahler-Versorgung: keine HiMi-Nr., kein
+      // Rezept, keine Krankenkasse — und der bezahlte Preis als Eigenanteil.
+      const eingereicht = !!product.hilfsmittelnummer && !position.withoutPrescription;
+      const rezept = domainSession.positionen.find((p) => p.produkt.id === position.productId)?.rezept ?? null;
+      const { supplyId } = await this.supplyOrder.createFromOnboarding(
+        tenant,
+        {
+          onboardingSessionId: row.id,
+          customerId: row.customerId,
+          productId: position.productId,
+          supplierProductId: position.supplierProductId,
+          ocrResultId: eingereicht ? position.ocrResultId : null,
+          productNameSnapshot: product.name,
+          manufacturerNameSnapshot: product.manufacturerName,
+          hilfsmittelNrSnapshot: eingereicht ? product.hilfsmittelnummer : null,
+          doctorNameSnapshot: eingereicht ? (rezept?.arzt.name ?? '') : '',
+          insurerNameSnapshot: eingereicht ? (rezept?.krankenkasse.name ?? '') : '',
+          customerCopaySnapshotCents: eingereicht ? (primaryOffer?.customerCopayCents ?? 0) : selbstGezahltCents(product, position.withoutPrescription),
+          deliveryTimeLabelSnapshot: primaryOffer ? `${primaryOffer.deliveryTimeDays} Werktage` : 'unbekannt',
+          deliveryAddressId: null,
+        },
+        { type: 'customer', id: row.customerId },
+      );
+      supplyIds.push(supplyId);
+    }
 
     await this.sessions.update(tenant, row.id, {
       status: result.session.status,
-      supplyId,
+      supplyId: supplyIds[0],
+      bindingConfirmation: true,
       completedAt: new Date(),
     });
 
-    return { supplyId };
+    return { supplyId: supplyIds[0], supplyIds };
   }
 
   private async getRowOrThrow(tenant: TenantContext, sessionId: string): Promise<OnboardingSessionRow> {
@@ -278,8 +361,15 @@ export class OnboardingService {
     row: OnboardingSessionRow,
     event: OnboardingEvent,
     ipAddress: string | null,
+    uebernommenerGrantId: string | null,
   ): Promise<void> {
     switch (event.type) {
+      case 'EINWILLIGUNG_UEBERNOMMEN':
+        // Neue consents-Zeilen für diese Session mit eigener IP und Verweis auf
+        // den Grant — nachvollziehbar übernommen, nie eine erfundene Zustimmung.
+        await this.consents.record(tenant, row.id, 'agb', event.agbVersion, ipAddress, uebernommenerGrantId);
+        await this.consents.record(tenant, row.id, 'datenschutz', event.datenschutzVersion, ipAddress, uebernommenerGrantId);
+        return;
       case 'AGB_AKZEPTIERT':
         await this.consents.record(tenant, row.id, 'agb', event.version, ipAddress);
         return;
@@ -357,58 +447,69 @@ export class OnboardingService {
         });
         return;
       case 'SUPPLY_AUSGEWAEHLT': {
-        // Full product (with offers), not just assertProductExists's raw-row
-        // check — needed to persist selectedSupplierProductId, the column
-        // proposeAppointmentSlots and abschliessen() both read as the single
-        // source of truth for "which supplier is fulfilling this order."
+        // Rezept-zuerst: das eben erfasste Rezept (Scan-Zwischenstand der
+        // Session) gehört ab jetzt der Position. supplierProductId ist die
+        // einzige Quelle für „welcher Lieferant liefert diese Position“.
+        const bestehende = await this.positions.listForSession(tenant, row.id);
+        const vorhanden = bestehende.find((p) => p.productId === event.produkt.id);
         const product = await this.catalog.getProduct(tenant, event.produkt.id);
+        await this.positions.upsert(tenant, row.id, event.produkt.id, {
+          supplierProductId: product.offers[0]?.id ?? null,
+          ocrResultId: row.ocrResultId,
+          sortOrder: vorhanden?.sortOrder ?? bestehende.length,
+        });
+        await this.sessions.update(tenant, row.id, { ocrResultId: null });
+        return;
+      }
+      case 'WARENKORB_UEBERNOMMEN': {
+        // Abgleich: fehlende Positionen fallen weg, bestehende behalten ihr
+        // Rezept (ocrResultId bleibt unangetastet), neue kommen hinzu.
+        const bestehende = await this.positions.listForSession(tenant, row.id);
+        await this.positions.deleteAllExcept(tenant, row.id, event.produkte.map((p) => p.id));
+        for (const [index, artikel] of event.artikel.entries()) {
+          const product = await this.catalog.getProduct(tenant, artikel.produktId);
+          const vorhanden = bestehende.find((p) => p.productId === artikel.produktId);
+          await this.positions.upsert(tenant, row.id, artikel.produktId, {
+            supplierProductId: product.offers[0]?.id ?? null,
+            krankheitsbildId: artikel.krankheitsbildId ?? vorhanden?.krankheitsbildId ?? null,
+            sortOrder: index,
+          });
+        }
+        return;
+      }
+      case 'REZEPT_FUER_POSITION':
+        await this.sessions.update(tenant, row.id, { activePositionProductId: event.produktId, ocrResultId: null });
+        return;
+      case 'REZEPT_HINZUFUEGEN':
+      case 'ZURUECK_CHECKOUT':
+        await this.sessions.update(tenant, row.id, { activePositionProductId: null, ocrResultId: null });
+        return;
+      case 'REZEPT_BEARBEITEN': {
+        // Bearbeiten statt neu scannen: der Scan-Zwischenstand zeigt direkt
+        // auf das Rezept der Position, Korrekturen landen dort.
+        const position = (await this.positions.listForSession(tenant, row.id)).find((p) => p.productId === event.produktId);
         await this.sessions.update(tenant, row.id, {
-          selectedProductId: event.produkt.id,
-          selectedSupplierProductId: product.offers[0]?.id ?? null,
+          activePositionProductId: event.produktId,
+          ocrResultId: position?.ocrResultId ?? null,
         });
         return;
       }
-      case 'KATALOG_PRODUKT_VORGEMERKT':
-        await this.sessions.update(tenant, row.id, { preselectedProductId: event.produktId });
+      case 'POSITION_OHNE_REZEPT':
+        await this.positions.update(tenant, row.id, event.produktId, { withoutPrescription: event.ohneRezept });
         return;
-      case 'KATALOG_PRODUKT_SELBSTZAHLER_GEWAEHLT': {
-        const product = await this.catalog.getProduct(tenant, event.produkt.id);
-        await this.sessions.update(tenant, row.id, {
-          entryPath: 'KATALOG_SELBSTZAHLER',
-          selectedProductId: event.produkt.id,
-          selectedSupplierProductId: product.offers[0]?.id ?? null,
-        });
+      case 'REZEPT_ZUGEORDNET':
+        if (!row.activePositionProductId) return;
+        await this.positions.update(tenant, row.id, row.activePositionProductId, { ocrResultId: row.ocrResultId, withoutPrescription: false });
+        await this.sessions.update(tenant, row.id, { activePositionProductId: null, ocrResultId: null });
         return;
-      }
-      case 'KRANKHEITSBILD_AUSGEWAEHLT':
-        // availableProductIds must be persisted here too — the response is
-        // re-hydrated from this row, so without it the Empfehlung screen
-        // would always see an empty verfügbareProdukte list.
-        await this.sessions.update(tenant, row.id, {
-          selectedKrankheitsbildId: event.krankheitsbildId,
-          availableProductIds: event.produkte.map((p) => p.id),
-        });
+      case 'TERMIN_WAEHLEN':
+        await this.sessions.update(tenant, row.id, { appointmentSlotsJson: [] });
         return;
-      case 'KRANKHEITSBILD_PRODUKT_VORGEMERKT':
-        await this.sessions.update(tenant, row.id, { preselectedProductId: event.produktId });
-        return;
-      case 'KRANKHEITSBILD_PRODUKT_SELBSTZAHLER_GEWAEHLT': {
-        const product = await this.catalog.getProduct(tenant, event.produkt.id);
-        await this.sessions.update(tenant, row.id, {
-          entryPath: 'KRANKHEITSBILD_SELBSTZAHLER',
-          selectedProductId: event.produkt.id,
-          selectedSupplierProductId: product.offers[0]?.id ?? null,
-        });
-        return;
-      }
       case 'TERMIN_VORSCHLAEGE_BERECHNET':
         await this.sessions.update(tenant, row.id, { appointmentSlotsJson: event.vorschläge });
         return;
       case 'TERMIN_AUSGEWAEHLT':
         await this.sessions.update(tenant, row.id, { selectedAppointmentJson: event.termin });
-        return;
-      case 'AUFTRAG_BESTAETIGT':
-        await this.sessions.update(tenant, row.id, { bindingConfirmation: true });
         return;
       case 'KONTAKT_ERFASST':
         await this.sessions.update(tenant, row.id, { contactEmail: event.email, contactPhone: event.telefon });
@@ -422,20 +523,24 @@ export class OnboardingService {
   }
 
   private async hydrate(tenant: TenantContext, row: OnboardingSessionRow): Promise<OnboardingSession> {
-    const [agb, datenschutz] = await Promise.all([
+    const [agb, datenschutz, policy, positionRows] = await Promise.all([
       this.consents.findLatest(tenant, row.id, 'agb'),
       this.consents.findLatest(tenant, row.id, 'datenschutz'),
+      this.insurancePolicies.findBySubject(tenant, 'onboarding_session', row.id),
+      this.positions.listForSession(tenant, row.id),
     ]);
     const ocrRow = row.ocrResultId ? await this.ocrResults.findById(tenant, row.ocrResultId) : null;
-    const policy = ocrRow ? await this.insurancePolicies.findBySubject(tenant, 'onboarding_session', row.id) : null;
 
     const availableProductIds = Array.isArray(row.availableProductIds) ? (row.availableProductIds as string[]) : [];
     const verfügbareProdukte = await Promise.all(
       availableProductIds.map(async (id) => toProdukt(await this.catalog.getProduct(tenant, id))),
     );
-    const selectedSupply = row.selectedProductId ? toProdukt(await this.catalog.getProduct(tenant, row.selectedProductId)) : null;
+    const positionen = await Promise.all(positionRows.map((p) => this.hydratePosition(tenant, p, policy)));
 
     const ocrResult: OcrResult | null = ocrRow ? toOcrResult(ocrRow, policy) : null;
+    const krankenkasse: OcrKrankenkasse | null = policy
+      ? { name: policy.insurerName, ik: policy.insurerIk ?? undefined, versichertenNr: policy.insuredNumber }
+      : null;
 
     return {
       id: row.id,
@@ -462,14 +567,12 @@ export class OnboardingService {
       ocrResult,
       ocrConfidence: ocrRow ? toOcrConfidence(ocrRow.confidence) : null,
       ocrBearbeitet: ocrRow?.rawEdited ?? false,
+      krankenkasse,
       verfügbareProdukte,
-      selectedSupply,
-      vorausgewaehltesProduktId: row.preselectedProductId ?? null,
-      ausgewaehltesKrankheitsbildId: row.selectedKrankheitsbildId ?? null,
-      eintrittspfad: (row.entryPath as OnboardingSession['eintrittspfad']) ?? 'REZEPT',
+      positionen,
+      aktivePositionId: row.activePositionProductId ?? null,
       terminVorschläge: Array.isArray(row.appointmentSlotsJson) ? (row.appointmentSlotsJson as OnboardingSession['terminVorschläge']) : [],
       selectedAppointment: (row.selectedAppointmentJson as OnboardingSession['selectedAppointment']) ?? null,
-      verbindlicheBestätigung: row.bindingConfirmation,
       customerContact: {
         email: row.contactEmail,
         telefon: row.contactPhone,
@@ -478,6 +581,36 @@ export class OnboardingService {
       versorgungId: row.supplyId,
     };
   }
+
+  private async hydratePosition(
+    tenant: TenantContext,
+    row: { productId: string; ocrResultId: string | null; krankheitsbildId: string | null; withoutPrescription: boolean },
+    policy: InsurancePolicy | null,
+  ): Promise<WarenkorbPosition> {
+    const produkt = toProdukt(await this.catalog.getProduct(tenant, row.productId));
+    const ocrRow = istKassenartikel(produkt) && row.ocrResultId ? await this.ocrResults.findById(tenant, row.ocrResultId) : null;
+    return {
+      produkt,
+      rezept: ocrRow ? toOcrResult(ocrRow, policy) : null,
+      rezeptConfidence: ocrRow ? toOcrConfidence(ocrRow.confidence) : null,
+      ohneRezept: istKassenartikel(produkt) && row.withoutPrescription,
+      krankheitsbildId: row.krankheitsbildId,
+    };
+  }
+}
+
+// Was der Kunde für ein Produkt beim Checkout selbst zahlt (Cent), aus dem Katalog-Angebot.
+function selbstGezahltCents(
+  product: { hilfsmittelnummer: string | null; offers: { customerCopayCents: number; selfPayPriceCents?: number | null }[] },
+  ohneRezept: boolean,
+): number {
+  const angebot = product.offers[0];
+  if (!product.hilfsmittelnummer) return angebot?.customerCopayCents ?? 0;
+  return ohneRezept ? (angebot?.selfPayPriceCents ?? 0) : 0;
+}
+
+function sha256(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
 }
 
 function ocrPatchToDbPatch(patch: Partial<OcrResult>): Partial<NewOcrResultRow> {

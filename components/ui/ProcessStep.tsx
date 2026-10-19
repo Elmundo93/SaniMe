@@ -6,8 +6,8 @@ import Animated, {
   useAnimatedStyle,
   withRepeat,
   withSpring,
-  FadeInDown,
 } from 'react-native-reanimated';
+import { einblenden } from '../../lib/einblenden';
 import { D } from '@sanime/design-system';
 
 export type StepStatus = 'done' | 'active' | 'pending';
@@ -46,7 +46,7 @@ export function ProcessStep({ label, status, isLast = false, index, datum }: Pro
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(index * 80).springify().damping(18)}
+      entering={einblenden(index * 80)}
       style={styles.row}
     >
       {/* Punkt-Spalte */}

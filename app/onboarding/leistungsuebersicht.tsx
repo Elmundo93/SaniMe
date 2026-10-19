@@ -7,9 +7,9 @@ import Animated, {
   withDelay,
   withRepeat,
   withSpring,
-  FadeInDown,
   FadeIn,
 } from 'react-native-reanimated';
+import { einblenden } from '../../lib/einblenden';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { D } from '@sanime/design-system';
@@ -38,7 +38,7 @@ function ProzessVisual() {
       {PROZESS_SCHRITTE.map((schritt, i) => (
         <Animated.View
           key={schritt.label}
-          entering={FadeInDown.delay(150 + i * 100).springify().damping(18)}
+          entering={einblenden(150 + i * 100)}
           style={styles.prozessRow}
         >
           <View style={styles.prozessIcon}>
@@ -107,10 +107,10 @@ export default function LeistungsuebersichtScreen() {
       setSubstep((s) => (s + 1) as 0 | 1 | 2);
       return;
     }
-    // Eine Katalog-/Krankheitsbild-Produktwahl, die vor Einwilligung getroffen
-    // wurde (siehe useProduktAuswahlDispatch), wird hier statt eines plain
+    // Ein „Zur Kasse“ aus dem Warenkorb, das vor der Einwilligung kam (siehe
+    // prozessStarten() im onboardingStore), wird hier statt eines plain
     // WEITER nachgeholt — Ziel-Status variiert dann (REZEPT_AUFNAHME oder
-    // TERMINPLANUNG), deshalb STATUS_META statt fest verdrahtetem '/scan/rezept'.
+    // CHECKOUT), deshalb STATUS_META statt fest verdrahtetem '/scan/rezept'.
     const pending = useOnboardingStore.getState().pendingEinstiegEvent;
     const result = await dispatch(pending ?? { type: 'WEITER' });
     if (result.ok) {
@@ -146,7 +146,7 @@ export default function LeistungsuebersichtScreen() {
               <View style={styles.visualArea}>
                 <ProzessVisual />
               </View>
-              <Animated.View entering={FadeInDown.delay(700).springify().damping(18)} style={styles.textBlock}>
+              <Animated.View entering={einblenden(700)} style={styles.textBlock}>
                 <Text style={styles.headline}>So läuft{'\n'}deine Versorgung.</Text>
                 <Text style={styles.sub}>Fünf Schritte, kein Papierkram — wir begleiten dich durch den ganzen Prozess.</Text>
               </Animated.View>
@@ -158,7 +158,7 @@ export default function LeistungsuebersichtScreen() {
               <View style={styles.visualArea}>
                 <SuccessRing />
               </View>
-              <Animated.View entering={FadeInDown.delay(500).springify().damping(18)} style={styles.textBlock}>
+              <Animated.View entering={einblenden(500)} style={styles.textBlock}>
                 <Text style={styles.headline}>Wir kümmern{'\n'}uns.</Text>
                 <Text style={styles.sub}>Krankenkasse, Unterlagen, Genehmigung — vollautomatisch. Du wirst benachrichtigt, sobald es Neuigkeiten gibt.</Text>
               </Animated.View>
@@ -167,12 +167,12 @@ export default function LeistungsuebersichtScreen() {
 
           {substep === 2 && (
             <Animated.View key="substep-2" entering={FadeIn.duration(300)} style={styles.substep}>
-              <Animated.View entering={FadeInDown.delay(60).springify().damping(18)} style={styles.textBlock}>
+              <Animated.View entering={einblenden(60)} style={styles.textBlock}>
                 <Text style={styles.headline}>Fast geschafft.</Text>
                 <Text style={styles.sub}>Bevor es losgeht, brauchen wir deine Einwilligung.</Text>
               </Animated.View>
 
-              <Animated.View entering={FadeInDown.delay(160).springify().damping(18)} style={styles.consentBlock}>
+              <Animated.View entering={einblenden(160)} style={styles.consentBlock}>
                 <Checkbox
                   dark
                   checked={agbAkzeptiert}

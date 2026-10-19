@@ -7,7 +7,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { einblenden } from '../../lib/einblenden';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { Screen } from '../../components/ui/Screen';
@@ -17,7 +18,8 @@ import { ProduktKarte } from '../../components/produkt/ProduktKarte';
 import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
-import { StepCounter } from '../../components/onboarding/StepCounter';
+import { ScanSchrittZaehler } from '../../components/onboarding/ScanSchrittZaehler';
+import { useWarenkorbStore } from '../../store/warenkorbStore';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '@sanime/design-system';
 
@@ -26,8 +28,10 @@ export default function VersorgungsauswahlScreen() {
   const { session, ready } = useOnboardingGuard('VERSORGUNGSAUSWAHL');
   const dispatch = useOnboardingStore((s) => s.dispatch);
 
+  // Liegt ein passender Kassenartikel schon im Warenkorb, ist er vorausgewählt.
+  const imWarenkorb = useWarenkorbStore((s) => s.artikel);
   const [ausgewähltId, setAusgewähltId] = useState<string | null>(
-    session?.vorausgewaehltesProduktId ?? null,
+    session?.verfügbareProdukte.find((p) => imWarenkorb.some((a) => a.produktId === p.id))?.id ?? null,
   );
   const [loading, setLoading] = useState(false);
 
@@ -53,6 +57,8 @@ export default function VersorgungsauswahlScreen() {
     const result = await dispatch({ type: 'SUPPLY_AUSGEWAEHLT', produkt: ausgewählt });
     setLoading(false);
     if (result.ok) {
+      // Die gewählte Versorgung gehört ab jetzt auch zum Warenkorb des Geräts.
+      await useWarenkorbStore.getState().hinzufuegen({ produktId: ausgewählt.id });
       router.push(STATUS_META[result.session.status].route as any);
     } else {
       zeigeDispatchFehler();
@@ -65,19 +71,12 @@ export default function VersorgungsauswahlScreen() {
         <ScreenHeader
           title="Versorgung wählen"
           onBack={handleZurück}
-          right={
-            <StepCounter
-              aktuellerSchritt={STATUS_META.VERSORGUNGSAUSWAHL.schritt}
-              gesamtSchritte={11}
-              variant="light"
-              label={`${STATUS_META.VERSORGUNGSAUSWAHL.schritt}/11`}
-            />
-          }
+          right={<ScanSchrittZaehler session={session} />}
         />
 
         <ScrollContainer contentContainerStyle={styles.scrollContent}>
           {/* Diagnose-Banner */}
-          <Animated.View entering={FadeInDown.delay(60).springify().damping(18)}>
+          <Animated.View entering={einblenden(60)}>
             <View style={styles.diagnoseBanner}>
               <LinearGradient
                 colors={['rgba(63,139,255,0.12)', 'rgba(63,139,255,0.05)']}
@@ -91,7 +90,7 @@ export default function VersorgungsauswahlScreen() {
             </View>
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(140).springify()}>
+          <Animated.View entering={einblenden(140)}>
             <Text style={styles.produkteAnzahl}>
               {produkte.length} passende Versorgung{produkte.length !== 1 ? 'en' : ''} gefunden
             </Text>
@@ -107,7 +106,7 @@ export default function VersorgungsauswahlScreen() {
             />
           ))}
 
-          <Animated.View entering={FadeInDown.delay(500).springify()}>
+          <Animated.View entering={einblenden(500)}>
             <View style={styles.hinweisBox}>
               <Feather name="info" size={16} color={D.color.accent} style={styles.hinweisIcon} />
               <Text style={styles.hinweisText}>
@@ -145,7 +144,7 @@ export default function VersorgungsauswahlScreen() {
               <ActivityIndicator color="#fff" size="small" />
             ) : (
               <Text style={[styles.buttonLabel, !ausgewählt && styles.buttonLabelDisabled]}>
-                {ausgewählt ? 'Versorgung starten' : 'Bitte Versorgung wählen'}
+                {ausgewählt ? 'Weiter zur Kasse' : 'Bitte Versorgung wählen'}
               </Text>
             )}
           </TouchableOpacity>

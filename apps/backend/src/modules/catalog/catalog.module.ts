@@ -4,12 +4,13 @@ import { CategoriesRepository } from './categories.repository';
 import { CatalogController } from './controllers/catalog.controller';
 import { CatalogService } from './catalog.service';
 import { ProductsRepository } from './products.repository';
+import { QaRepository } from './qa.repository';
 import { SuppliersRepository } from './suppliers.repository';
 
 @Module({
   imports: [AuthModule],
   controllers: [CatalogController],
-  providers: [CategoriesRepository, ProductsRepository, SuppliersRepository, CatalogService],
+  providers: [CategoriesRepository, ProductsRepository, QaRepository, SuppliersRepository, CatalogService],
   exports: [CatalogService],
 })
 export class CatalogModule {}

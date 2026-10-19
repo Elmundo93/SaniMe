@@ -29,6 +29,7 @@ function makeService(overrides: { stripe?: Partial<Stripe>; payments?: Partial<P
     paymentIntents: {
       create: jest.fn(),
       retrieve: jest.fn(),
+      cancel: jest.fn(),
     },
     webhooks: {
       constructEvent: jest.fn(),
@@ -78,6 +79,27 @@ describe('PaymentService', () => {
       expect(result).toEqual({ clientSecret: 'secret_existing', paymentIntentId: 'pi_existing', amountCents: 1000, currency: 'eur' });
       expect(stripe.paymentIntents.create).not.toHaveBeenCalled();
       expect(payments.create).not.toHaveBeenCalled();
+    });
+
+    it('storniert eine bestehende Zahlung mit veraltetem Betrag und legt eine neue an', async () => {
+      const existing = makePaymentRow({ id: 'pay-alt', stripePaymentIntentId: 'pi_alt', amountCents: 1000, status: 'requires_payment_method' });
+      const { service, stripe, payments } = makeService({ payments: { findReusableForSession: jest.fn().mockResolvedValue(existing) } });
+      (stripe.paymentIntents.create as jest.Mock).mockResolvedValue({ id: 'pi_neu', client_secret: 'secret_neu' });
+
+      const result = await service.createOrReuseIntent(DEFAULT_TENANT_CONTEXT, 'session-1', 2490);
+
+      expect(stripe.paymentIntents.cancel).toHaveBeenCalledWith('pi_alt');
+      expect(payments.setStatus).toHaveBeenCalledWith('pay-alt', 'canceled');
+      expect(result.amountCents).toBe(2490);
+      expect(stripe.paymentIntents.retrieve).not.toHaveBeenCalled();
+    });
+
+    it('lehnt einen neuen Betrag ab, solange die alte Zahlung noch verarbeitet wird', async () => {
+      const existing = makePaymentRow({ stripePaymentIntentId: 'pi_alt', amountCents: 1000, status: 'processing' });
+      const { service, stripe } = makeService({ payments: { findReusableForSession: jest.fn().mockResolvedValue(existing) } });
+
+      await expect(service.createOrReuseIntent(DEFAULT_TENANT_CONTEXT, 'session-1', 2490)).rejects.toBeInstanceOf(BadRequestException);
+      expect(stripe.paymentIntents.cancel).not.toHaveBeenCalled();
     });
 
     it('throws if Stripe returns no client_secret', async () => {

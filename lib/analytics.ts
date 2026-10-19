@@ -7,7 +7,9 @@ export type OnboardingAnalyticsEvent =
   | { name: 'screen_opened'; status: OnboardingStatus }
   | { name: 'ocr_success'; feld: 'rezept' | 'krankenkasse' }
   | { name: 'ocr_corrected' }
-  | { name: 'supply_chosen'; produktKategorie: string }
+  // Bewusst ohne Produkt/Kategorie: „Inkontinenzartikel gewählt“ wäre bereits
+  // eine Gesundheitsinferenz (Katalogplan §4.4).
+  | { name: 'supply_chosen' }
   | { name: 'appointment_chosen' }
   | { name: 'checkout_started' }
   | { name: 'checkout_completed' }

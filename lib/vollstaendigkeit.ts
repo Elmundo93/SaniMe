@@ -1,4 +1,4 @@
-import type { Benutzer } from '../types';
+import type { ProfilDaten } from '../types';
 
 export interface ProfilVollstaendigkeit {
   profil: number;
@@ -11,7 +11,7 @@ function zaehleLeere(werte: (string | undefined | null)[]): number {
   return werte.filter((w) => !w || w.trim() === '').length;
 }
 
-export function berechneProfilVollstaendigkeit(benutzer: Benutzer | null): ProfilVollstaendigkeit {
+export function berechneProfilVollstaendigkeit(benutzer: ProfilDaten | null): ProfilVollstaendigkeit {
   const profil = zaehleLeere([benutzer?.vorname, benutzer?.nachname, benutzer?.telefon, benutzer?.email]);
   const krankenkasse = zaehleLeere([benutzer?.krankenkasse, benutzer?.versichertenNr]);
   const lieferung = zaehleLeere([
@@ -20,4 +20,10 @@ export function berechneProfilVollstaendigkeit(benutzer: Benutzer | null): Profi
     benutzer?.lieferadresse?.ort,
   ]);
   return { profil, krankenkasse, lieferung, gesamt: profil + krankenkasse + lieferung };
+}
+
+/** Solange im Profil Angaben fehlen, steht „Profil vervollständigen“ in den
+ * Benachrichtigungen (Glocke) — auch für Gäste, die ihre Daten schon vorab eintragen können. */
+export function profilAufgabeOffen(profil: ProfilDaten | null): boolean {
+  return berechneProfilVollstaendigkeit(profil).gesamt > 0;
 }

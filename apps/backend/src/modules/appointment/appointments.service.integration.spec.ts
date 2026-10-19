@@ -11,6 +11,7 @@ import { CategoriesRepository } from '../catalog/categories.repository';
 import { CatalogService } from '../catalog/catalog.service';
 import { ProductsRepository } from '../catalog/products.repository';
 import { SuppliersRepository } from '../catalog/suppliers.repository';
+import { QaRepository } from '../catalog/qa.repository';
 import { OpenActionsRepository } from '../supply-order/open-actions.repository';
 import { OrderStatusEventsRepository } from '../supply-order/order-status-events.repository';
 import { OrdersRepository } from '../supply-order/orders.repository';
@@ -34,7 +35,7 @@ describe('AppointmentsService (integration)', () => {
   beforeAll(() => {
     pool = createPool(process.env.DATABASE_URL!);
     const db = createDatabase(pool);
-    const catalog = new CatalogService(new CategoriesRepository(db), new ProductsRepository(db), new SuppliersRepository(db));
+    const catalog = new CatalogService(new CategoriesRepository(db), new ProductsRepository(db), new SuppliersRepository(db), new QaRepository(db));
     const appointments = new AppointmentsRepository(db);
     const calendar = new SupplierCalendarService(catalog, appointments);
     onboardingSessions = new OnboardingSessionsRepository(db);

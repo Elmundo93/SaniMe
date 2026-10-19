@@ -8,6 +8,8 @@ type Dispatch = (event: ClientOnboardingEvent, code?: string) => Promise<Transit
 // dispatch()-Aufrufe (KONTAKT_ERFASST löst den Code-Versand serverseitig aus,
 // OTP_VERIFIZIERT prüft ihn) — app/scan/checkout.tsx darf danach nicht noch
 // einmal selbst dispatchen, sonst feuert ein Tap zwei PATCH-Requests.
+export type CodeSendenErgebnis = 'fehler' | 'gesendet' | 'verifiziert';
+
 export function useOtpVerification(dispatch: Dispatch, initialKontakt = '') {
   const [kontakt, setKontakt] = useState(initialKontakt);
   const [code, setCode] = useState('');
@@ -15,10 +17,10 @@ export function useOtpVerification(dispatch: Dispatch, initialKontakt = '') {
   const [fehler, setFehler] = useState('');
   const codeRef = useRef<TextInput>(null);
 
-  const codeSenden = async (empfänger: string, email: string | null): Promise<boolean> => {
+  const codeSenden = async (empfänger: string, email: string | null): Promise<CodeSendenErgebnis> => {
     if (!empfänger.trim()) {
       setFehler('Bitte Telefonnummer oder E-Mail eingeben.');
-      return false;
+      return 'fehler';
     }
     setFehler('');
     setLoading(true);
@@ -26,11 +28,31 @@ export function useOtpVerification(dispatch: Dispatch, initialKontakt = '') {
     setLoading(false);
     if (!result.ok) {
       setFehler(result.reason);
-      return false;
+      return 'fehler';
     }
     setKontakt(empfänger);
-    if (__DEV__ && result.devCode) setCode(result.devCode);
+    // Dev-Build: Es gibt noch keinen echten SMS-/Mail-Versand (der Backend-
+    // DevCodeVerificationProvider liefert den Code nur in der Antwort zurück),
+    // also das OTP-Gate direkt mit diesem Code durchlaufen. Geht trotzdem über
+    // den echten OTP_VERIFIZIERT-PATCH, damit der Server telefonVerifiziert setzt.
+    if (__DEV__ && result.devCode) {
+      setCode(result.devCode);
+      if (await verifiziere(result.devCode)) return 'verifiziert';
+      return 'gesendet';
+    }
     setTimeout(() => codeRef.current?.focus(), 300);
+    return 'gesendet';
+  };
+
+  const verifiziere = async (wert: string): Promise<boolean> => {
+    setFehler('');
+    setLoading(true);
+    const result = await dispatch({ type: 'OTP_VERIFIZIERT' }, wert);
+    setLoading(false);
+    if (!result.ok) {
+      setFehler(result.reason);
+      return false;
+    }
     return true;
   };
 
@@ -39,15 +61,7 @@ export function useOtpVerification(dispatch: Dispatch, initialKontakt = '') {
       setFehler('Bitte den 6-stelligen Code eingeben.');
       return false;
     }
-    setFehler('');
-    setLoading(true);
-    const result = await dispatch({ type: 'OTP_VERIFIZIERT' }, code);
-    setLoading(false);
-    if (!result.ok) {
-      setFehler(result.reason);
-      return false;
-    }
-    return true;
+    return verifiziere(code);
   };
 
   return { kontakt, setKontakt, code, setCode, loading, fehler, codeRef, codeSenden, codeVerifizieren };

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TextInput, StyleSheet, type KeyboardTypeOptions } from 'react-native';
+import { View, Text, TextInput, StyleSheet, type KeyboardTypeOptions, type TextInputProps } from 'react-native';
 import { D } from '@sanime/design-system';
 
 interface FormFieldProps {
@@ -12,6 +12,8 @@ interface FormFieldProps {
   editable?: boolean;
   placeholder?: string;
   accessibilityHint?: string;
+  autoComplete?: TextInputProps['autoComplete'];
+  autoCapitalize?: TextInputProps['autoCapitalize'];
 }
 
 // Generalisierte Texteingabe (Checkout E-Mail/Telefon etc.) — für OCR-Felder mit
@@ -26,6 +28,8 @@ export function FormField({
   editable = true,
   placeholder,
   accessibilityHint,
+  autoComplete,
+  autoCapitalize,
 }: FormFieldProps) {
   return (
     <View style={styles.feld}>
@@ -38,6 +42,9 @@ export function FormField({
         autoFocus={autoFocus}
         editable={editable}
         placeholder={placeholder}
+        autoComplete={autoComplete}
+        autoCapitalize={autoCapitalize}
+        autoCorrect={autoCapitalize === 'none' ? false : undefined}
         placeholderTextColor={D.color.inkTertiary}
         accessibilityLabel={label}
         accessibilityHint={accessibilityHint}

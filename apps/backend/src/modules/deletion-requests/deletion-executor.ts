@@ -1,7 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
 import { DRIZZLE, type Database } from '../../db/client';
-import { customerAddresses, customerProfiles, customers, documentVersions, documents, ocrResults, onboardingSessions } from '../../db/schema';
+import { and, eq, isNull } from 'drizzle-orm';
+import {
+  consentGrants,
+  customerAddresses,
+  customerProfiles,
+  customers,
+  documentVersions,
+  documents,
+  ocrResults,
+  onboardingSessions,
+} from '../../db/schema';
 import { STORAGE_PROVIDER, type StorageProvider } from '../document/ports/storage-provider.port';
 
 // Pseudonymize the identifying edge, retain the structural graph — a real
@@ -15,6 +24,9 @@ import { STORAGE_PROVIDER, type StorageProvider } from '../document/ports/storag
 //   onboarding_sessions           -> retained, contact fields nulled
 //   ocr_results, insurance_policies, supplies, orders, order_status_events,
 //   consents, audit_entries, access_logs -> retained unchanged
+//   consent_grants                -> retained (Nachweis), aber widerrufen —
+//                                    eine gelöschte Person übernimmt nie wieder
+//                                    automatisch eine Einwilligung
 //   documents/document_versions   -> storage object deleted, documents.deletedAt set
 @Injectable()
 export class DeletionExecutor {
@@ -25,6 +37,11 @@ export class DeletionExecutor {
 
   async execute(customerId: string): Promise<void> {
     await this.eraseDocuments(customerId);
+
+    await this.db
+      .update(consentGrants)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(consentGrants.customerId, customerId), isNull(consentGrants.revokedAt)));
 
     await this.db
       .update(onboardingSessions)

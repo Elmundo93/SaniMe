@@ -1,26 +1,24 @@
 import 'dotenv/config';
 import { sql } from 'drizzle-orm';
 import { createDatabase, createPool } from '../client';
-import { catalogCategories, manufacturers, products, supplierProducts, suppliers } from '../schema';
+import {
+  catalogCategories,
+  manufacturers,
+  productRelations,
+  products,
+  productVariants,
+  supplierProducts,
+  suppliers,
+} from '../schema';
 import { DEFAULT_ORGANIZATION_ID } from '../../common/repository/tenant-context';
+import { BEZIEHUNGEN, KATEGORIEN, MANUFACTURERS, PRODUKTE, SUPPLIER_ID, VARIANTEN } from './catalog.seed-data';
 
 // Placeholder catalog data for the pilot — per CLAUDE.md, never hardcode real
-// manufacturer/pricing/Hilfsmittelnummer data as if it were production.
-const CATEGORY_ID = '10000000-0000-0000-0000-000000000001';
-const SELBSTZAHLER_CATEGORY_ID = '10000000-0000-0000-0000-000000000002';
-const MANUFACTURER_IDS = {
-  mobiltech: '20000000-0000-0000-0000-000000000001',
-  aktivcare: '20000000-0000-0000-0000-000000000002',
-};
-const SUPPLIER_ID = '30000000-0000-0000-0000-000000000001';
-const PRODUCT_IDS = {
-  p1: '40000000-0000-0000-0000-000000000001',
-  p2: '40000000-0000-0000-0000-000000000002',
-};
-const SELBSTZAHLER_PRODUCT_IDS = {
-  p1: '40000000-0000-0000-0000-000000000003',
-};
-
+// manufacturer/pricing/Hilfsmittelnummer data as if it were production. Die
+// Daten selbst stehen in catalog.seed-data.ts (dort auch gegen @sanime/domain
+// getestet); hier nur das Schreiben. Durchgehend Upserts statt DoNothing: eine
+// vor dem Katalogausbau geseedete DB hat Kategorien/Produkte schon (gleiche
+// UUIDs), aber ohne Hierarchie, slug, Attribute — die müssen nachgezogen werden.
 async function main() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
@@ -28,112 +26,88 @@ async function main() {
   }
   const pool = createPool(databaseUrl);
   const db = createDatabase(pool);
+  const org = DEFAULT_ORGANIZATION_ID;
 
-  await db
-    .insert(catalogCategories)
-    .values([
-      // krankheitsbildId 'mobilitaet' matcht @sanime/domain's
-      // KRANKHEITSBILD_KATALOG — beide Kategorien werden für die
-      // Krankheitsbild-Empfehlung "Mobilität & Gehen" vorgeschlagen.
-      { id: CATEGORY_ID, organizationId: DEFAULT_ORGANIZATION_ID, name: 'Rollstuhl', krankheitsbildId: 'mobilitaet' },
-      {
-        id: SELBSTZAHLER_CATEGORY_ID,
-        organizationId: DEFAULT_ORGANIZATION_ID,
-        name: 'Selbstzahler-Hilfsmittel (Platzhalter)',
-        krankheitsbildId: 'mobilitaet',
-      },
-    ])
-    // Upsert statt DoNothing: eine vor dem Krankheitsbild-Feature geseedete
-    // DB hat die Kategorie schon, aber ohne krankheitsbild_id — ohne Update
-    // bliebe die Krankheitsbild-Empfehlung dort dauerhaft leer.
-    .onConflictDoUpdate({
-      target: catalogCategories.id,
-      set: { krankheitsbildId: sql`excluded.krankheitsbild_id` },
-    });
+  const idBySlug = new Map(KATEGORIEN.map((k) => [k.slug, k.id]));
+  // Hauptkategorien zuerst — Unterkategorien verweisen per parent_id auf sie.
+  const sortiert = [...KATEGORIEN].sort((a, b) => Number(a.parentSlug !== null) - Number(b.parentSlug !== null));
+  for (const [index, k] of sortiert.entries()) {
+    const values = {
+      id: k.id,
+      organizationId: org,
+      parentId: k.parentSlug ? idBySlug.get(k.parentSlug)! : null,
+      name: k.name,
+      slug: k.slug,
+      beschreibung: k.beschreibung ?? null,
+      icon: k.icon,
+      sortOrder: index,
+      isActive: k.isActive ?? true,
+      krankheitsbildId: k.krankheitsbildId ?? null,
+    };
+    await db.insert(catalogCategories).values(values).onConflictDoUpdate({ target: catalogCategories.id, set: values });
+  }
 
   await db
     .insert(manufacturers)
-    .values([
-      { id: MANUFACTURER_IDS.mobiltech, organizationId: DEFAULT_ORGANIZATION_ID, name: 'MobilTech (Platzhalter)' },
-      { id: MANUFACTURER_IDS.aktivcare, organizationId: DEFAULT_ORGANIZATION_ID, name: 'AktivCare (Platzhalter)' },
-    ])
+    .values(MANUFACTURERS.map((m) => ({ ...m, organizationId: org })))
     .onConflictDoNothing();
 
   await db
     .insert(suppliers)
-    .values({ id: SUPPLIER_ID, organizationId: DEFAULT_ORGANIZATION_ID, name: 'SaniMe-Pilotlieferant (Platzhalter)' })
+    .values({ id: SUPPLIER_ID, organizationId: org, name: 'SaniMe-Pilotlieferant (Platzhalter)' })
     .onConflictDoNothing();
 
-  await db
-    .insert(products)
-    .values([
-      {
-        id: PRODUCT_IDS.p1,
-        organizationId: DEFAULT_ORGANIZATION_ID,
-        categoryId: CATEGORY_ID,
-        manufacturerId: MANUFACTURER_IDS.mobiltech,
-        name: 'Rollstuhl Aktiv SB 40 — Basisversorgung (Platzhalter)',
-        hilfsmittelnummer: '00.00.00.0001',
-        description: 'Leichter Standardrollstuhl, faltbar, Sitzbreite 40 cm.',
-        features: ['Faltbar', 'Leichtgewicht 13 kg', 'Bremsgriffe', 'Fußrasten verstellbar'],
-        requiresApproval: true,
-      },
-      {
-        id: PRODUCT_IDS.p2,
-        organizationId: DEFAULT_ORGANIZATION_ID,
-        categoryId: CATEGORY_ID,
-        manufacturerId: MANUFACTURER_IDS.aktivcare,
-        name: 'Rollstuhl Komfort Plus SB 40 (Platzhalter)',
-        hilfsmittelnummer: '00.00.00.0012',
-        description: 'Komfortrollstuhl mit verbesserter Polsterung und einstellbarer Rückenlehne.',
-        features: ['Faltbar', 'Ergonomische Rückenlehne', 'Anti-Dekubituspolsterung'],
-        requiresApproval: true,
-      },
-      {
-        id: SELBSTZAHLER_PRODUCT_IDS.p1,
-        organizationId: DEFAULT_ORGANIZATION_ID,
-        categoryId: SELBSTZAHLER_CATEGORY_ID,
-        manufacturerId: MANUFACTURER_IDS.aktivcare,
-        name: 'Gehstock Basic (Platzhalter)',
-        // Kein hilfsmittelnummer: Selbstzahler-Artikel, keine
-        // Krankenkassen-Beteiligung — siehe istAbschlussfaehig in @sanime/domain.
-        hilfsmittelnummer: null,
-        description: 'Einfacher, höhenverstellbarer Gehstock ohne Rezeptpflicht.',
-        features: ['Höhenverstellbar', 'Rutschfester Griff'],
-        requiresApproval: false,
-      },
-    ])
-    .onConflictDoNothing();
+  for (const p of PRODUKTE) {
+    const values = {
+      id: p.id,
+      organizationId: org,
+      categoryId: idBySlug.get(p.kategorieSlug)!,
+      manufacturerId: p.herstellerId,
+      name: p.name,
+      // null = Selbstzahler-Artikel, keine Krankenkassen-Beteiligung — siehe
+      // istAbschlussfaehig in @sanime/domain.
+      hilfsmittelnummer: p.hilfsmittelnummer,
+      description: p.beschreibung,
+      kurzbeschreibung: p.kurzbeschreibung,
+      artikelnummer: p.artikelnummer,
+      features: p.merkmale,
+      attributes: p.attribute ?? {},
+      requiresApproval: p.requiresApproval,
+    };
+    await db.insert(products).values(values).onConflictDoUpdate({ target: products.id, set: values });
+
+    const angebot = {
+      organizationId: org,
+      supplierId: SUPPLIER_ID,
+      productId: p.id,
+      deliveryTimeDays: p.angebot.lieferzeitTage,
+      // Bei Selbstzahlern der volle Preis (kein Festbetrag-Split) — Platzhalter.
+      customerCopayCents: p.angebot.copayCents,
+      selfPayPriceCents: p.angebot.selbstzahlerPreisCents ?? null,
+      availability: p.angebot.availability ?? 'available',
+    };
+    await db
+      .insert(supplierProducts)
+      .values(angebot)
+      .onConflictDoUpdate({
+        target: [supplierProducts.supplierId, supplierProducts.productId],
+        set: {
+          deliveryTimeDays: sql`excluded.delivery_time_days`,
+          customerCopayCents: sql`excluded.customer_copay_cents`,
+          selfPayPriceCents: sql`excluded.self_pay_price_cents`,
+          availability: sql`excluded.availability`,
+        },
+      });
+  }
+
+  for (const v of VARIANTEN) {
+    const values = { id: v.id, organizationId: org, productId: v.productId, sku: v.sku, attributes: v.attribute };
+    await db.insert(productVariants).values(values).onConflictDoUpdate({ target: productVariants.id, set: values });
+  }
 
   await db
-    .insert(supplierProducts)
-    .values([
-      {
-        organizationId: DEFAULT_ORGANIZATION_ID,
-        supplierId: SUPPLIER_ID,
-        productId: PRODUCT_IDS.p1,
-        deliveryTimeDays: 3,
-        customerCopayCents: 1000,
-        availability: 'available',
-      },
-      {
-        organizationId: DEFAULT_ORGANIZATION_ID,
-        supplierId: SUPPLIER_ID,
-        productId: PRODUCT_IDS.p2,
-        deliveryTimeDays: 5,
-        customerCopayCents: 1000,
-        availability: 'available',
-      },
-      {
-        organizationId: DEFAULT_ORGANIZATION_ID,
-        supplierId: SUPPLIER_ID,
-        productId: SELBSTZAHLER_PRODUCT_IDS.p1,
-        deliveryTimeDays: 3,
-        // Full self-pay price (no statutory Festbetrag split) — Platzhalter.
-        customerCopayCents: 2490,
-        availability: 'available',
-      },
-    ])
+    .insert(productRelations)
+    .values(BEZIEHUNGEN.map((b) => ({ ...b, organizationId: org })))
     .onConflictDoNothing();
 
   await pool.end();

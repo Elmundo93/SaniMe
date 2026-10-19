@@ -1,98 +1,95 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { transition } from '@sanime/domain';
-import type { ClientOnboardingEvent, CustomerContact, OcrResult, OnboardingSession, OnboardingStatus, TransitionResult } from '@sanime/domain';
+import { AGB_VERSION, DATENSCHUTZ_VERSION, consentErteilt, transition } from '@sanime/domain';
+import type {
+  ClientOnboardingEvent,
+  CustomerContact,
+  OcrKrankenkasse,
+  OcrResult,
+  OnboardingSession,
+  OnboardingStatus,
+  TransitionResult,
+  WarenkorbPosition,
+} from '@sanime/domain';
 import { useAuthStore } from './authStore';
+import { useWarenkorbStore } from './warenkorbStore';
 import * as onboardingApi from '../lib/api/onboarding';
 import { trackOnboarding } from '../lib/analytics';
 import { getSecureJSON, setSecureJSON, deleteSecureItem } from '../lib/secureStorage';
+import { ApiError } from '../lib/api/client';
+import { ladeEinwilligungsToken, speichereEinwilligungsToken, vergesseEinwilligungsToken } from '../lib/einwilligung';
 
 const SESSION_KEY = 'sanime_onboarding_session';
 const SENSITIVE_KEY = 'sanime_onboarding_sensitive';
 
-// OCR-Ergebnis (Diagnose, Versichertennummer, Patientenname) und Kontaktdaten sind
-// die einzigen Session-Felder mit echten Gesundheits-/Versicherungsdaten — die landen
+// OCR-Ergebnis, Krankenkasse, Warenkorb-Positionen (Rezepte; schon die Produktliste
+// ist ein Gesundheitsdatum) und Kontaktdaten sind die Session-Felder mit echten
+// Gesundheits-/Versicherungsdaten — die landen
 // verschlüsselt im SecureStore, statt im Klartext-AsyncStorage wie der Rest der
 // (beliebig wachsenden) Maschinen-Session. Fotos bleiben als reine URI-Zeiger im
 // AsyncStorage-Teil; sie zeigen auf App-Sandbox-Dateien, nicht auf die Bilddaten selbst.
 interface SensitiveSessionData {
   ocrResult: OcrResult | null;
+  krankenkasse: OcrKrankenkasse | null;
+  positionen: WarenkorbPosition[];
   customerContact: CustomerContact;
 }
 
 export interface StatusMeta {
   route: string;
-  schritt: number;
 }
 
-// Einzige Stelle, an der Machine-Status auf konkrete Routen/Fortschrittsnummern gemappt wird.
+// Einzige Stelle, an der Machine-Status auf konkrete Routen gemappt wird.
 export const STATUS_META: Record<OnboardingStatus, StatusMeta> = {
-  WILLKOMMEN: { route: '/onboarding', schritt: 1 },
-  LEISTUNGSUEBERSICHT: { route: '/onboarding/leistungsuebersicht', schritt: 2 },
-  KRANKHEITSBILD_ERFASSUNG: { route: '/scan/krankheitsbild', schritt: 3 },
-  KRANKHEITSBILD_EMPFEHLUNG: { route: '/scan/krankheitsbild-empfehlung', schritt: 4 },
-  REZEPT_AUFNAHME: { route: '/scan/rezept', schritt: 3 },
-  REZEPT_PRUEFUNG: { route: '/scan/review', schritt: 4 },
-  KRANKENKASSE_AUFNAHME: { route: '/scan/krankenkasse', schritt: 5 },
-  DATENPRUEFUNG: { route: '/scan/datenpruefung', schritt: 6 },
-  VERSORGUNGSAUSWAHL: { route: '/scan/versorgungen', schritt: 7 },
-  TERMINPLANUNG: { route: '/scan/termin', schritt: 8 },
-  ZUSAMMENFASSUNG: { route: '/scan/zusammenfassung', schritt: 9 },
-  CHECKOUT: { route: '/scan/checkout', schritt: 10 },
-  CHECKOUT_FEHLGESCHLAGEN: { route: '/scan/checkout', schritt: 10 },
-  ABGESCHLOSSEN: { route: '/(app)/dashboard', schritt: 11 },
+  WILLKOMMEN: { route: '/onboarding' },
+  LEISTUNGSUEBERSICHT: { route: '/onboarding/leistungsuebersicht' },
+  REZEPT_AUFNAHME: { route: '/scan/rezept' },
+  REZEPT_PRUEFUNG: { route: '/scan/review' },
+  KRANKENKASSE_AUFNAHME: { route: '/scan/krankenkasse' },
+  DATENPRUEFUNG: { route: '/scan/datenpruefung' },
+  VERSORGUNGSAUSWAHL: { route: '/scan/versorgungen' },
+  TERMINPLANUNG: { route: '/scan/termin' },
+  CHECKOUT: { route: '/scan/checkout' },
+  CHECKOUT_FEHLGESCHLAGEN: { route: '/scan/checkout' },
+  ABGESCHLOSSEN: { route: '/dashboard' },
 };
 
-// STATUS_META.schritt ist eine globale 1-11-Nummerierung entlang der
-// klassischen Rezept-Kette — für TERMINPLANUNG/ZUSAMMENFASSUNG/CHECKOUT, die
-// von allen drei Eintrittspfaden gemeinsam genutzt werden, würde sie bei den
-// kürzeren Selbstzahler-Pfaden "Schritt 8 von 11" zeigen, obwohl deren Pfad
-// nur 6 bzw. 8 Schritte hat. schrittInfo() berechnet Position/Gesamtzahl
-// stattdessen aus der tatsächlichen Reihenfolge des jeweiligen eintrittspfad.
-const SCHRITT_REIHENFOLGE: Record<OnboardingSession['eintrittspfad'], OnboardingStatus[]> = {
-  REZEPT: [
-    'WILLKOMMEN', 'LEISTUNGSUEBERSICHT', 'REZEPT_AUFNAHME', 'REZEPT_PRUEFUNG',
-    'KRANKENKASSE_AUFNAHME', 'DATENPRUEFUNG', 'VERSORGUNGSAUSWAHL',
-    'TERMINPLANUNG', 'ZUSAMMENFASSUNG', 'CHECKOUT', 'ABGESCHLOSSEN',
-  ],
-  KATALOG_SELBSTZAHLER: [
-    'WILLKOMMEN', 'LEISTUNGSUEBERSICHT', 'TERMINPLANUNG', 'ZUSAMMENFASSUNG', 'CHECKOUT', 'ABGESCHLOSSEN',
-  ],
-  KRANKHEITSBILD_SELBSTZAHLER: [
-    'WILLKOMMEN', 'LEISTUNGSUEBERSICHT', 'KRANKHEITSBILD_ERFASSUNG', 'KRANKHEITSBILD_EMPFEHLUNG',
-    'TERMINPLANUNG', 'ZUSAMMENFASSUNG', 'CHECKOUT', 'ABGESCHLOSSEN',
-  ],
-};
+// Der Rezept-Scan ist entweder der Weg in die Bestellung (Rezept zuerst: bis zur
+// Versorgungsauswahl, dann die Kasse) oder eine Speiche des Checkouts für eine
+// Position (endet mit der Datenprüfung wieder an der Kasse). Die Krankenkassen-
+// karte zählt immer mit, auch wenn sie beim zweiten Rezept übersprungen wird.
+const REZEPT_SCAN: OnboardingStatus[] = ['REZEPT_AUFNAHME', 'REZEPT_PRUEFUNG', 'KRANKENKASSE_AUFNAHME', 'DATENPRUEFUNG'];
 
-export function schrittInfo(session: OnboardingSession): { aktuell: number; gesamt: number } {
-  const reihenfolge = SCHRITT_REIHENFOLGE[session.eintrittspfad] ?? SCHRITT_REIHENFOLGE.REZEPT;
-  // CHECKOUT_FEHLGESCHLAGEN ist derselbe Schritt wie CHECKOUT (ein Retry-
-  // Zustand, kein Fortschritt) — genau wie STATUS_META beide auf dieselbe
-  // Route mit derselben schritt-Zahl mappt.
-  const status = session.status === 'CHECKOUT_FEHLGESCHLAGEN' ? 'CHECKOUT' : session.status;
-  const index = reihenfolge.indexOf(status);
-  if (index === -1) {
-    // Ein per Katalog/Krankheitsbild vorgemerktes HiMi-Produkt lässt den
-    // Selbstzahler-eintrittspfad zurück, während der Status schon wieder in
-    // der klassischen Kette ist — auf REZEPT zurückfallen.
-    const rezeptIndex = SCHRITT_REIHENFOLGE.REZEPT.indexOf(status);
-    if (rezeptIndex !== -1) return { aktuell: rezeptIndex + 1, gesamt: SCHRITT_REIHENFOLGE.REZEPT.length };
-    return { aktuell: 1, gesamt: reihenfolge.length };
-  }
+/** Fortschritt im Rezept-Scan — null für Screens ohne Schrittzähler (Kasse, Termin). */
+export function schrittInfo(session: OnboardingSession): { aktuell: number; gesamt: number } | null {
+  const reihenfolge = session.aktivePositionId
+    ? REZEPT_SCAN
+    : [...REZEPT_SCAN, 'VERSORGUNGSAUSWAHL' as const, 'CHECKOUT' as const];
+  const index = reihenfolge.indexOf(session.status);
+  if (index === -1 || session.status === 'CHECKOUT') return null;
   return { aktuell: index + 1, gesamt: reihenfolge.length };
+}
+
+/** Status, in denen gerade eine Speiche bzw. der Rezept-Scan läuft — dort setzt
+ * ein Einstieg die Sitzung fort, statt ein neues Event zu schicken. */
+export function istLaufenderSchritt(status: OnboardingStatus): boolean {
+  return [...REZEPT_SCAN, 'VERSORGUNGSAUSWAHL', 'TERMINPLANUNG'].includes(status);
 }
 
 interface OnboardingState {
   session: OnboardingSession | null;
   isLoading: boolean;
-  // Client-only, nie an AsyncStorage/Backend gereicht: eine Katalog-/
-  // Krankheitsbild-Produktwahl, die getroffen wurde, bevor AGB/Datenschutz für
-  // die aktuelle (immer frische) Session erteilt sind. leistungsuebersicht.tsx
-  // dispatcht dieses Event anstelle von WEITER, sobald beide Einwilligungen
-  // vorliegen — siehe useProduktAuswahlDispatch.
+  // Client-only, nie an AsyncStorage/Backend gereicht: ein Warenkorb-„Zur Kasse“,
+  // das getroffen wurde, bevor AGB/Datenschutz für die aktuelle Session erteilt
+  // sind. leistungsuebersicht.tsx dispatcht dieses Event anstelle von WEITER,
+  // sobald beide Einwilligungen vorliegen — siehe prozessStarten().
   pendingEinstiegEvent: ClientOnboardingEvent | null;
 
   starten: () => Promise<OnboardingSession>;
+  /** Einziger Einstieg in einen Prozess (Rezept scannen, Zur Kasse): startet
+   * bzw. holt die Session, übernimmt eine dauerhafte Einwilligung und liefert die
+   * Route, auf die der Screen navigieren soll — oder einen Fehlergrund. */
+  prozessStarten: (einstieg: ClientOnboardingEvent | 'REZEPT') => Promise<{ ok: true; route: string } | { ok: false; reason: string }>;
   laden: () => Promise<void>;
   dispatch: (event: ClientOnboardingEvent, code?: string) => Promise<TransitionResult & { devCode?: string }>;
   setPendingEinstiegEvent: (event: ClientOnboardingEvent | null) => void;
@@ -104,10 +101,10 @@ interface OnboardingState {
 // truth itself. dispatch()/starten() already synced with the real backend
 // before calling this; it just makes the session available offline/cold-start.
 async function persistSession(session: OnboardingSession) {
-  const { ocrResult, customerContact, ...rest } = session;
+  const { ocrResult, krankenkasse, positionen, customerContact, ...rest } = session;
   try {
     await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(rest));
-    await setSecureJSON<SensitiveSessionData>(SENSITIVE_KEY, { ocrResult, customerContact });
+    await setSecureJSON<SensitiveSessionData>(SENSITIVE_KEY, { ocrResult, krankenkasse, positionen, customerContact });
   } catch (e) {
     // Best effort: dispatch() hat die Transition bereits im Zustand-Store übernommen;
     // ein Storage-Fehler (Disk voll, Keystore-Fehler) soll den Nutzerfluss nicht mit
@@ -135,15 +132,15 @@ function emitAnalyticsForTransition(before: OnboardingSession, after: Onboarding
       trackOnboarding({ name: 'ocr_corrected' });
       break;
     case 'SUPPLY_AUSGEWAEHLT':
-    case 'KATALOG_PRODUKT_SELBSTZAHLER_GEWAEHLT':
-    case 'KRANKHEITSBILD_PRODUKT_SELBSTZAHLER_GEWAEHLT':
-      trackOnboarding({ name: 'supply_chosen', produktKategorie: event.produkt.kategorie });
+      trackOnboarding({ name: 'supply_chosen' });
       break;
     case 'TERMIN_AUSGEWAEHLT':
       trackOnboarding({ name: 'appointment_chosen' });
       break;
-    case 'AUFTRAG_BESTAETIGT':
-      trackOnboarding({ name: 'checkout_started' });
+    case 'WARENKORB_UEBERNOMMEN':
+      // Nur beim Betreten der Kasse, nicht bei jedem Abgleich — und nie mit
+      // Produkten oder ihrer Anzahl (Gesundheitsdaten).
+      if (before.status !== 'CHECKOUT') trackOnboarding({ name: 'checkout_started' });
       break;
   }
 }
@@ -172,10 +169,62 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     }
     const { sessionSecret } = await onboardingApi.create();
     await useAuthStore.getState().setToken(sessionSecret);
-    const session = await onboardingApi.getCurrent();
+    let session = await onboardingApi.getCurrent();
+
+    // Dauerhafte Einwilligung (Katalogplan §2.3): liegt ein Token einer früheren
+    // Zustimmung vor, übernimmt der Server sie — sofern die Rechtstexte gleich
+    // geblieben sind und nichts widerrufen wurde. Dann entfallen Willkommen und
+    // Leistungsübersicht. Lehnt der Server ab (400: widerrufen, veraltet,
+    // unbekannt), ist der Token wertlos und wird verworfen; bei einem
+    // Netzwerkfehler bleibt er für den nächsten Versuch erhalten.
+    const token = await ladeEinwilligungsToken();
+    if (token) {
+      try {
+        const res = await onboardingApi.patch(session.id, {
+          type: 'EINWILLIGUNG_UEBERNOMMEN',
+          einwilligungsToken: token,
+          agbVersion: AGB_VERSION,
+          datenschutzVersion: DATENSCHUTZ_VERSION,
+        });
+        session = res.session;
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 400) await vergesseEinwilligungsToken();
+      }
+    }
+
     await persistSession(session);
     set({ session });
     return session;
+  },
+
+  prozessStarten: async (einstieg) => {
+    let session: OnboardingSession;
+    try {
+      session = await get().starten();
+    } catch {
+      return { ok: false, reason: 'Netzwerkfehler' };
+    }
+    const event: ClientOnboardingEvent = einstieg === 'REZEPT' ? { type: 'WEITER' } : einstieg;
+
+    // Einwilligung liegt vor (übernommen oder in dieser Session erteilt) —
+    // direkt in den Prozess.
+    if (session.status === 'LEISTUNGSUEBERSICHT' && consentErteilt(session)) {
+      const result = await get().dispatch(event);
+      return result.ok ? { ok: true, route: STATUS_META[result.session.status].route } : { ok: false, reason: result.reason };
+    }
+    // Noch keine Einwilligung: Auswahl merken, Willkommen/Leistungsübersicht
+    // holen sie ein und dispatchen das gemerkte Event danach.
+    if (session.status === 'WILLKOMMEN' || session.status === 'LEISTUNGSUEBERSICHT') {
+      get().setPendingEinstiegEvent(einstieg === 'REZEPT' ? null : event);
+      return { ok: true, route: STATUS_META[session.status].route };
+    }
+    // Ein laufender Scan/Termin wird fortgesetzt, nicht überfahren.
+    if (istLaufenderSchritt(session.status)) return { ok: true, route: STATUS_META[session.status].route };
+    // An der Kasse: „Rezept scannen“ wird zu einem weiteren Rezept dieser
+    // Bestellung, ein Warenkorb gleicht die Positionen ab.
+    const kassenEvent: ClientOnboardingEvent = einstieg === 'REZEPT' ? { type: 'REZEPT_HINZUFUEGEN' } : einstieg;
+    const result = await get().dispatch(kassenEvent);
+    return result.ok ? { ok: true, route: STATUS_META[result.session.status].route } : { ok: false, reason: result.reason };
   },
 
   laden: async () => {
@@ -197,12 +246,14 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
         set({ session: null, isLoading: false });
         return;
       }
-      const rest = JSON.parse(json) as Omit<OnboardingSession, 'ocrResult' | 'customerContact'>;
+      const rest = JSON.parse(json) as Omit<OnboardingSession, keyof SensitiveSessionData>;
       const sensitive = await getSecureJSON<SensitiveSessionData>(SENSITIVE_KEY);
       set({
         session: {
           ...rest,
           ocrResult: sensitive?.ocrResult ?? null,
+          krankenkasse: sensitive?.krankenkasse ?? null,
+          positionen: sensitive?.positionen ?? [],
           customerContact: sensitive?.customerContact ?? { email: null, telefon: null, telefonVerifiziert: false },
         },
         isLoading: false,
@@ -228,7 +279,9 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     if (!localCheck.ok) return localCheck;
 
     try {
-      const { session: fresh, devCode } = await onboardingApi.patch(session.id, event, code);
+      const { session: fresh, devCode, einwilligungsToken } = await onboardingApi.patch(session.id, event, code);
+      // Erste vollständige Zustimmung → Token für die Übernahme in künftige Sessions.
+      if (einwilligungsToken) await speichereEinwilligungsToken(einwilligungsToken);
       await persistSession(fresh);
       set({ session: fresh });
       emitAnalyticsForTransition(session, fresh, event);
@@ -238,7 +291,8 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     }
   },
 
-  // Reicht eine Versorgung ohne Checkout-Zahlung ein (jede Rezept-Versorgung).
+  // Reicht eine Bestellung ohne Checkout-Zahlung ein (nur Kassenartikel bzw.
+  // kostenlose Selbstzahler-Artikel).
   // Eigener Endpoint statt PATCH: erst der Server legt die echte
   // Versorgung/Bestellung an. Ein zahlungspflichtiger Selbstzahler-Kauf wird
   // hier lokal wie serverseitig vom FSM-Guard abgelehnt — den schließt nur der
@@ -268,19 +322,19 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     emitAnalyticsForAbschluss(session);
 
     if (!useAuthStore.getState().benutzer) {
-      // Darf nie fehlschlagen, solange die Guard-Kette (Datenprüfung, useOnboardingGuard
-      // requireOcrResult auf checkout.tsx) hält — schlägt trotzdem hart fehl statt
+      // Darf nie fehlschlagen, solange der Checkout eine bestätigte Telefonnummer
+      // verlangt — schlägt trotzdem hart fehl statt
       // onboardingAbschliessen() zu erreichen, denn genau diese Kombination
       // (onboardingAbgeschlossen=true, benutzer=null) schickt jeden künftigen App-Start
       // ohne Ausweg auf den Re-Login-Screen.
-      // ocrResult ist beim Selbstzahler-Katalogpfad bewusst null (nie ein
-      // Rezept fotografiert) — vorname/nachname/krankenkasse bleiben dann
-      // leer statt hart zu crashen; nur die Telefonnummer ist in jedem Pfad
-      // Pflicht (Checkout verlangt sie unabhängig vom Eintrittspfad).
+      // Eine reine Selbstzahler-Bestellung hat nie ein Rezept — vorname/
+      // nachname/krankenkasse bleiben dann leer statt hart zu crashen; nur die
+      // Telefonnummer ist immer Pflicht (der Checkout verlangt sie).
       if (!session.customerContact.telefon) {
         throw new Error('abschliessen(): Telefonnummer fehlt, kann keinen Benutzer anlegen');
       }
-      const vollerName = session.ocrResult?.patient.name ?? '';
+      const rezept = session.positionen.find((p) => p.rezept)?.rezept ?? null;
+      const vollerName = rezept?.patient.name ?? '';
       // benutzer is display-only (never used by any ownership check — those
       // key off the bearer secret), so this stays a client-side derivation
       // rather than a new backend endpoint. token is the real sessionSecret
@@ -292,8 +346,8 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
           nachname: vollerName.split(' ').slice(1).join(' '),
           email: session.customerContact.email ?? undefined,
           telefon: session.customerContact.telefon,
-          krankenkasse: session.ocrResult?.krankenkasse.name ?? '',
-          versichertenNr: session.ocrResult?.krankenkasse.versichertenNr ?? '',
+          krankenkasse: session.krankenkasse?.name ?? '',
+          versichertenNr: session.krankenkasse?.versichertenNr ?? '',
         },
         useAuthStore.getState().token!,
       );
@@ -305,11 +359,11 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
       if (!bestehender.email && session.customerContact.email) {
         patch.email = session.customerContact.email;
       }
-      if (!bestehender.krankenkasse && session.ocrResult?.krankenkasse.name) {
-        patch.krankenkasse = session.ocrResult.krankenkasse.name;
+      if (!bestehender.krankenkasse && session.krankenkasse?.name) {
+        patch.krankenkasse = session.krankenkasse.name;
       }
-      if (!bestehender.versichertenNr && session.ocrResult?.krankenkasse.versichertenNr) {
-        patch.versichertenNr = session.ocrResult.krankenkasse.versichertenNr;
+      if (!bestehender.versichertenNr && session.krankenkasse?.versichertenNr) {
+        patch.versichertenNr = session.krankenkasse.versichertenNr;
       }
       if (Object.keys(patch).length > 0) {
         await useAuthStore.getState().aktualisiereBenutzer(patch);
@@ -317,6 +371,8 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     }
     await useAuthStore.getState().onboardingAbschliessen();
 
+    // Bestellt ist bestellt: der lokale Warenkorb war genau diese Bestellung.
+    await useWarenkorbStore.getState().leeren();
     await AsyncStorage.removeItem(SESSION_KEY);
     await deleteSecureItem(SENSITIVE_KEY);
     set({ session: null });

@@ -13,13 +13,13 @@ import Animated, {
   withSpring,
   withTiming,
   FadeIn,
-  FadeInDown,
   SharedValue,
 } from 'react-native-reanimated';
+import { einblenden } from '../../lib/einblenden';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { D } from '@sanime/design-system';
-import { useOnboardingStore } from '../../store/onboardingStore';
+import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
 import { Screen } from '../../components/ui/Screen';
 
 // Einzelnes Partikel-Element
@@ -167,7 +167,7 @@ export default function OnboardingScreen1() {
         </View>
 
         {/* Text-Bereich */}
-        <Animated.View entering={FadeInDown.delay(1600).springify().damping(18)} style={styles.textArea}>
+        <Animated.View entering={einblenden(1600)} style={styles.textArea}>
           <Text style={styles.headline}>Scanne dein Rezept.</Text>
           <Text style={styles.sub}>
             Den Rest übernimmt SaniMe. Krankenkasse,
@@ -185,7 +185,13 @@ export default function OnboardingScreen1() {
           <TouchableOpacity
             style={styles.button}
             onPress={async () => {
-              await starten();
+              const session = await starten();
+              // Konnte starten() eine dauerhafte Einwilligung übernehmen, steht
+              // die Session schon weiter — dann direkt dorthin statt WEITER.
+              if (session.status !== 'WILLKOMMEN') {
+                router.replace(STATUS_META[session.status].route as any);
+                return;
+              }
               await dispatch({ type: 'WEITER' });
               router.push('/onboarding/leistungsuebersicht');
             }}

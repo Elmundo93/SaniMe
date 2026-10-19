@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { ConsentsRepository } from '../consents/consents.repository';
+import { ConsentGrantsRepository } from '../consents/consent-grants.repository';
 import { DocumentModule } from '../document/document.module';
 import { AdminDataExportController } from './controllers/admin-data-export.controller';
 import { MeDataExportController } from './controllers/me-data-export.controller';
@@ -15,6 +16,7 @@ import { DataExportGenerateJobHandler } from './jobs/data-export-generate.job-ha
   providers: [
     DataExportRequestsRepository,
     ConsentsRepository,
+    ConsentGrantsRepository,
     DataExportPayloadBuilder,
     DataExportService,
     DataExportGenerateJobHandler,

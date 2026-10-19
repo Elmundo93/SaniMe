@@ -15,7 +15,16 @@ export class ConsentsRepository extends TenantScopedRepository {
   // consentType after a version bump) becomes a new row. Never updates an
   // existing row; that was the Layer 1 bug this replaces (a re-accept
   // silently overwrote the prior version's record, leaving no history).
-  async record(tenant: TenantContext, subjectId: string, consentType: 'agb' | 'datenschutz', version: string, ipAddress: string | null) {
+  // uebernommenVonGrantId: gesetzt, wenn die Zeile eine dauerhafte Einwilligung
+  // (consent_grants) für diese Session übernimmt statt einer neuen Zustimmung.
+  async record(
+    tenant: TenantContext,
+    subjectId: string,
+    consentType: 'agb' | 'datenschutz',
+    version: string,
+    ipAddress: string | null,
+    uebernommenVonGrantId: string | null = null,
+  ) {
     await this.db.insert(consents).values({
       organizationId: tenant.organizationId,
       subjectType: 'onboarding_session',
@@ -24,6 +33,7 @@ export class ConsentsRepository extends TenantScopedRepository {
       version,
       acceptedAt: new Date(),
       ipAddress,
+      uebernommenVonGrantId,
     });
   }
 
@@ -58,8 +68,8 @@ export class ConsentsRepository extends TenantScopedRepository {
       .orderBy(asc(consents.acceptedAt));
   }
 
-  // A customer may run onboarding more than once (repeat orders re-collect
-  // consent — see CLAUDE.md), so this can span rows from several distinct
+  // A customer may run onboarding more than once (each session gets its own
+  // consent rows — fresh or taken over from a consent_grant), so this can span rows from several distinct
   // onboarding_session subjectIds, all backfilled to the same customerId.
   async findHistoryForCustomer(tenant: TenantContext, customerId: string) {
     return this.db

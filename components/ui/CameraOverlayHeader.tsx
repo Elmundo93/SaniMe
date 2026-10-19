@@ -18,7 +18,7 @@ interface CameraOverlayHeaderProps {
 export function CameraOverlayHeader({
   onBack,
   schritt,
-  gesamtSchritte = 11,
+  gesamtSchritte = 4,
   icon = 'arrow-left',
   accessibilityLabel = 'Zurück',
 }: CameraOverlayHeaderProps) {

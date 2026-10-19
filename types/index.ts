@@ -68,6 +68,10 @@ export interface Benutzer {
   lieferadresse?: Adresse;
 }
 
+/** Profildaten, die ein Gast schon vor seiner ersten Versorgung einträgt — kein
+ * `Benutzer` (der steht für einen erkannten Kunden), wird erst bei dessen Anlage übernommen. */
+export type ProfilDaten = Partial<Omit<Benutzer, 'id'>>;
+
 // ─── Onboarding-Session ──────────────────────────────────────────────────────
 //
 // OnboardingStatus/OnboardingSession/OnboardingConsent/Einwilligung/TerminSlot/

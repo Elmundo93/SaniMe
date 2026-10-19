@@ -7,7 +7,8 @@ import {
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
+import { einblenden } from '../../../lib/einblenden';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { ScreenHeader } from '../../../components/ui/ScreenHeader';
@@ -74,7 +75,7 @@ export default function VersorgungsdetailScreen() {
 
         <ScrollContainer contentContainerStyle={styles.scrollContent}>
           {/* Status Hero */}
-          <Animated.View entering={FadeInDown.delay(80).springify().damping(18)}>
+          <Animated.View entering={einblenden(80)}>
             <GlassCard padding={22} radius={D.radius.xl}>
               <Text style={styles.statusChipLabel}>AKTUELLER STATUS</Text>
               <View style={styles.statusRow}>
@@ -89,7 +90,7 @@ export default function VersorgungsdetailScreen() {
 
           {/* Prozessschritte */}
           {!isAbgeschlossen && (
-            <Animated.View entering={FadeInDown.delay(160).springify().damping(18)}>
+            <Animated.View entering={einblenden(160)}>
               <GlassCard padding={22} radius={D.radius.lg}>
                 <Text style={styles.sectionTitel}>Fortschritt</Text>
                 <View style={styles.steps}>
@@ -109,7 +110,7 @@ export default function VersorgungsdetailScreen() {
 
           {/* Offene Aktionen */}
           {versorgung.offeneAktionen.length > 0 && (
-            <Animated.View entering={FadeInDown.delay(220).springify().damping(18)}>
+            <Animated.View entering={einblenden(220)}>
               <GlassCard padding={20} radius={D.radius.lg} style={styles.aktionCard}>
                 <Text style={styles.sectionTitel}>Ihre Aktion erforderlich</Text>
                 {versorgung.offeneAktionen.map((a) => (
@@ -123,7 +124,7 @@ export default function VersorgungsdetailScreen() {
           )}
 
           {/* Details */}
-          <Animated.View entering={FadeInDown.delay(260).springify().damping(18)}>
+          <Animated.View entering={einblenden(260)}>
             <GlassCard padding={20} radius={D.radius.lg}>
               <Text style={styles.sectionTitel}>Details</Text>
               <InfoZeile label="Arzt" wert={versorgung.arzt} />
@@ -150,7 +151,7 @@ export default function VersorgungsdetailScreen() {
           </Animated.View>
 
           {/* Verlauf */}
-          <Animated.View entering={FadeInDown.delay(320).springify().damping(18)}>
+          <Animated.View entering={einblenden(320)}>
             <GlassCard padding={20} radius={D.radius.lg}>
               <Text style={styles.sectionTitel}>Verlauf</Text>
               <StatusTimeline events={versorgung.timeline} />
@@ -158,7 +159,7 @@ export default function VersorgungsdetailScreen() {
           </Animated.View>
 
           {/* Support */}
-          <Animated.View entering={FadeInDown.delay(380).springify()}>
+          <Animated.View entering={einblenden(380)}>
             <View style={styles.hilfeSection}>
               <Text style={styles.hilfeText}>Fragen zu Ihrer Versorgung?</Text>
               <TouchableOpacity style={styles.supportBtn} activeOpacity={0.75}>

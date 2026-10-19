@@ -8,7 +8,9 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
 import { DRIZZLE, type Database } from '../src/db/client';
-import { auditEntries } from '../src/db/schema';
+import { AGB_VERSION, DATENSCHUTZ_VERSION } from '@sanime/domain';
+import { auditEntries, consentGrants, consents } from '../src/db/schema';
+import { DEFAULT_ORGANIZATION_ID } from '../src/common/repository/tenant-context';
 
 // The real full-slice proof of Layer 2: create session -> accept consents ->
 // upload prescription (Document) -> OCR result (HealthData) -> select
@@ -188,21 +190,30 @@ describe('Onboarding full slice (e2e)', () => {
     expect(res.status).toBe(404);
   });
 
-  it('selects a real product, walks through Termin -> Zusammenfassung -> Checkout contact -> OTP', async () => {
+  it('selects a real product into the Checkout hub, picks a Termin there, then contact -> OTP', async () => {
     const current = await request(app.getHttpServer()).get('/api/v1/onboarding-sessions/current').set('Authorization', auth()).expect(200);
     const produkt = current.body.verfügbareProdukte.find((p: { id: string }) => p.id === selectedProductId);
 
     let res = await patchEvent({ type: 'SUPPLY_AUSGEWAEHLT', produkt }).expect(200);
-    expect(res.body.session.status).toBe('TERMINPLANUNG');
+    expect(res.body.session.status).toBe('CHECKOUT');
+    expect(res.body.session.positionen).toHaveLength(1);
+    expect(res.body.session.positionen[0].rezept.patient.name).toBe('Max Mustermann');
+    expect(res.body.session.positionen[0].rezept.krankenkasse.name).toBe('Techniker Krankenkasse');
+    expect(res.body.session.ocrResult).toBeNull();
 
+    // Ohne Termin ist die Bestellung noch nicht abschlussfähig.
+    await request(app.getHttpServer())
+      .post(`/api/v1/onboarding-sessions/${sessionId}/complete`)
+      .set('Authorization', auth())
+      .set('Idempotency-Key', nextIdempotencyKey())
+      .expect(400);
+
+    res = await patchEvent({ type: 'TERMIN_WAEHLEN' }).expect(200);
+    expect(res.body.session.status).toBe('TERMINPLANUNG');
     const slot = { id: 'slot-1', beginn: '2026-08-01T09:00:00.000Z', ende: '2026-08-01T11:00:00.000Z', ort: 'Berlin' };
     await patchEvent({ type: 'TERMIN_VORSCHLAEGE_BERECHNET', vorschläge: [slot] }).expect(200);
     res = await patchEvent({ type: 'TERMIN_AUSGEWAEHLT', termin: slot }).expect(200);
-    expect(res.body.session.status).toBe('ZUSAMMENFASSUNG');
-
-    res = await patchEvent({ type: 'AUFTRAG_BESTAETIGT' }).expect(200);
     expect(res.body.session.status).toBe('CHECKOUT');
-    expect(res.body.session.verbindlicheBestätigung).toBe(true);
 
     res = await patchEvent({ type: 'KONTAKT_ERFASST', email: null, telefon: '+491511234567' }).expect(200);
     expect(res.body.devCode).toMatch(/^\d{6}$/);
@@ -265,27 +276,63 @@ describe('Onboarding full slice (e2e)', () => {
   });
 });
 
-// Catalog-first self-pay path (Phase 1 of the Katalog/Krankheitsbild plan):
-// a customer picks a no-Hilfsmittelnummer product directly, skipping the
-// Rezept/Krankenkasse/Datenpruefung chain entirely, and completes without
-// ever having an ocrResult.
-describe('Onboarding self-pay Katalog path (e2e)', () => {
+// Warenkorb: mehrere Produkte in einer Bestellung. Der Warenkorb liegt bis
+// „Zur Kasse“ nur auf dem Gerät; WARENKORB_UEBERNOMMEN schickt nur Produkt-IDs,
+// der Server holt die Produkte aus dem Katalog. Kassenartikel brauchen je ein
+// eigenes Rezept, das im Checkout nachgepflegt wird.
+describe('Onboarding Warenkorb (e2e)', () => {
   let app: INestApplication;
-  let sessionId: string;
-  let sessionSecret: string;
+  let adminToken: string;
   let idempotencyCounter = 0;
-  let himiProduktId: string;
-  let selbstzahlerProdukt: Record<string, unknown>;
+  let kassenartikel: { id: string }[];
+  let selbstzahlerId: string;
+  let nichtBestellbarId: string;
 
-  const auth = () => `Bearer ${sessionSecret}`;
-  const nextIdempotencyKey = () => `onboarding-selbstzahler-e2e-${Date.now()}-${idempotencyCounter++}`;
+  const nextIdempotencyKey = () => `warenkorb-e2e-${Date.now()}-${idempotencyCounter++}`;
 
-  function patchEvent(event: unknown, code?: string) {
-    return request(app.getHttpServer())
-      .patch(`/api/v1/onboarding-sessions/${sessionId}`)
-      .set('Authorization', auth())
-      .set('Idempotency-Key', nextIdempotencyKey())
-      .send({ event, code });
+  async function neueSessionMitConsent() {
+    const session = await request(app.getHttpServer()).post('/api/v1/onboarding-sessions').expect(201);
+    const sessionId: string = session.body.sessionId;
+    const auth = `Bearer ${session.body.sessionSecret}`;
+    const patchEvent = (event: unknown, code?: string) =>
+      request(app.getHttpServer())
+        .patch(`/api/v1/onboarding-sessions/${sessionId}`)
+        .set('Authorization', auth)
+        .set('Idempotency-Key', nextIdempotencyKey())
+        .send({ event, code });
+    const complete = () =>
+      request(app.getHttpServer())
+        .post(`/api/v1/onboarding-sessions/${sessionId}/complete`)
+        .set('Authorization', auth)
+        .set('Idempotency-Key', nextIdempotencyKey());
+    await patchEvent({ type: 'WEITER' }).expect(200);
+    await patchEvent({ type: 'AGB_AKZEPTIERT', version: 'v1' }).expect(200);
+    await patchEvent({ type: 'DATENSCHUTZ_AKZEPTIERT', version: 'v1' }).expect(200);
+    return { sessionId, auth, patchEvent, complete };
+  }
+
+  const warenkorb = (...ids: string[]) => ({ type: 'WARENKORB_UEBERNOMMEN', artikel: ids.map((produktId) => ({ produktId })) });
+
+  const rezeptScan = (hilfsmittel: string) => ({
+    type: 'REZEPT_OCR_ABGESCHLOSSEN',
+    uri: 'file:///lokal/rezept.jpg',
+    result: {
+      patient: { name: 'Erika Mustermann', dateOfBirth: '01.01.1950' },
+      arzt: { name: 'Dr. med. Beispiel' },
+      krankenkasse: { name: '', versichertenNr: '' },
+      diagnose: 'R26.8',
+      hilfsmittel,
+      datum: '01.10.2026',
+    },
+    confidence: { patient: 'high', arzt: 'high', krankenkasse: 'low', diagnose: 'high', hilfsmittel: 'high' },
+  });
+
+  async function terminUndKontakt(patchEvent: (event: unknown, code?: string) => request.Test, telefon: string) {
+    const slot = { id: 'slot-1', beginn: '2026-08-01T09:00:00.000Z', ende: '2026-08-01T11:00:00.000Z', ort: 'Berlin' };
+    await patchEvent({ type: 'TERMIN_WAEHLEN' }).expect(200);
+    await patchEvent({ type: 'TERMIN_AUSGEWAEHLT', termin: slot }).expect(200);
+    const kontakt = await patchEvent({ type: 'KONTAKT_ERFASST', email: null, telefon }).expect(200);
+    await patchEvent({ type: 'OTP_VERIFIZIERT' }, kontakt.body.devCode).expect(200);
   }
 
   beforeAll(async () => {
@@ -295,190 +342,252 @@ describe('Onboarding self-pay Katalog path (e2e)', () => {
     await app.init();
 
     const jwt = app.get(JwtService);
-    const adminToken = await jwt.signAsync(
+    adminToken = await jwt.signAsync(
       { sub: 'test-admin', email: 'test-admin@example.com' },
       { secret: process.env.ADMIN_JWT_SECRET, expiresIn: '5m' },
     );
-    const products = await request(app.getHttpServer())
-      .get('/api/v1/products')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .expect(200);
-    selbstzahlerProdukt = products.body.find((p: { hilfsmittelNr?: string }) => !p.hilfsmittelNr);
-    himiProduktId = products.body.find((p: { hilfsmittelNr?: string }) => p.hilfsmittelNr).id;
-    expect(selbstzahlerProdukt).toBeDefined();
-
-    const session = await request(app.getHttpServer()).post('/api/v1/onboarding-sessions').expect(201);
-    sessionId = session.body.sessionId;
-    sessionSecret = session.body.sessionSecret;
-    await patchEvent({ type: 'WEITER' }).expect(200);
-    await patchEvent({ type: 'AGB_AKZEPTIERT', version: 'v1' }).expect(200);
-    await patchEvent({ type: 'DATENSCHUTZ_AKZEPTIERT', version: 'v1' }).expect(200);
+    const products = await request(app.getHttpServer()).get('/api/v1/products?limit=100').expect(200);
+    type P = { id: string; hilfsmittelNr?: string; verfuegbar: boolean };
+    kassenartikel = products.body.filter((p: P) => p.hilfsmittelNr && p.verfuegbar).slice(0, 2);
+    selbstzahlerId = products.body.find((p: P) => !p.hilfsmittelNr && p.verfuegbar).id;
+    nichtBestellbarId = products.body.find((p: P) => !p.verfuegbar).id;
+    expect(kassenartikel).toHaveLength(2);
   });
 
   afterAll(async () => {
     await app.close();
   });
 
-  it('rejects KATALOG_PRODUKT_SELBSTZAHLER_GEWAEHLT for a product that has a Hilfsmittelnummer', async () => {
+  it('übernimmt einen gemischten Warenkorb direkt in den Checkout, Produkte kommen aus dem Katalog', async () => {
+    const { patchEvent } = await neueSessionMitConsent();
     const res = await patchEvent({
-      type: 'KATALOG_PRODUKT_SELBSTZAHLER_GEWAEHLT',
-      produkt: { ...selbstzahlerProdukt, id: himiProduktId, hilfsmittelNr: '00.00.00.0001' },
-    });
-    expect(res.status).toBe(400);
-  });
-
-  it('rejects KATALOG_PRODUKT_VORGEMERKT for a product that has no Hilfsmittelnummer', async () => {
-    const res = await patchEvent({ type: 'KATALOG_PRODUKT_VORGEMERKT', produktId: (selbstzahlerProdukt as { id: string }).id });
-    expect(res.status).toBe(400);
-  });
-
-  it('routes straight to TERMINPLANUNG, skipping Rezept/Krankenkasse/Datenpruefung', async () => {
-    const res = await patchEvent({
-      type: 'KATALOG_PRODUKT_SELBSTZAHLER_GEWAEHLT',
-      produkt: selbstzahlerProdukt,
+      ...warenkorb(kassenartikel[0].id, selbstzahlerId),
+      // Was der Client an Produktdaten mitschickt, wird verworfen.
+      produkte: [{ id: selbstzahlerId, name: 'gefälscht', hersteller: 'x', beschreibung: 'x', eigenanteil: 0, lieferzeit: 'x', kategorie: 'x', merkmale: [] }],
     }).expect(200);
-    expect(res.body.session.status).toBe('TERMINPLANUNG');
-    expect(res.body.session.ocrResult).toBeNull();
-    expect(res.body.session.selectedSupply.id).toBe((selbstzahlerProdukt as { id: string }).id);
+    expect(res.body.session.status).toBe('CHECKOUT');
+    expect(res.body.session.positionen.map((p: { produkt: { id: string } }) => p.produkt.id)).toEqual([kassenartikel[0].id, selbstzahlerId]);
+    expect(res.body.session.positionen[1].produkt.name).not.toBe('gefälscht');
+    expect(res.body.session.positionen[0].rezept).toBeNull();
   });
 
-  it('reaches CHECKOUT without ever supplying an ocrResult, but refuses to complete a paid purchase via /complete', async () => {
-    const slot = { id: 'slot-1', beginn: '2026-08-01T09:00:00.000Z', ende: '2026-08-01T11:00:00.000Z', ort: 'Berlin' };
-    await patchEvent({ type: 'TERMIN_VORSCHLAEGE_BERECHNET', vorschläge: [slot] }).expect(200);
-    await patchEvent({ type: 'TERMIN_AUSGEWAEHLT', termin: slot }).expect(200);
-    await patchEvent({ type: 'AUFTRAG_BESTAETIGT' }).expect(200);
+  it('lehnt nicht bestellbare, unbekannte und doppelte Artikel sowie unbekannte Krankheitsbilder ab', async () => {
+    const { patchEvent } = await neueSessionMitConsent();
+    const nicht = await patchEvent(warenkorb(nichtBestellbarId));
+    expect(nicht.status).toBe(400);
+    expect(nicht.body.message).toMatch(/derzeit nicht bestellbar/);
+    expect((await patchEvent(warenkorb('00000000-0000-0000-0000-000000000000'))).status).toBe(404);
+    expect((await patchEvent(warenkorb(selbstzahlerId, selbstzahlerId))).status).toBe(400);
+    expect((await patchEvent(warenkorb())).status).toBe(400);
+    const kb = await patchEvent({ type: 'WARENKORB_UEBERNOMMEN', artikel: [{ produktId: selbstzahlerId, krankheitsbildId: 'nicht-existent' }] });
+    expect(kb.status).toBe(400);
+    // Die entfernten Einzelprodukt-Events gibt es nicht mehr.
+    expect((await patchEvent({ type: 'KATALOG_PRODUKT_VORGEMERKT', produktId: selbstzahlerId })).status).toBe(400);
+  });
 
-    const kontakt = await patchEvent({ type: 'KONTAKT_ERFASST', email: null, telefon: '+491511234568' }).expect(200);
-    const devCode: string = kontakt.body.devCode;
-    await patchEvent({ type: 'OTP_VERIFIZIERT' }, devCode).expect(200);
+  it('pflegt je Kassenartikel ein eigenes Rezept nach — die Krankenkassenkarte nur einmal', async () => {
+    const { patchEvent, complete } = await neueSessionMitConsent();
+    await patchEvent({ type: 'WARENKORB_UEBERNOMMEN', artikel: [{ produktId: kassenartikel[0].id, krankheitsbildId: 'mobilitaet' }, { produktId: kassenartikel[1].id }] }).expect(200);
+    await terminUndKontakt(patchEvent, '+491511234569');
 
-    // A paid self-pay purchase can only be completed by the verified Stripe
-    // webhook (see payment.e2e-spec.ts) — never by the client claiming so.
-    await request(app.getHttpServer())
-      .post(`/api/v1/onboarding-sessions/${sessionId}/complete`)
-      .set('Authorization', auth())
-      .set('Idempotency-Key', nextIdempotencyKey())
-      .expect(400);
+    // Rezepte fehlen noch → nicht abschlussfähig; Selbstzahler-Positionen
+    // brauchen keins (kein Artikel ohne Hilfsmittelnummer → kein Rezept-Scan).
+    expect((await complete()).status).toBe(400);
 
-    const current = await request(app.getHttpServer()).get('/api/v1/onboarding-sessions/current').set('Authorization', auth()).expect(200);
+    let res = await patchEvent({ type: 'REZEPT_FUER_POSITION', produktId: kassenartikel[0].id }).expect(200);
+    expect(res.body.session.status).toBe('REZEPT_AUFNAHME');
+    expect(res.body.session.aktivePositionId).toBe(kassenartikel[0].id);
+    await patchEvent(rezeptScan('Rollstuhl')).expect(200);
+    // Krankenkasse noch unbekannt → die Karte muss fotografiert werden.
+    expect((await patchEvent({ type: 'WEITER_KRANKENKASSE_BEKANNT' })).status).toBe(400);
+    await patchEvent({ type: 'WEITER' }).expect(200);
+    await patchEvent({
+      type: 'KRANKENKASSE_OCR_ABGESCHLOSSEN',
+      uri: 'file:///lokal/egk.jpg',
+      krankenkasse: { name: 'Techniker Krankenkasse', versichertenNr: 'A123456789' },
+      confidence: 'high',
+    }).expect(200);
+    res = await patchEvent({ type: 'REZEPT_ZUGEORDNET' }).expect(200);
+    expect(res.body.session.status).toBe('CHECKOUT');
+    expect(res.body.session.positionen[0].rezept.hilfsmittel).toBe('Rollstuhl');
+    expect(res.body.session.positionen[0].krankheitsbildId).toBe('mobilitaet');
+    expect(res.body.session.krankenkasse.name).toBe('Techniker Krankenkasse');
+
+    // Zweites Rezept: Karte ist bekannt, also direkt zur Datenprüfung.
+    await patchEvent({ type: 'REZEPT_FUER_POSITION', produktId: kassenartikel[1].id }).expect(200);
+    res = await patchEvent(rezeptScan('Rollator')).expect(200);
+    expect(res.body.session.ocrResult.krankenkasse.name).toBe('Techniker Krankenkasse');
+    await patchEvent({ type: 'WEITER_KRANKENKASSE_BEKANNT' }).expect(200);
+    res = await patchEvent({ type: 'REZEPT_ZUGEORDNET' }).expect(200);
+    expect(res.body.session.positionen.map((p: { rezept: { hilfsmittel: string } }) => p.rezept.hilfsmittel)).toEqual(['Rollstuhl', 'Rollator']);
+
+    // Bearbeiten direkt in der Datenprüfung, Korrektur landet am Rezept der Position.
+    await patchEvent({ type: 'REZEPT_BEARBEITEN', produktId: kassenartikel[1].id }).expect(200);
+    await patchEvent({ type: 'FELD_KORRIGIERT', patch: { diagnose: 'R26.2' } }).expect(200);
+    res = await patchEvent({ type: 'ZURUECK_CHECKOUT' }).expect(200);
+    expect(res.body.session.positionen[1].rezept.diagnose).toBe('R26.2');
+
+    // Erneutes Übernehmen des Warenkorbs behält die Rezepte.
+    res = await patchEvent(warenkorb(kassenartikel[0].id, kassenartikel[1].id)).expect(200);
+    expect(res.body.session.positionen.every((p: { rezept: unknown }) => p.rezept !== null)).toBe(true);
+
+    // Keine Zahlung beim Checkout für reine Kassenartikel; je Position eine Versorgung.
+    const done = await complete().expect(201);
+    expect(done.body.supplyIds).toHaveLength(2);
+    for (const supplyId of done.body.supplyIds) {
+      const supply = await request(app.getHttpServer())
+        .get(`/api/v1/supplies/${supplyId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      expect(supply.body.status).toBe('submitted');
+      expect(supply.body.hilfsmittelNrSnapshot).toBeTruthy();
+    }
+  });
+
+  it('lehnt einen Rezept-Scan für einen Selbstzahler-Artikel ab und verlangt für ihn die Zahlung über Stripe', async () => {
+    const { patchEvent, complete, auth } = await neueSessionMitConsent();
+    await patchEvent(warenkorb(selbstzahlerId)).expect(200);
+    expect((await patchEvent({ type: 'REZEPT_FUER_POSITION', produktId: selbstzahlerId })).status).toBe(400);
+    await terminUndKontakt(patchEvent, '+491511234570');
+
+    // Eine Bestellung mit Selbstzahler-Anteil schließt nur der verifizierte
+    // Stripe-Webhook ab (siehe payment.e2e-spec.ts) — nie der Client.
+    expect((await complete()).status).toBe(400);
+    const current = await request(app.getHttpServer()).get('/api/v1/onboarding-sessions/current').set('Authorization', auth).expect(200);
     expect(current.body.status).toBe('CHECKOUT');
     expect(current.body.versorgungId).toBeNull();
   });
+
+  it('kauft einen Kassenartikel ohne Rezept zum Selbstzahlerpreis — nur über die Zahlung abschließbar', async () => {
+    const { patchEvent, complete, auth } = await neueSessionMitConsent();
+    let res = await patchEvent(warenkorb(kassenartikel[0].id)).expect(200);
+    const preis = res.body.session.positionen[0].produkt.selbstzahlerPreis;
+    expect(preis).toBeGreaterThan(res.body.session.positionen[0].produkt.eigenanteil);
+    await terminUndKontakt(patchEvent, '+491511234571');
+    expect((await complete()).status).toBe(400); // Rezept fehlt noch
+
+    res = await patchEvent({ type: 'POSITION_OHNE_REZEPT', produktId: kassenartikel[0].id, ohneRezept: true }).expect(200);
+    expect(res.body.session.positionen[0].ohneRezept).toBe(true);
+    // Jetzt ist der Selbstzahlerpreis fällig — /complete darf das nicht abschließen.
+    expect((await complete()).status).toBe(400);
+    expect((await patchEvent({ type: 'POSITION_OHNE_REZEPT', produktId: selbstzahlerId, ohneRezept: true })).status).toBe(400);
+
+    // Zurück zum Rezept-Weg ist jederzeit möglich.
+    res = await patchEvent({ type: 'POSITION_OHNE_REZEPT', produktId: kassenartikel[0].id, ohneRezept: false }).expect(200);
+    expect(res.body.session.positionen[0].ohneRezept).toBe(false);
+    const current = await request(app.getHttpServer()).get('/api/v1/onboarding-sessions/current').set('Authorization', auth).expect(200);
+    expect(current.body.status).toBe('CHECKOUT');
+  });
+
+  it('entfernt beim Abgleich Positionen, die nicht mehr im Warenkorb sind', async () => {
+    const { patchEvent } = await neueSessionMitConsent();
+    await patchEvent(warenkorb(kassenartikel[0].id, selbstzahlerId)).expect(200);
+    const res = await patchEvent(warenkorb(selbstzahlerId)).expect(200);
+    expect(res.body.session.positionen.map((p: { produkt: { id: string } }) => p.produkt.id)).toEqual([selbstzahlerId]);
+  });
 });
 
-// Krankheitsbild path (Phase 2): describe a condition instead of scanning a
-// Rezept, get server-computed recommendations, then branch exactly like the
-// Katalog path — HiMi rejoins the classic Rezept chain, self-pay skips
-// straight to Termin.
-describe('Onboarding Krankheitsbild path (e2e)', () => {
+// Dauerhafte Einwilligung (Katalogplan §2.3): einmal zustimmen, danach für jede
+// neue Session übernehmen — solange die Rechtstexte gleich bleiben und der
+// Grant nicht widerrufen ist. Der Server prüft, der Client behauptet nur.
+describe('Onboarding dauerhafte Einwilligung (e2e)', () => {
   let app: INestApplication;
+  let db: Database;
   let idempotencyCounter = 0;
-  let himiProduktId: string;
-  let selbstzahlerProdukt: Record<string, unknown>;
 
-  async function neueSessionBisEmpfehlung() {
+  async function neueSession() {
     const session = await request(app.getHttpServer()).post('/api/v1/onboarding-sessions').expect(201);
     const sessionId: string = session.body.sessionId;
-    const sessionSecret: string = session.body.sessionSecret;
-    const auth = `Bearer ${sessionSecret}`;
+    const auth = `Bearer ${session.body.sessionSecret}`;
     const patchEvent = (event: unknown) =>
       request(app.getHttpServer())
         .patch(`/api/v1/onboarding-sessions/${sessionId}`)
         .set('Authorization', auth)
-        .set('Idempotency-Key', `krankheitsbild-e2e-${Date.now()}-${idempotencyCounter++}`)
+        .set('Idempotency-Key', `einwilligung-e2e-${Date.now()}-${idempotencyCounter++}`)
         .send({ event });
-
-    await patchEvent({ type: 'WEITER' }).expect(200);
-    await patchEvent({ type: 'AGB_AKZEPTIERT', version: 'v1' }).expect(200);
-    await patchEvent({ type: 'DATENSCHUTZ_AKZEPTIERT', version: 'v1' }).expect(200);
-    const started = await patchEvent({ type: 'KRANKHEITSBILD_STARTEN' }).expect(200);
-    expect(started.body.session.status).toBe('KRANKHEITSBILD_ERFASSUNG');
-
-    const empfehlung = await patchEvent({
-      type: 'KRANKHEITSBILD_AUSGEWAEHLT',
-      krankheitsbildId: 'mobilitaet',
-    }).expect(200);
-    expect(empfehlung.body.session.status).toBe('KRANKHEITSBILD_EMPFEHLUNG');
-    expect(empfehlung.body.session.ausgewaehltesKrankheitsbildId).toBe('mobilitaet');
-
-    return { sessionId, patchEvent, empfehlung: empfehlung.body.session };
+    return { sessionId, patchEvent };
   }
+
+  async function zustimmen(version: { agb: string; datenschutz: string }) {
+    const s = await neueSession();
+    await s.patchEvent({ type: 'WEITER' }).expect(200);
+    const agb = await s.patchEvent({ type: 'AGB_AKZEPTIERT', version: version.agb }).expect(200);
+    expect(agb.body.einwilligungsToken).toBeUndefined();
+    const ds = await s.patchEvent({ type: 'DATENSCHUTZ_AKZEPTIERT', version: version.datenschutz }).expect(200);
+    return ds.body.einwilligungsToken as string | undefined;
+  }
+
+  const uebernehmen = (einwilligungsToken?: string) => ({
+    type: 'EINWILLIGUNG_UEBERNOMMEN',
+    einwilligungsToken,
+    agbVersion: AGB_VERSION,
+    datenschutzVersion: DATENSCHUTZ_VERSION,
+  });
 
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     configureApp(app);
     await app.init();
-
-    const jwt = app.get(JwtService);
-    const adminToken = await jwt.signAsync(
-      { sub: 'test-admin', email: 'test-admin@example.com' },
-      { secret: process.env.ADMIN_JWT_SECRET, expiresIn: '5m' },
-    );
-    const products = await request(app.getHttpServer())
-      .get('/api/v1/products')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .expect(200);
-    selbstzahlerProdukt = products.body.find((p: { hilfsmittelNr?: string }) => !p.hilfsmittelNr);
-    himiProduktId = products.body.find((p: { hilfsmittelNr?: string }) => p.hilfsmittelNr).id;
+    db = app.get(DRIZZLE);
   });
 
   afterAll(async () => {
     await app.close();
   });
 
-  it('recognizes the seeded "mobilitaet" Krankheitsbild and recommends the tagged-category products, ignoring an untrusted produkte payload', async () => {
-    const { empfehlung } = await neueSessionBisEmpfehlung();
-    expect(empfehlung.verfügbareProdukte.length).toBeGreaterThan(0);
-    expect(empfehlung.verfügbareProdukte.some((p: { id: string }) => p.id === selbstzahlerProdukt.id)).toBe(true);
+  it('issues a token once both current consents are given, and takes it over in a new session', async () => {
+    const token = await zustimmen({ agb: AGB_VERSION, datenschutz: DATENSCHUTZ_VERSION });
+    expect(token).toEqual(expect.any(String));
+
+    const zweite = await neueSession();
+    const res = await zweite.patchEvent(uebernehmen(token)).expect(200);
+    expect(res.body.session.status).toBe('LEISTUNGSUEBERSICHT');
+    expect(res.body.session.consent.agb).toMatchObject({ akzeptiert: true, version: AGB_VERSION });
+    expect(res.body.einwilligungsToken).toBeUndefined();
+
+    // Nachvollziehbar übernommen: eigene consents-Zeilen mit Grant-Verweis.
+    const zeilen = await db.select().from(consents).where(eq(consents.subjectId, zweite.sessionId));
+    expect(zeilen).toHaveLength(2);
+    expect(zeilen.every((z) => z.uebernommenVonGrantId !== null)).toBe(true);
+
+    // Danach geht es ohne erneutes Abfragen direkt weiter.
+    await zweite.patchEvent({ type: 'WEITER' }).expect(200);
   });
 
-  it('returns no recommendations for an unknown Krankheitsbild id rather than falling back to everything', async () => {
-    const session = await request(app.getHttpServer()).post('/api/v1/onboarding-sessions').expect(201);
-    const auth = `Bearer ${session.body.sessionSecret}`;
-    const p = (event: unknown) =>
-      request(app.getHttpServer())
-        .patch(`/api/v1/onboarding-sessions/${session.body.sessionId}`)
-        .set('Authorization', auth)
-        .set('Idempotency-Key', `krankheitsbild-e2e-unknown-${Date.now()}-${idempotencyCounter++}`)
-        .send({ event });
-    await p({ type: 'WEITER' }).expect(200);
-    await p({ type: 'AGB_AKZEPTIERT', version: 'v1' }).expect(200);
-    await p({ type: 'DATENSCHUTZ_AKZEPTIERT', version: 'v1' }).expect(200);
-    await p({ type: 'KRANKHEITSBILD_STARTEN' }).expect(200);
-    const res = await p({ type: 'KRANKHEITSBILD_AUSGEWAEHLT', krankheitsbildId: 'nicht-existent' }).expect(200);
-    expect(res.body.session.verfügbareProdukte).toHaveLength(0);
+  it('issues no token for outdated legal text versions', async () => {
+    expect(await zustimmen({ agb: 'v1', datenschutz: 'v1' })).toBeUndefined();
   });
 
-  it('routes a self-pay pick from the recommendation straight to TERMINPLANUNG, skipping the Rezept/Krankenkasse chain', async () => {
-    const { patchEvent } = await neueSessionBisEmpfehlung();
-    const res = await patchEvent({
-      type: 'KRANKHEITSBILD_PRODUKT_SELBSTZAHLER_GEWAEHLT',
-      produkt: selbstzahlerProdukt,
-    }).expect(200);
-    expect(res.body.session.status).toBe('TERMINPLANUNG');
-    expect(res.body.session.ocrResult).toBeNull();
+  it('rejects a missing, unknown or outdated grant', async () => {
+    const s = await neueSession();
+    expect((await s.patchEvent(uebernehmen())).status).toBe(400);
+    expect((await s.patchEvent(uebernehmen('gibt-es-nicht'))).status).toBe(400);
 
-    const back = await patchEvent({ type: 'ZURUECK_KRANKHEITSBILD' }).expect(200);
-    expect(back.body.session.status).toBe('KRANKHEITSBILD_EMPFEHLUNG');
-  });
-
-  it('rejects picking a HiMi product via the self-pay event, and vice versa', async () => {
-    const { patchEvent } = await neueSessionBisEmpfehlung();
-    const wrongBranch = await patchEvent({
-      type: 'KRANKHEITSBILD_PRODUKT_SELBSTZAHLER_GEWAEHLT',
-      produkt: { ...selbstzahlerProdukt, id: himiProduktId, hilfsmittelNr: '00.00.00.0001' },
+    const veralteterToken = 'veraltet-' + Date.now();
+    await db.insert(consentGrants).values({
+      organizationId: DEFAULT_ORGANIZATION_ID,
+      tokenHash: createHash('sha256').update(veralteterToken).digest('hex'),
+      agbVersion: '2000-01-01',
+      datenschutzVersion: DATENSCHUTZ_VERSION,
     });
-    expect(wrongBranch.status).toBe(400);
+    const alt = await s.patchEvent(uebernehmen(veralteterToken));
+    expect(alt.status).toBe(400);
+    expect(alt.body.message).toBe('Die Rechtstexte haben sich geändert — bitte stimme erneut zu');
 
-    const alsoWrong = await patchEvent({ type: 'KRANKHEITSBILD_PRODUKT_VORGEMERKT', produktId: selbstzahlerProdukt.id });
-    expect(alsoWrong.status).toBe(400);
+    // Der Client kann keine veralteten Versionen "behaupten" — der FSM-Guard
+    // prüft sie schon vor dem Server-Lookup gegen die aktuellen.
+    expect((await s.patchEvent({ ...uebernehmen('x'), agbVersion: '2000-01-01' })).status).toBe(400);
   });
 
-  it('routes a HiMi pick from the recommendation into REZEPT_AUFNAHME, rejoining the classic chain', async () => {
-    const { patchEvent } = await neueSessionBisEmpfehlung();
-    const res = await patchEvent({ type: 'KRANKHEITSBILD_PRODUKT_VORGEMERKT', produktId: himiProduktId }).expect(200);
-    expect(res.body.session.status).toBe('REZEPT_AUFNAHME');
-    expect(res.body.session.vorausgewaehltesProduktId).toBe(himiProduktId);
+  it('stops working after revocation, idempotently and without leaking unknown tokens', async () => {
+    const token = await zustimmen({ agb: AGB_VERSION, datenschutz: DATENSCHUTZ_VERSION });
+    await request(app.getHttpServer()).post('/api/v1/consent-grants/revoke').send({ einwilligungsToken: token }).expect(204);
+    await request(app.getHttpServer()).post('/api/v1/consent-grants/revoke').send({ einwilligungsToken: token }).expect(204);
+    await request(app.getHttpServer()).post('/api/v1/consent-grants/revoke').send({ einwilligungsToken: 'unbekannt' }).expect(204);
+    await request(app.getHttpServer()).post('/api/v1/consent-grants/revoke').send({}).expect(400);
+
+    const s = await neueSession();
+    expect((await s.patchEvent(uebernehmen(token))).status).toBe(400);
   });
 });

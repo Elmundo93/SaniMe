@@ -41,7 +41,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const envelope: ErrorEnvelope = {
       statusCode: status,
       message: extractMessage(response_),
-      path: request.url,
+      // request.path statt request.url: der Query-String kann Suchbegriffe
+      // (Gesundheitsdaten, z. B. `?q=inkontinenz`) enthalten — siehe scrub.ts.
+      path: request.path,
       timestamp: new Date().toISOString(),
     };
 

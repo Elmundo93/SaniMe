@@ -63,7 +63,11 @@ export class StripeWebhookController {
     if (!shouldComplete) return; // already processed by an earlier delivery of this event
 
     try {
-      const { supplyId } = await this.onboarding.abschliessenNachZahlung(DEFAULT_TENANT_CONTEXT, payment.onboardingSessionId);
+      const { supplyId } = await this.onboarding.abschliessenNachZahlung(
+        DEFAULT_TENANT_CONTEXT,
+        payment.onboardingSessionId,
+        payment.amountCents,
+      );
       await this.payment.attachSupply(payment, supplyId);
     } catch (err) {
       // The session may already be ABGESCHLOSSEN (e.g. a race with a

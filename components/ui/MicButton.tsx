@@ -7,6 +7,7 @@ import Animated, {
   withSequence,
   withTiming,
   withSpring,
+  useReducedMotion,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
@@ -16,24 +17,36 @@ interface MicButtonProps {
   hoertZu: boolean;
   onPress: () => void;
   size?: number;
+  /** Was die Spracheingabe auslöst — Default passt zur Krankheitsbild-Erfassung. */
+  accessibilityLabel?: string;
 }
 
-// Gleiche visuelle Sprache wie CameraButton — hier als sekundäre Aktion neben
-// dem Suchfeld auf krankheitsbild.tsx, ersetzt es nie, siehe dortige Nutzung.
-export function MicButton({ hoertZu, onPress, size = 56 }: MicButtonProps) {
+// Gleiche visuelle Sprache wie CameraButton — immer sekundäre Aktion neben
+// einem Textfeld (Krankheitsbild-Erfassung, Katalogsuche), ersetzt es nie.
+export function MicButton({
+  hoertZu,
+  onPress,
+  size = 56,
+  accessibilityLabel = 'Krankheitsbild per Sprache beschreiben',
+}: MicButtonProps) {
+  // Bei „Bewegung reduzieren“ kein Atmen — der Zustand bleibt über Farbe und
+  // Icon (Quadrat statt Mikrofon) erkennbar.
+  const bewegungReduziert = useReducedMotion();
   const breathe = useSharedValue(1);
   const glowOpacity = useSharedValue(0.25);
   const pressScale = useSharedValue(1);
 
   useEffect(() => {
-    if (hoertZu) {
+    if (hoertZu && bewegungReduziert) {
+      glowOpacity.value = 0.4;
+    } else if (hoertZu) {
       breathe.value = withRepeat(withSequence(withTiming(1.08, { duration: 500 }), withTiming(1, { duration: 500 })), -1, true);
       glowOpacity.value = withRepeat(withSequence(withTiming(0.6, { duration: 500 }), withTiming(0.25, { duration: 500 })), -1, true);
     } else {
       breathe.value = withTiming(1, { duration: 200 });
       glowOpacity.value = withTiming(0, { duration: 200 });
     }
-  }, [hoertZu, breathe, glowOpacity]);
+  }, [hoertZu, bewegungReduziert, breathe, glowOpacity]);
 
   const glowStyle = useAnimatedStyle(() => ({ opacity: glowOpacity.value }));
   const containerStyle = useAnimatedStyle(() => ({ transform: [{ scale: breathe.value * pressScale.value }] }));
@@ -71,7 +84,7 @@ export function MicButton({ hoertZu, onPress, size = 56 }: MicButtonProps) {
           activeOpacity={0.85}
           style={{ width: size, height: size }}
           accessibilityRole="button"
-          accessibilityLabel={hoertZu ? 'Spracheingabe beenden' : 'Krankheitsbild per Sprache beschreiben'}
+          accessibilityLabel={hoertZu ? 'Spracheingabe beenden' : accessibilityLabel}
         >
           <View
             style={[

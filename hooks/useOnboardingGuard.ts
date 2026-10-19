@@ -10,21 +10,14 @@ export interface OnboardingGuardOptions {
   // applyEventData), bleibt `ready` false statt dass der Screen mit einem `!`-Zugriff
   // auf null crasht — der Nutzer wird stattdessen zum Schritt zurückgeschickt, der
   // das fehlende Feld füllt.
+  // ocrResult ist der Zwischenstand des laufenden Rezept-Scans — nur die
+  // Prüf-Screens des Scans brauchen ihn. Rezepte der Positionen prüft der
+  // Abschluss-Guard (istAbschlussfaehig), nicht dieser Hook.
   requireOcrResult?: boolean;
-  requireSupply?: boolean;
-  requireAppointment?: boolean;
 }
 
 function fehlendesPflichtfeldRoute(session: OnboardingSession, options?: OnboardingGuardOptions): string | null {
-  // Jeder Selbstzahler-Pfad (Katalog oder Krankheitsbild) hat legitim nie ein
-  // Rezept fotografiert — ocrResult bleibt dort für die ganze Session null
-  // (siehe istAbschlussfaehig in @sanime/domain). Nur der klassische
-  // REZEPT-Pfad braucht diesen Guard.
-  if (options?.requireOcrResult && session.eintrittspfad === 'REZEPT' && !session.ocrResult) {
-    return STATUS_META.REZEPT_AUFNAHME.route;
-  }
-  if (options?.requireSupply && !session.selectedSupply) return STATUS_META.VERSORGUNGSAUSWAHL.route;
-  if (options?.requireAppointment && !session.selectedAppointment) return STATUS_META.TERMINPLANUNG.route;
+  if (options?.requireOcrResult && !session.ocrResult) return STATUS_META.REZEPT_AUFNAHME.route;
   return null;
 }
 
@@ -56,7 +49,7 @@ export function useOnboardingGuard(
       router.replace(fehlendeRoute as any);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, session?.status, session?.ocrResult, session?.selectedSupply, session?.selectedAppointment]);
+  }, [isLoading, session?.status, session?.ocrResult]);
 
   const pflichtfelderVorhanden = !session || !fehlendesPflichtfeldRoute(session, options);
 

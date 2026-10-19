@@ -1,3 +1,5 @@
+import { normalisiere } from './katalogSuche';
+
 export interface Krankheitsbild {
   id: string;
   bezeichnung: string;
@@ -13,6 +15,11 @@ export interface Krankheitsbild {
 // App als auch Backend importieren dieselbe Liste über ihre id — das Backend
 // verknüpft eine Kategorie über catalogCategories.krankheitsbildId mit einer
 // dieser ids (siehe apps/backend/src/modules/catalog/categories.repository.ts).
+// Jede id muss auf mindestens eine geseedete Kategorie zeigen — erzwungen vom
+// Invarianten-Test catalog.seed-data.spec.ts. Hörhilfen wurden deshalb entfernt:
+// Hörgeräte versorgt der Hörakustiker, nicht das Sanitätshaus — ein Eintrag ohne
+// mögliche Produkte wäre eine Sackgasse. Altdaten mit `hoerhilfen` liefern über
+// findeKrankheitsbild() einfach `undefined`.
 export const KRANKHEITSBILD_KATALOG: Krankheitsbild[] = [
   {
     id: 'mobilitaet',
@@ -51,15 +58,9 @@ export const KRANKHEITSBILD_KATALOG: Krankheitsbild[] = [
     icon: 'moon',
   },
   {
-    id: 'hoerhilfen',
-    bezeichnung: 'Hörhilfen',
-    synonyme: ['hören', 'ohr', 'schwerhörig', 'hörgerät'],
-    icon: 'volume-2',
-  },
-  {
     id: 'sehhilfen',
     bezeichnung: 'Sehhilfen',
-    synonyme: ['sehen', 'auge', 'lupe', 'vergrößerung'],
+    synonyme: ['sehen', 'auge', 'lupe', 'vergrößerung', 'sehschwäche'],
     icon: 'eye',
   },
 ];
@@ -68,15 +69,17 @@ export function findeKrankheitsbild(id: string): Krankheitsbild | undefined {
   return KRANKHEITSBILD_KATALOG.find((k) => k.id === id);
 }
 
-// Rein lokaler Stichwort-Abgleich für die on-device Sprach-Eingabe (Phase 3,
-// lib/voice/krankheitsbildSpracherkennung.ts) — bewusst kein Cloud-NLP/LLM:
-// nur die aufgelöste id verlässt später das Gerät, nie der Transkript-Text
-// selbst. In der Domain (nicht app-only) gehalten, damit der Abgleich nicht
+// Rein lokaler Stichwort-Abgleich (Einzeltreffer) — die Katalog-Discovery
+// nutzt findeHilfe() aus katalogSuche.ts, das Bedarfe und Krankheitsbilder
+// gemeinsam rankt. Bewusst kein Cloud-NLP/LLM: nur die bestätigte id verlässt
+// das Gerät, nie der Transkript-Text selbst. In der Domain (nicht app-only) gehalten, damit der Abgleich nicht
 // von der Taxonomie abweichen kann, die er selbst durchsucht.
+// Beide Seiten über normalisiere() — „Strümpfe“, „struempfe“ und „STRÜMPFE“
+// treffen dasselbe Synonym.
 export function matcheKrankheitsbild(transcript: string): Krankheitsbild | null {
-  const text = transcript.toLowerCase();
+  const text = normalisiere(transcript);
   for (const kb of KRANKHEITSBILD_KATALOG) {
-    if (kb.synonyme.some((synonym) => text.includes(synonym))) {
+    if (kb.synonyme.some((synonym) => text.includes(normalisiere(synonym)))) {
       return kb;
     }
   }

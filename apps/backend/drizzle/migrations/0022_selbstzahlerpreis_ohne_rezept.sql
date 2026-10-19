@@ -1,0 +1,2 @@
+ALTER TABLE "supplier_products" ADD COLUMN "self_pay_price_cents" integer;--> statement-breakpoint
+ALTER TABLE "onboarding_session_positions" ADD COLUMN "without_prescription" boolean DEFAULT false NOT NULL;

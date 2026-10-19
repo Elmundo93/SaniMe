@@ -66,15 +66,16 @@ describe('Payment flow (e2e)', () => {
     await patchEvent({ type: 'WEITER' }).expect(200);
     await patchEvent({ type: 'AGB_AKZEPTIERT', version: 'v1' }).expect(200);
     await patchEvent({ type: 'DATENSCHUTZ_AKZEPTIERT', version: 'v1' }).expect(200);
-    // Payment at checkout only exists for paid self-pay purchases — a
-    // Rezept-Versorgung is submitted without one (Zuzahlung comes later).
-    const produkte = await request(app.getHttpServer()).get('/api/v1/products').expect(200);
-    const selbstzahler = produkte.body.find((p: { hilfsmittelNr?: string; eigenanteil: number }) => !p.hilfsmittelNr && p.eigenanteil > 0);
-    await patchEvent({ type: 'KATALOG_PRODUKT_SELBSTZAHLER_GEWAEHLT', produkt: selbstzahler }).expect(200);
+    // Payment at checkout only exists for the self-pay part of an order — a
+    // Kassenartikel is submitted without one (Zuzahlung comes later).
+    const produkte = await request(app.getHttpServer()).get('/api/v1/products?limit=100').expect(200);
+    const selbstzahler = produkte.body.find(
+      (p: { hilfsmittelNr?: string; eigenanteil: number; verfuegbar: boolean }) => !p.hilfsmittelNr && p.eigenanteil > 0 && p.verfuegbar,
+    );
+    await patchEvent({ type: 'WARENKORB_UEBERNOMMEN', artikel: [{ produktId: selbstzahler.id }] }).expect(200);
     const slot = { id: 'slot-1', beginn: '2026-08-01T09:00:00.000Z', ende: '2026-08-01T11:00:00.000Z', ort: 'Berlin' };
-    await patchEvent({ type: 'TERMIN_VORSCHLAEGE_BERECHNET', vorschläge: [slot] }).expect(200);
+    await patchEvent({ type: 'TERMIN_WAEHLEN' }).expect(200);
     await patchEvent({ type: 'TERMIN_AUSGEWAEHLT', termin: slot }).expect(200);
-    await patchEvent({ type: 'AUFTRAG_BESTAETIGT' }).expect(200);
     const kontakt = await patchEvent({ type: 'KONTAKT_ERFASST', email: null, telefon: '+491512223344' }).expect(200);
     await patchEvent({ type: 'OTP_VERIFIZIERT' }, kontakt.body.devCode).expect(200);
   }
@@ -86,7 +87,7 @@ describe('Payment flow (e2e)', () => {
     const moduleRef: TestingModule = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(STRIPE_CLIENT)
       .useValue({
-        paymentIntents: { create: paymentIntentsCreate, retrieve: paymentIntentsRetrieve },
+        paymentIntents: { create: paymentIntentsCreate, retrieve: paymentIntentsRetrieve, cancel: jest.fn() },
         webhooks: { constructEvent: verificationStripe.webhooks.constructEvent.bind(verificationStripe.webhooks) },
       })
       .compile();
@@ -202,5 +203,60 @@ describe('Payment flow (e2e)', () => {
 
     expect(res.body.paymentIntentId).toBe(piRetry);
     expect(paymentIntentsCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('berechnet für einen Kassenartikel ohne Rezept den Selbstzahlerpreis und schließt nach der Zahlung als Selbstzahler-Versorgung ab', async () => {
+    await driveNewSessionToCheckout();
+    const produkte = await request(app.getHttpServer()).get('/api/v1/products?limit=100').expect(200);
+    const kassenartikel = produkte.body.find((p: { hilfsmittelNr?: string; selbstzahlerPreis?: number; verfuegbar: boolean }) => p.hilfsmittelNr && p.selbstzahlerPreis && p.verfuegbar);
+    const current = await request(app.getHttpServer()).get('/api/v1/onboarding-sessions/current').set('Authorization', auth()).expect(200);
+    const selbstzahler = current.body.positionen[0].produkt;
+    await patchEvent({ type: 'WARENKORB_UEBERNOMMEN', artikel: [{ produktId: selbstzahler.id }, { produktId: kassenartikel.id }] }).expect(200);
+    await patchEvent({ type: 'POSITION_OHNE_REZEPT', produktId: kassenartikel.id, ohneRezept: true }).expect(200);
+
+    const piOhneRezept = `pi_e2e_ohne_rezept_${runId}`;
+    paymentIntentsCreate.mockResolvedValue({ id: piOhneRezept, client_secret: 'secret_ohne_rezept' });
+    const intent = await request(app.getHttpServer())
+      .post(`/api/v1/onboarding-sessions/${sessionId}/payment-intent`)
+      .set('Authorization', auth())
+      .set('Idempotency-Key', nextIdempotencyKey())
+      .expect(201);
+    expect(intent.body.amountCents).toBe(Math.round((selbstzahler.eigenanteil + kassenartikel.selbstzahlerPreis) * 100));
+
+    await postWebhook({
+      id: `evt_e2e_ohne_rezept_${runId}`,
+      type: 'payment_intent.succeeded',
+      data: { object: { id: piOhneRezept, object: 'payment_intent', status: 'succeeded' } },
+    }).expect(200);
+    const done = await request(app.getHttpServer()).get('/api/v1/onboarding-sessions/current').set('Authorization', auth()).expect(200);
+    expect(done.body.status).toBe('ABGESCHLOSSEN');
+  });
+
+  it('schließt nicht ab, wenn der bezahlte Betrag nicht mehr zum Warenkorb passt', async () => {
+    await driveNewSessionToCheckout();
+    const piVeraltet = `pi_e2e_veraltet_${runId}`;
+    paymentIntentsCreate.mockResolvedValue({ id: piVeraltet, client_secret: 'secret_e2e_veraltet' });
+    await request(app.getHttpServer())
+      .post(`/api/v1/onboarding-sessions/${sessionId}/payment-intent`)
+      .set('Authorization', auth())
+      .set('Idempotency-Key', nextIdempotencyKey())
+      .expect(201);
+
+    // Warenkorb nach dem Anlegen der Zahlung um einen weiteren Selbstzahler-Artikel erweitert.
+    const produkte = await request(app.getHttpServer()).get('/api/v1/products?limit=100').expect(200);
+    const selbstzahler = produkte.body.filter(
+      (p: { hilfsmittelNr?: string; eigenanteil: number; verfuegbar: boolean }) => !p.hilfsmittelNr && p.eigenanteil > 0 && p.verfuegbar,
+    );
+    await patchEvent({ type: 'WARENKORB_UEBERNOMMEN', artikel: selbstzahler.slice(0, 2).map((p: { id: string }) => ({ produktId: p.id })) }).expect(200);
+
+    const res = await postWebhook({
+      id: `evt_e2e_veraltet_${runId}`,
+      type: 'payment_intent.succeeded',
+      data: { object: { id: piVeraltet, object: 'payment_intent', status: 'succeeded' } },
+    });
+    expect(res.status).toBe(200);
+    const current = await request(app.getHttpServer()).get('/api/v1/onboarding-sessions/current').set('Authorization', auth()).expect(200);
+    expect(current.body.status).toBe('CHECKOUT');
+    expect(current.body.versorgungId).toBeNull();
   });
 });

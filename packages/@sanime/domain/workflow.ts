@@ -2,7 +2,10 @@ export interface TransitionRule<S extends string, E extends { type: string }, C,
   from: S;
   event: E['type'];
   to: S;
-  guard?: (context: C) => boolean;
+  // Das Event ist für Guards, die seine Nutzdaten prüfen müssen (z. B.
+  // EINWILLIGUNG_UEBERNOMMEN: nur aktuelle Rechtstext-Versionen) — bestehende
+  // Guards ignorieren den zweiten Parameter einfach.
+  guard?: (context: C, event: E) => boolean;
   // Optional domain events emitted on a successful transition. Defaults to
   // `never` so existing machines (e.g. OnboardingWorkflow) are unaffected —
   // `events` is always `[]` for them, carrying no information the caller
@@ -25,7 +28,7 @@ export function createWorkflow<S extends string, E extends { type: string }, C e
       if (!rule) {
         return { ok: false, reason: `Kein Übergang von ${context.status} mit ${event.type}` };
       }
-      if (rule.guard && !rule.guard(context)) {
+      if (rule.guard && !rule.guard(context, event)) {
         return { ok: false, reason: `Vorbedingung für ${event.type} nicht erfüllt` };
       }
       const patched = applyEventData(context, event);

@@ -7,8 +7,11 @@ import { PaymentModule } from '../payment/payment.module';
 import { SupplyOrderModule } from '../supply-order/supply-order.module';
 import { VerificationModule } from '../verification/verification.module';
 import { ConsentsRepository } from '../consents/consents.repository';
+import { ConsentGrantsRepository } from '../consents/consent-grants.repository';
+import { ConsentGrantsController } from './controllers/consent-grants.controller';
 import { OnboardingController } from './controllers/onboarding.controller';
 import { StripeWebhookController } from './controllers/stripe-webhook.controller';
+import { OnboardingSessionPositionsRepository } from './onboarding-session-positions.repository';
 import { OnboardingSessionsRepository } from './onboarding-sessions.repository';
 import { OnboardingService } from './onboarding.service';
 
@@ -20,8 +23,8 @@ import { OnboardingService } from './onboarding.service';
   // not in PaymentModule, specifically so PaymentModule never needs to import
   // OnboardingService back (it would otherwise, to call abschliessenNachZahlung()).
   imports: [AppointmentModule, AuthModule, CatalogModule, HealthDataModule, PaymentModule, SupplyOrderModule, VerificationModule],
-  controllers: [OnboardingController, StripeWebhookController],
-  providers: [OnboardingSessionsRepository, ConsentsRepository, OnboardingService],
+  controllers: [OnboardingController, ConsentGrantsController, StripeWebhookController],
+  providers: [OnboardingSessionsRepository, OnboardingSessionPositionsRepository, ConsentsRepository, ConsentGrantsRepository, OnboardingService],
   exports: [OnboardingService],
 })
 export class OnboardingModule {}

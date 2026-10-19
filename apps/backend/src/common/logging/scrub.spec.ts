@@ -19,6 +19,23 @@ describe('scrub', () => {
     expect(result[1].count).toBe(1);
   });
 
+  it('masks query values in URL strings under harmless keys', () => {
+    const result = scrub({ data: { url: '/api/v1/products?q=inkontinenz&bedarfId=aufstehen&filter[faltbar]=true' } }) as {
+      data: { url: string };
+    };
+    expect(result.data.url).toBe('/api/v1/products?q=[REDACTED]&bedarfId=[REDACTED]&filter[faltbar]=[REDACTED]');
+  });
+
+  it('redacts Sentry request.query_string entirely', () => {
+    const result = scrub({ request: { query_string: 'q=inkontinenz' } }) as { request: { query_string: unknown } };
+    expect(result.request.query_string).toBe('[REDACTED]');
+  });
+
+  it('leaves strings without a query unchanged', () => {
+    expect(scrub('Meintest du? Ja')).toBe('Meintest du? Ja');
+    expect(scrub('/api/v1/products/abc')).toBe('/api/v1/products/abc');
+  });
+
   it('passes through primitives unchanged', () => {
     expect(scrub('hello')).toBe('hello');
     expect(scrub(42)).toBe(42);

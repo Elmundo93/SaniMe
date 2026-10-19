@@ -30,7 +30,18 @@ export class PaymentService {
   // and reopened it) — never creates a second live intent for the same
   // checkout, which would let a customer be charged twice for one order.
   async createOrReuseIntent(tenant: TenantContext, onboardingSessionId: string, amountCents: number, currency = 'eur'): Promise<PaymentIntentResult> {
-    const existing = await this.payments.findReusableForSession(tenant, onboardingSessionId);
+    let existing: PaymentRow | null = await this.payments.findReusableForSession(tenant, onboardingSessionId);
+    // Hat sich der Warenkorb seit dem Anlegen geändert, passt der alte Betrag
+    // nicht mehr: die alte Zahlung wird bei Stripe storniert (sie kann danach
+    // nie mehr gelingen) und eine neue mit dem aktuellen Betrag angelegt.
+    if (existing && existing.amountCents !== amountCents) {
+      if (existing.status === 'processing') {
+        throw new BadRequestException('Deine letzte Zahlung wird noch verarbeitet — bitte versuche es in ein paar Minuten erneut');
+      }
+      await this.stripe.paymentIntents.cancel(existing.stripePaymentIntentId);
+      await this.payments.setStatus(existing.id, 'canceled');
+      existing = null;
+    }
     if (existing) {
       const intent = await this.stripe.paymentIntents.retrieve(existing.stripePaymentIntentId);
       if (!intent.client_secret) {

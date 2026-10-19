@@ -50,6 +50,83 @@ export interface Produkt {
   lieferzeit: string;
   kategorie: string;
   merkmale: string[];
+  // Katalog-Felder (alle optional — Produkt steckt auch in OnboardingSession und
+  // in Events, die müssen ohne sie kompatibel bleiben).
+  /** Ein Satz Nutzen für die Katalogkarte; fehlt → beschreibung. */
+  kurzbeschreibung?: string;
+  /** Nur Kassenartikel: unser Preis, wenn kein Rezept vorliegt (der Kunde zahlt
+   * selbst, die Krankenkasse ist nicht beteiligt). Fehlt → ohne Rezept nicht erhältlich. */
+  selbstzahlerPreis?: number;
+  /** false = derzeit kein aktives, verfügbares Angebot → nicht bestellbar. */
+  verfuegbar?: boolean;
+  kategorieId?: string;
+  /** Feather-Icon der Kategorie — Bild-Platzhalter, solange es keine lizenzierten Fotos gibt. */
+  kategorieIcon?: string;
+}
+
+export interface ProduktBild {
+  url: string;
+  /** Pflicht — jedes Bild braucht eine Beschreibung für Screenreader. */
+  altText: string;
+}
+
+/** Detailform aus GET /products/:id — nur die Detailseite braucht sie. */
+export interface ProduktDetail extends Produkt {
+  artikelnummer?: string;
+  bilder: ProduktBild[];
+  /** Strukturierte, filterbare Daten (gewichtKg, faltbar, einsatzort …), siehe katalogFilter.ts. */
+  attribute: Record<string, string | number | boolean>;
+  kategorieSlug?: string;
+  requiresApproval: boolean;
+  /** Ausführungen — bestimmen nur die Zubehör-Kompatibilität, bestellt wird das Produkt. */
+  varianten: ProduktVariante[];
+}
+
+export type ProduktBeziehung = 'zubehoer' | 'ersatzteil' | 'dienstleistung';
+
+export interface ProduktVariante {
+  id: string;
+  sku: string;
+  attribute: Record<string, string | number | boolean>;
+}
+
+/** GET /products/:id/related — nach Beziehungsart gruppiert. */
+export type PassendeProdukte = Record<ProduktBeziehung, Produkt[]>;
+
+// ─── Katalog-Kategorien ──────────────────────────────────────────────────────
+
+/** GET /catalog/categories — max. zwei Ebenen: parentId null = Hauptkategorie
+ * (reine Navigation), sonst Unterkategorie (Produkte hängen immer hier). */
+export interface KatalogKategorie {
+  id: string;
+  name: string;
+  slug: string;
+  parentId: string | null;
+  beschreibung?: string;
+  icon?: string;
+  sortOrder: number;
+}
+
+// ─── Ratgeber (kuratierte Q&A-Bibliothek) ────────────────────────────────────
+
+export interface QaQuelle {
+  titel: string;
+  url: string;
+}
+
+export interface QaEintrag {
+  id: string;
+  slug: string;
+  frage: string;
+  kurzantwort?: string;
+  antwort: string;
+  quellen: QaQuelle[];
+  /** ISO-Datum der letzten redaktionellen Prüfung; null = noch nicht geprüft. */
+  geprueftAm: string | null;
+}
+
+export interface QaEintragMitProdukten extends QaEintrag {
+  produkte: Produkt[];
 }
 
 // ─── Onboarding-Session ──────────────────────────────────────────────────────
@@ -57,15 +134,12 @@ export interface Produkt {
 export type OnboardingStatus =
   | 'WILLKOMMEN'
   | 'LEISTUNGSUEBERSICHT'
-  | 'KRANKHEITSBILD_ERFASSUNG'
-  | 'KRANKHEITSBILD_EMPFEHLUNG'
   | 'REZEPT_AUFNAHME'
   | 'REZEPT_PRUEFUNG'
   | 'KRANKENKASSE_AUFNAHME'
   | 'DATENPRUEFUNG'
   | 'VERSORGUNGSAUSWAHL'
   | 'TERMINPLANUNG'
-  | 'ZUSAMMENFASSUNG'
   | 'CHECKOUT'
   | 'CHECKOUT_FEHLGESCHLAGEN'
   | 'ABGESCHLOSSEN';
@@ -97,6 +171,21 @@ export interface CustomerContact {
   telefonVerifiziert: boolean;
 }
 
+export interface WarenkorbPosition {
+  produkt: Produkt;
+  // Nur bei Kassenartikeln (produkt.hilfsmittelNr) relevant; null = Rezept fehlt
+  // noch. krankenkasse darin ist immer die der Session.
+  rezept: OcrResult | null;
+  rezeptConfidence: OcrConfidence | null;
+  // Der Kunde kauft diesen Kassenartikel bewusst ohne Rezept zum
+  // Selbstzahlerpreis — dann braucht er kein Rezept, wird beim Checkout
+  // bezahlt und nie bei der Krankenkasse eingereicht.
+  ohneRezept: boolean;
+  // Optionaler Kontext, wenn das Produkt aus einer Krankheitsbild-Empfehlung
+  // kam — für Admin-Sichtbarkeit, keine Guard-Eingabe.
+  krankheitsbildId: string | null;
+}
+
 export interface OnboardingSession {
   id: string;
   status: OnboardingStatus;
@@ -113,27 +202,23 @@ export interface OnboardingSession {
   ocrConfidence: OcrConfidence | null;
   ocrBearbeitet: boolean;
 
-  verfügbareProdukte: Produkt[];
-  selectedSupply: Produkt | null;
+  // Krankenkasse der Session — einmal erfasst (eGK-Scan oder Datenprüfung), gilt
+  // für die Rezepte aller Positionen. null = noch nicht erfasst.
+  krankenkasse: OcrKrankenkasse | null;
 
-  // Von einer Katalog-/Krankheitsbild-Vormerkung gesetzt (siehe onboarding.ts's
-  // KATALOG_PRODUKT_VORGEMERKT / KRANKHEITSBILD_PRODUKT_VORGEMERKT) — rein zur
-  // Vorauswahl auf VERSORGUNGSAUSWAHL, keine Guard-Eingabe.
-  vorausgewaehltesProduktId: string | null;
-  // Von KRANKHEITSBILD_AUSGEWAEHLT gesetzt — für spätere Admin-Sichtbarkeit,
-  // keine Guard-Eingabe. Kein FK auf eine DB-Tabelle: die Taxonomie ist
-  // statische Domain-Daten (siehe krankheitsbild.ts), keine eigene Entität.
-  ausgewaehltesKrankheitsbildId: string | null;
-  // Reine Navigations-Buchführung (z.B. welches ZURUECK-Event ein Screen
-  // dispatchen muss) — niemals als Eingabe für einen Business-Guard nutzen,
-  // dafür ist ausschließlich das Fehlen/Vorhandensein von hilfsmittelNr am
-  // gewählten Produkt maßgeblich (siehe istAbschlussfaehig in onboarding.ts).
-  eintrittspfad: 'REZEPT' | 'KATALOG_SELBSTZAHLER' | 'KRANKHEITSBILD_SELBSTZAHLER';
+  verfügbareProdukte: Produkt[];
+
+  // Der Warenkorb dieser Bestellung. Eine Position je Produkt (Produkt-ID ist
+  // zugleich Positions-ID); Kassenartikel tragen ihr eigenes Rezept.
+  positionen: WarenkorbPosition[];
+  // Für welche Position der laufende Rezept-Scan (REZEPT_AUFNAHME …
+  // DATENPRUEFUNG) gedacht ist. null = Rezept-zuerst: das Produkt wird erst
+  // auf VERSORGUNGSAUSWAHL gewählt. ocrResult ist dabei der Zwischenstand des
+  // laufenden Scans, nicht das Rezept einer Position.
+  aktivePositionId: string | null;
 
   terminVorschläge: TerminSlot[];
   selectedAppointment: TerminSlot | null;
-
-  verbindlicheBestätigung: boolean;
 
   customerContact: CustomerContact;
 

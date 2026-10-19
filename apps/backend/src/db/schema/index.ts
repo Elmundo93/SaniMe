@@ -29,14 +29,25 @@ import { retentionPolicies } from './retention-policy.schema';
 import { payments } from './payment.schema';
 import { appointments } from './appointment.schema';
 import { auditEntries } from './audit-entries.schema';
-import { catalogCategories, manufacturers, products, supplierProducts, suppliers } from './catalog.schema';
-import { consents } from './consents.schema';
+import {
+  catalogCategories,
+  manufacturers,
+  productImages,
+  productRelations,
+  products,
+  productVariants,
+  qaEntries,
+  qaEntryLinks,
+  supplierProducts,
+  suppliers,
+} from './catalog.schema';
+import { consentGrants, consents } from './consents.schema';
 import { customerAddresses, customerProfiles, customers } from './customers.schema';
 import { documents, documentVersions } from './documents.schema';
 import { insurancePolicies, ocrResults } from './health-data.schema';
 import { idempotencyKeys } from './idempotency-keys.schema';
 import { notifications } from './notification.schema';
-import { onboardingSessions } from './onboarding-sessions.schema';
+import { onboardingSessionPositions, onboardingSessions } from './onboarding-sessions.schema';
 import { organizations } from './organizations.schema';
 import { rolePermissions } from './role-permissions.schema';
 import { openActions, orders, orderStatusEvents, supplies, timelineEvents } from './supply-order.schema';
@@ -50,11 +61,17 @@ export const schema = {
   accessLogs,
   idempotencyKeys,
   consents,
+  consentGrants,
   manufacturers,
   catalogCategories,
   products,
   suppliers,
   supplierProducts,
+  productImages,
+  productVariants,
+  productRelations,
+  qaEntries,
+  qaEntryLinks,
   documents,
   documentVersions,
   customers,
@@ -68,6 +85,7 @@ export const schema = {
   timelineEvents,
   openActions,
   onboardingSessions,
+  onboardingSessionPositions,
   verificationCodes,
   notifications,
   appointments,

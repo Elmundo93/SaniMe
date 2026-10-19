@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { createDatabase, createPool } from '../../db/client';
 import { DEFAULT_TENANT_CONTEXT } from '../../common/repository/tenant-context';
 import { ConsentsRepository } from '../consents/consents.repository';
+import { ConsentGrantsRepository } from '../consents/consent-grants.repository';
 import { OnboardingSessionsRepository } from '../onboarding/onboarding-sessions.repository';
 import { AccessLogsRepository } from '../audit/access-logs.repository';
 import { AuditEntriesRepository } from '../audit/audit-entries.repository';
@@ -29,7 +30,7 @@ describe('DataExportPayloadBuilder (integration)', () => {
     pool = createPool(process.env.DATABASE_URL!);
     const db = createDatabase(pool);
     consents = new ConsentsRepository(db);
-    builder = new DataExportPayloadBuilder(db, consents);
+    builder = new DataExportPayloadBuilder(db, consents, new ConsentGrantsRepository(db));
     onboardingSessions = new OnboardingSessionsRepository(db);
     supplyOrder = new SupplyOrderService(
       new SuppliesRepository(db),

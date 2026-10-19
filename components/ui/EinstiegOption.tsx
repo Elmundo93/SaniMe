@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { einblenden } from '../../lib/einblenden';
 import { D } from '@sanime/design-system';
 import { GlassCard } from './GlassCard';
 
@@ -19,7 +20,7 @@ interface EinstiegOptionProps {
 // die ganze Karte ist tappbar).
 export function EinstiegOption({ icon, titel, beschreibung, onPress, index }: EinstiegOptionProps) {
   return (
-    <Animated.View entering={FadeInDown.delay(100 + index * 90).springify().damping(18)}>
+    <Animated.View entering={einblenden(100 + index * 90)}>
       <TouchableOpacity
         onPress={onPress}
         activeOpacity={0.85}

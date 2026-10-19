@@ -1,49 +1,57 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { einblenden } from '../../lib/einblenden';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { Screen } from '../../components/ui/Screen';
 import { ScrollContainer } from '../../components/ui/ScrollContainer';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { DatenFeld, DatenFeldGruppenTitel } from '../../components/onboarding/DatenFeld';
-import { StepCounter } from '../../components/onboarding/StepCounter';
+import { ScanSchrittZaehler } from '../../components/onboarding/ScanSchrittZaehler';
 import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
+import { useFeldKorrektur } from '../../hooks/useFeldKorrektur';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '@sanime/design-system';
-import { hatPflichtfelderKomplett } from '@sanime/domain';
-import type { OcrResult } from '@sanime/domain';
+import { findePosition, hatPflichtfelderKomplett } from '@sanime/domain';
 
 export default function DatenpruefungScreen() {
   const router = useRouter();
   const { session, ready } = useOnboardingGuard('DATENPRUEFUNG', { requireOcrResult: true });
   const dispatch = useOnboardingStore((s) => s.dispatch);
+  const { feldKorrigiert, abwarten: korrekturenAbwarten } = useFeldKorrektur();
 
   if (!ready || !session) return <OnboardingLoadingView />;
 
   const ocr = session.ocrResult!;
   const vollständig = hatPflichtfelderKomplett(session);
-
-  const feldKorrigiert = (patch: Partial<OcrResult>) => {
-    dispatch({ type: 'FELD_KORRIGIERT', patch });
-  };
+  // Rezept für eine Position der Bestellung (statt Rezept zuerst): Weiter
+  // ordnet es zu und führt zurück an die Kasse. Beim Bearbeiten eines schon
+  // zugeordneten Rezepts führt auch Zurück direkt dorthin.
+  const position = findePosition(session, session.aktivePositionId);
+  const bearbeitet = !!position?.rezept;
 
   const handleZurück = async () => {
-    const result = await dispatch({ type: 'ZURUECK' });
+    await korrekturenAbwarten();
+    const result = await dispatch(bearbeitet ? { type: 'ZURUECK_CHECKOUT' } : { type: 'ZURUECK' });
     if (result.ok) {
-      router.replace(STATUS_META[result.session.status].route as any);
+      if (bearbeitet) router.dismissTo(STATUS_META[result.session.status].route as any);
+      else router.replace(STATUS_META[result.session.status].route as any);
     } else {
       zeigeDispatchFehler();
     }
   };
 
   const handleWeiter = async () => {
-    const result = await dispatch({ type: 'WEITER' });
+    await korrekturenAbwarten();
+    const result = await dispatch(position ? { type: 'REZEPT_ZUGEORDNET' } : { type: 'WEITER' });
     if (result.ok) {
-      router.push(STATUS_META[result.session.status].route as any);
+      // Zurück an der Kasse ersetzt die Scan-Screens, statt sie zu stapeln.
+      if (position) router.dismissTo(STATUS_META[result.session.status].route as any);
+      else router.push(STATUS_META[result.session.status].route as any);
     } else {
       Alert.alert(
         'Bitte vervollständigen',
@@ -57,73 +65,66 @@ export default function DatenpruefungScreen() {
         <ScreenHeader
           title="Daten prüfen"
           onBack={handleZurück}
-          right={
-            <StepCounter
-              aktuellerSchritt={STATUS_META.DATENPRUEFUNG.schritt}
-              gesamtSchritte={11}
-              variant="light"
-              label={`${STATUS_META.DATENPRUEFUNG.schritt}/11`}
-            />
-          }
+          right={<ScanSchrittZaehler session={session} />}
         />
 
         <ScrollContainer contentContainerStyle={styles.scrollContent}>
-          <Animated.View entering={FadeInDown.delay(40).springify()}>
+          <Animated.View entering={einblenden(40)}>
             <Text style={styles.hinweis}>
               Hier siehst du alle erkannten Daten auf einen Blick. Du kannst jedes Feld antippen und korrigieren.
             </Text>
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(100).springify().damping(18)}>
+          <Animated.View entering={einblenden(100)}>
             <GlassCard padding={0} radius={D.radius.md}>
               <DatenFeldGruppenTitel title="Person" />
               <DatenFeld
                 label="Name"
                 wert={ocr.patient.name}
-                onEdit={(w) => feldKorrigiert({ patient: { ...ocr.patient, name: w } })}
+                onEdit={(w) => feldKorrigiert((o) => ({ patient: { ...o.patient, name: w } }))}
               />
               <DatenFeld
                 label="Geburtsdatum"
                 wert={ocr.patient.dateOfBirth}
-                onEdit={(w) => feldKorrigiert({ patient: { ...ocr.patient, dateOfBirth: w } })}
+                onEdit={(w) => feldKorrigiert((o) => ({ patient: { ...o.patient, dateOfBirth: w } }))}
               />
             </GlassCard>
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(160).springify().damping(18)}>
+          <Animated.View entering={einblenden(160)}>
             <GlassCard padding={0} radius={D.radius.md}>
               <DatenFeldGruppenTitel title="Krankenkasse" />
               <DatenFeld
                 label="Kasse"
                 wert={ocr.krankenkasse.name}
-                onEdit={(w) => feldKorrigiert({ krankenkasse: { ...ocr.krankenkasse, name: w } })}
+                onEdit={(w) => feldKorrigiert((o) => ({ krankenkasse: { ...o.krankenkasse, name: w } }))}
               />
               <DatenFeld
                 label="Versichertennummer"
                 wert={ocr.krankenkasse.versichertenNr}
-                onEdit={(w) => feldKorrigiert({ krankenkasse: { ...ocr.krankenkasse, versichertenNr: w } })}
+                onEdit={(w) => feldKorrigiert((o) => ({ krankenkasse: { ...o.krankenkasse, versichertenNr: w } }))}
               />
               {ocr.krankenkasse.ik && <DatenFeld label="IK-Nummer" wert={ocr.krankenkasse.ik} confidence="high" />}
             </GlassCard>
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(220).springify().damping(18)}>
+          <Animated.View entering={einblenden(220)}>
             <GlassCard padding={0} radius={D.radius.md}>
               <DatenFeldGruppenTitel title="Rezept" />
               <DatenFeld
                 label="Arzt"
                 wert={ocr.arzt.name}
-                onEdit={(w) => feldKorrigiert({ arzt: { ...ocr.arzt, name: w } })}
+                onEdit={(w) => feldKorrigiert((o) => ({ arzt: { ...o.arzt, name: w } }))}
               />
               <DatenFeld
                 label="Diagnose"
                 wert={ocr.diagnose}
-                onEdit={(w) => feldKorrigiert({ diagnose: w })}
+                onEdit={(w) => feldKorrigiert(() => ({ diagnose: w }))}
               />
               <DatenFeld
                 label="Hilfsmittel"
                 wert={ocr.hilfsmittel}
-                onEdit={(w) => feldKorrigiert({ hilfsmittel: w })}
+                onEdit={(w) => feldKorrigiert(() => ({ hilfsmittel: w }))}
               />
             </GlassCard>
           </Animated.View>
@@ -147,7 +148,11 @@ export default function DatenpruefungScreen() {
               />
             )}
             <Text style={[styles.buttonLabel, !vollständig && styles.buttonLabelDisabled]}>
-              {vollständig ? 'Weiter zur Versorgungsauswahl' : 'Bitte alle Pflichtfelder ausfüllen'}
+              {!vollständig
+                ? 'Bitte alle Pflichtfelder ausfüllen'
+                : position
+                  ? `Rezept für ${position.produkt.name} übernehmen`
+                  : 'Weiter zur Versorgungsauswahl'}
             </Text>
           </TouchableOpacity>
         </View>

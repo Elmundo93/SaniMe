@@ -5,8 +5,8 @@ import Animated, {
   useAnimatedStyle,
   withRepeat,
   withSpring,
-  FadeInDown,
 } from 'react-native-reanimated';
+import { einblenden } from '../../lib/einblenden';
 import { D } from '@sanime/design-system';
 import type { TimelineEvent } from '../../types';
 
@@ -51,7 +51,7 @@ export function StatusTimeline({ events }: StatusTimelineProps) {
         return (
           <Animated.View
             key={event.id}
-            entering={FadeInDown.delay(index * 80).springify().damping(18)}
+            entering={einblenden(index * 80)}
             style={styles.row}
           >
             <View style={styles.lineContainer}>

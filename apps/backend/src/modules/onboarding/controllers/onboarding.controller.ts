@@ -1,4 +1,5 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Req, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Patch, Post, Req, UseGuards, UseInterceptors } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import type { OnboardingEvent } from '@sanime/domain';
 import { AuditRead } from '../../../common/audit/audit-read.decorator';
@@ -11,7 +12,10 @@ import { OnboardingService } from '../onboarding.service';
 
 @Controller('onboarding-sessions')
 export class OnboardingController {
-  constructor(private readonly onboarding: OnboardingService) {}
+  constructor(
+    private readonly onboarding: OnboardingService,
+    private readonly config: ConfigService,
+  ) {}
 
   @Post()
   createSession() {
@@ -83,6 +87,25 @@ export class OnboardingController {
     }
     return this.onboarding.createPaymentIntent(DEFAULT_TENANT_CONTEXT, id);
   }
+
+  // Nur lokale Entwicklung ohne Stripe-Keys: simuliert einen erfolgreichen
+  // payment_intent.succeeded-Webhook. Läuft über dieselbe
+  // abschliessenNachZahlung() wie StripeWebhookController (inkl. FSM-Guard
+  // "Zahlung fällig"), erzeugt aber keine payments-Zeile. Außerhalb von
+  // NODE_ENV=development existiert die Route nicht (404) — strikt auf
+  // 'development' statt "nicht production", damit ein falsch/nicht gesetztes
+  // NODE_ENV auf einem Server sie nicht versehentlich freischaltet.
+  @Post(':id/dev-zahlung')
+  @UseGuards(CustomerSessionAuthGuard)
+  async devZahlungSimulieren(@Param('id') id: string, @CurrentCustomerSession() session: { sessionId: string }) {
+    if (this.config.get<string>('NODE_ENV') !== 'development') {
+      throw new NotFoundException();
+    }
+    if (session.sessionId !== id) {
+      throw new BadRequestException('Session-ID stimmt nicht mit dem authentifizierten Bearer-Token überein');
+    }
+    return this.onboarding.abschliessenNachZahlung(DEFAULT_TENANT_CONTEXT, id);
+  }
 }
 
 // Principle 9 names PATCH .../:id and POST .../complete explicitly as
@@ -103,7 +126,7 @@ function withDefaultedProdukte(event: ReturnType<typeof patchBodySchema.parse>['
   if (
     event.type === 'KRANKENKASSE_OCR_ABGESCHLOSSEN' ||
     event.type === 'KRANKENKASSE_UEBERSPRUNGEN' ||
-    event.type === 'KRANKHEITSBILD_AUSGEWAEHLT'
+    event.type === 'WARENKORB_UEBERNOMMEN'
   ) {
     return { ...event, produkte: event.produkte ?? [] };
   }

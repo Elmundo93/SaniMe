@@ -7,8 +7,18 @@ describe('matcheKrankheitsbild', () => {
   });
 
   it('is case-insensitive', () => {
-    const result = matcheKrankheitsbild('ICH BRAUCHE EIN HÖRGERÄT');
-    expect(result?.id).toBe('hoerhilfen');
+    const result = matcheKrankheitsbild('ICH BRAUCHE EINE LUPE');
+    expect(result?.id).toBe('sehhilfen');
+  });
+
+  it('tolerates umlaut spellings on both sides', () => {
+    expect(matcheKrankheitsbild('Kompressionsstruempfe')?.id).toBe('kompression');
+    expect(matcheKrankheitsbild('STRÜMPFE')?.id).toBe('kompression');
+  });
+
+  it('no longer knows Hörhilfen (Hörakustiker, not Sanitätshaus)', () => {
+    expect(matcheKrankheitsbild('Ich brauche ein Hörgerät')).toBeNull();
+    expect(findeKrankheitsbild('hoerhilfen')).toBeUndefined();
   });
 
   it('returns null when nothing matches', () => {

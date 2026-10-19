@@ -20,8 +20,14 @@ export function patch(
   sessionId: string,
   event: ClientOnboardingEvent,
   code?: string,
-): Promise<{ session: OnboardingSession; devCode?: string }> {
+): Promise<{ session: OnboardingSession; devCode?: string; einwilligungsToken?: string }> {
   return request('PATCH', `/onboarding-sessions/${sessionId}`, { body: { event, code }, idempotent: true });
+}
+
+// Widerruf der dauerhaften Einwilligung — der Token ist der Besitznachweis,
+// daher ohne Bearer. Antwortet immer 204, auch für unbekannte Tokens.
+export function einwilligungWiderrufen(einwilligungsToken: string): Promise<void> {
+  return request('POST', '/consent-grants/revoke', { body: { einwilligungsToken }, auth: false });
 }
 
 // Reicht eine Versorgung ohne Checkout-Zahlung ein — nur für Rezept-
@@ -48,4 +54,11 @@ export interface PaymentIntentResult {
 // see checkout.tsx's post-PaymentSheet polling.
 export function createPaymentIntent(sessionId: string): Promise<PaymentIntentResult> {
   return request('POST', `/onboarding-sessions/${sessionId}/payment-intent`, { idempotent: true });
+}
+
+// Nur __DEV__ ohne konfigurierten Stripe-Publishable-Key: das Backend simuliert
+// den Stripe-Webhook (Route existiert nur bei NODE_ENV=development). Der
+// Abschluss passiert trotzdem serverseitig — checkout.tsx pollt danach genauso.
+export function devZahlungSimulieren(sessionId: string): Promise<{ supplyId: string }> {
+  return request('POST', `/onboarding-sessions/${sessionId}/dev-zahlung`);
 }

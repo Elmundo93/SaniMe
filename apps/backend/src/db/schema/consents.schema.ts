@@ -24,7 +24,33 @@ export const consents = pgTable('consents', {
   // Backend beim Sync gesetzt, nie client-seitig" — set here, never from a
   // client-supplied value.
   ipAddress: text('ip_address'),
+  // Gesetzt, wenn diese Zeile keine neue Zustimmung ist, sondern eine früher
+  // erteilte (consent_grants) für eine neue Session übernommen wurde — die
+  // Herkunft bleibt so nachvollziehbar, nie eine erfundene neue Zustimmung.
+  uebernommenVonGrantId: uuid('uebernommen_von_grant_id').references(() => consentGrants.id),
+});
+
+// Dauerhafte Einwilligung (Katalogplan §2.3): bei der ersten Zustimmung angelegt,
+// danach für jede neue Session übernehmbar, solange agbVersion/datenschutzVersion
+// den aktuellen entsprechen und revokedAt null ist. Das Token (nur als Hash
+// gespeichert) berechtigt AUSSCHLIESSLICH zu dieser Übernahme — kein
+// Session-Secret, öffnet keine Daten. customerId wird beim Claim gesetzt, damit
+// erkannte Kunden die Einwilligung auch geräteübergreifend übernehmen.
+export const consentGrants = pgTable('consent_grants', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id')
+    .notNull()
+    .references(() => organizations.id),
+  tokenHash: text('token_hash').notNull().unique(),
+  customerId: uuid('customer_id').references(() => customers.id),
+  // Die Session, in der die Zustimmung erteilt wurde — für den Claim-Backfill.
+  onboardingSessionId: uuid('onboarding_session_id'),
+  agbVersion: text('agb_version').notNull(),
+  datenschutzVersion: text('datenschutz_version').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
 });
 
 export type Consent = typeof consents.$inferSelect;
 export type NewConsent = typeof consents.$inferInsert;
+export type ConsentGrant = typeof consentGrants.$inferSelect;

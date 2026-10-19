@@ -4,6 +4,7 @@ import type { Pool } from 'pg';
 import { createDatabase, createPool } from '../../../db/client';
 import { DEFAULT_TENANT_CONTEXT } from '../../../common/repository/tenant-context';
 import { ConsentsRepository } from '../../consents/consents.repository';
+import { ConsentGrantsRepository } from '../../consents/consent-grants.repository';
 import { S3StorageProvider } from '../../document/providers/s3-storage.provider';
 import { InProcessJobQueue } from '../../job-queue/providers/in-process-job-queue.provider';
 import { DataExportPayloadBuilder } from '../data-export-payload.builder';
@@ -43,7 +44,7 @@ describe('DataExportGenerateJobHandler (integration)', () => {
     await storage.onModuleInit();
 
     jobQueue = new InProcessJobQueue();
-    const handler = new DataExportGenerateJobHandler(jobQueue, storage, requests, new DataExportPayloadBuilder(db, new ConsentsRepository(db)));
+    const handler = new DataExportGenerateJobHandler(jobQueue, storage, requests, new DataExportPayloadBuilder(db, new ConsentsRepository(db), new ConsentGrantsRepository(db)));
     handler.onModuleInit();
   });
 

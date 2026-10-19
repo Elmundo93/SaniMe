@@ -17,7 +17,7 @@ import Animated from 'react-native-reanimated';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
-import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
+import { useOnboardingStore, STATUS_META, schrittInfo } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { useGlowPulse } from '../../hooks/useGlowPulse';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
@@ -59,7 +59,7 @@ const CARD_H = CARD_W * 0.628; // Standard Scheckkartenformat
 
 export default function KrankenkasseScreen() {
   const router = useRouter();
-  const { ready } = useOnboardingGuard('KRANKENKASSE_AUFNAHME');
+  const { session, ready } = useOnboardingGuard('KRANKENKASSE_AUFNAHME');
   const dispatch = useOnboardingStore((s) => s.dispatch);
   const setBenutzer = useAuthStore((s) => s.setBenutzer);
   const [permission, requestPermission] = useCameraPermissions();
@@ -285,7 +285,11 @@ export default function KrankenkasseScreen() {
       </Animated.View>
 
       {/* Header */}
-      <CameraOverlayHeader onBack={handleZurück} schritt={STATUS_META.KRANKENKASSE_AUFNAHME.schritt} />
+      <CameraOverlayHeader
+        onBack={handleZurück}
+        schritt={(session && schrittInfo(session)?.aktuell) || 3}
+        gesamtSchritte={(session && schrittInfo(session)?.gesamt) || undefined}
+      />
 
       {/* Footer */}
       <SafeAreaView style={styles.bottomHint} edges={['bottom']}>

@@ -83,7 +83,7 @@ export default function Index() {
   // einem Login-Zwang — der leere Zustand dort fordert zum Scannen auf, und ein
   // Krankenkassenkarten-Scan kann die Identität per Archiv-Abgleich (POST
   // /customers/match, siehe app/scan/krankenkasse.tsx) wiederherstellen.
-  return <Redirect href="/(app)/dashboard" />;
+  return <Redirect href="/dashboard" />;
 }
 
 const styles = StyleSheet.create({

@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { randomUUID } from 'crypto';
+import { and, eq } from 'drizzle-orm';
 import { addBusinessDays } from '@sanime/domain';
 import type { Pool } from 'pg';
 import { createDatabase, createPool } from '../../db/client';
@@ -13,6 +14,7 @@ import { CategoriesRepository } from '../catalog/categories.repository';
 import { CatalogService } from '../catalog/catalog.service';
 import { ProductsRepository } from '../catalog/products.repository';
 import { SuppliersRepository } from '../catalog/suppliers.repository';
+import { QaRepository } from '../catalog/qa.repository';
 import { OpenActionsRepository } from '../supply-order/open-actions.repository';
 import { OrderStatusEventsRepository } from '../supply-order/order-status-events.repository';
 import { OrdersRepository } from '../supply-order/orders.repository';
@@ -36,7 +38,7 @@ describe('SupplierCalendarService (integration)', () => {
   beforeAll(() => {
     pool = createPool(process.env.DATABASE_URL!);
     const db = createDatabase(pool);
-    const catalog = new CatalogService(new CategoriesRepository(db), new ProductsRepository(db), new SuppliersRepository(db));
+    const catalog = new CatalogService(new CategoriesRepository(db), new ProductsRepository(db), new SuppliersRepository(db), new QaRepository(db));
     appointments = new AppointmentsRepository(db);
     calendar = new SupplierCalendarService(catalog, appointments);
     onboardingSessions = new OnboardingSessionsRepository(db);
@@ -124,5 +126,13 @@ describe('SupplierCalendarService (integration)', () => {
     const proposedDay = new Date(slots[0].start);
     expect(proposedDay.toDateString()).not.toBe(anchorDay.toDateString());
     expect(proposedDay.getTime()).toBeGreaterThan(anchorDay.getTime());
+
+    // Das Wegwerf-Angebot hängt am echten Seed-Produkt — aktiv gelassen würde
+    // es im Katalog (je nach Zeilenreihenfolge) als dessen Hauptangebot mit
+    // Preis 0 erscheinen. Löschen geht nicht (Termin verweist auf den Lieferanten).
+    await db
+      .update(supplierProducts)
+      .set({ isActive: false })
+      .where(and(eq(supplierProducts.supplierId, throwawaySupplierId), eq(supplierProducts.productId, SEEDED_PRODUCT_ID)));
   });
 });

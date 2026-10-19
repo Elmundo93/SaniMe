@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { OnboardingSessionClaimPort } from '../../customer/ports/onboarding-session-claim.port';
 import { DEFAULT_TENANT_CONTEXT } from '../../../common/repository/tenant-context';
 import { ConsentsRepository } from '../../consents/consents.repository';
+import { ConsentGrantsRepository } from '../../consents/consent-grants.repository';
 import { InsurancePoliciesRepository } from '../../health-data/insurance-policies.repository';
 import { OcrResultsRepository } from '../../health-data/ocr-results.repository';
 import { OnboardingSessionsRepository } from '../onboarding-sessions.repository';
@@ -21,6 +22,7 @@ export class OnboardingSessionClaimAdapter implements OnboardingSessionClaimPort
   constructor(
     private readonly sessions: OnboardingSessionsRepository,
     private readonly consents: ConsentsRepository,
+    private readonly consentGrants: ConsentGrantsRepository,
     private readonly insurancePolicies: InsurancePoliciesRepository,
     private readonly ocrResults: OcrResultsRepository,
   ) {}
@@ -28,6 +30,7 @@ export class OnboardingSessionClaimAdapter implements OnboardingSessionClaimPort
   async claimSession(sessionId: string, customerId: string): Promise<void> {
     await this.sessions.claimToCustomer(DEFAULT_TENANT_CONTEXT, sessionId, customerId);
     await this.consents.claimToCustomer(DEFAULT_TENANT_CONTEXT, 'onboarding_session', sessionId, customerId);
+    await this.consentGrants.claimToCustomer(DEFAULT_TENANT_CONTEXT, sessionId, customerId);
     await this.insurancePolicies.claimToCustomer(DEFAULT_TENANT_CONTEXT, 'onboarding_session', sessionId, customerId);
     await this.ocrResults.claimToCustomer(DEFAULT_TENANT_CONTEXT, 'onboarding_session', sessionId, customerId);
   }

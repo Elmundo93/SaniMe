@@ -6,14 +6,19 @@ import { mapSupplyRowToVersorgung } from '../lib/supplyMapper';
 
 interface VersorgungState {
   versorgungen: Versorgung[];
+  /** true, solange `laden()` läuft — die drei Start-Tabs zeigen dann ihr Skelett. */
+  laedt: boolean;
   laden: () => Promise<void>;
   zuruecksetzen: () => void;
 }
 
 export const useVersorgungStore = create<VersorgungState>((set) => ({
   versorgungen: [],
+  // Startet als true, damit vor dem ersten laden()-Aufruf kein leerer Zustand aufblitzt.
+  laedt: true,
 
   laden: async () => {
+    set({ laedt: true });
     try {
       const rows = await supplyApi.list();
       set({ versorgungen: rows.map(mapSupplyRowToVersorgung) });
@@ -26,10 +31,12 @@ export const useVersorgungStore = create<VersorgungState>((set) => ({
         return;
       }
       throw err;
+    } finally {
+      set({ laedt: false });
     }
   },
 
   // Für einen unbekannten/ausgeloggten Nutzer (kein benutzer) darf das Dashboard
   // keine Versorgungen eines vorherigen Kunden weiter anzeigen.
-  zuruecksetzen: () => set({ versorgungen: [] }),
+  zuruecksetzen: () => set({ versorgungen: [], laedt: false }),
 }));

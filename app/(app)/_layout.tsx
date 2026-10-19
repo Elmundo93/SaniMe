@@ -1,186 +1,19 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Platform,
-} from 'react-native';
-import { Tabs, useRouter } from 'expo-router';
-import { BlurView } from 'expo-blur';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
-import { CameraButton } from '../../components/ui/CameraButton';
-import { D, glass } from '@sanime/design-system';
+import { Stack } from 'expo-router';
 
-const FAB_SIZE = 72;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function PremiumTabBar({ state, descriptors, navigation }: any) {
-  const router = useRouter();
-
-  // Nur diese beiden Routen bekommen eine sichtbare Kachel — dashboard/[id] (die
-  // Versorgungsdetailseite) ist Teil desselben Tab-Stacks, aber kein eigener Tab.
-  // (expo-router's `options.href: null` wirkt nur auf die Default-Tabbar, nicht auf
-  // eine custom `tabBar`-Prop, deshalb filtern wir hier explizit über den Routennamen.)
-  const SICHTBARE_TABS = ['dashboard/index', 'einstellungen/index'];
-  const sichtbareRouten = state.routes
-    .map((route: { key: string; name: string }, index: number) => ({ route, index }))
-    .filter(({ route }: { route: { name: string } }) => SICHTBARE_TABS.includes(route.name));
-
-  const tabBar = (
-    <View style={styles.tabBar} accessibilityRole="tablist">
-      {sichtbareRouten.map(({ route, index }: { route: { key: string; name: string }; index: number }) => {
-        const { options } = descriptors[route.key];
-        const isFocused = state.index === index;
-        const label = options.title ?? route.name;
-
-        const onPress = () => {
-          const event = navigation.emit({
-            type: 'tabPress',
-            target: route.key,
-            canPreventDefault: true,
-          });
-          if (!isFocused && !event.defaultPrevented) {
-            navigation.navigate(route.name);
-          }
-        };
-
-        return (
-          <TouchableOpacity
-            key={route.key}
-            onPress={onPress}
-            style={styles.tab}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: isFocused }}
-            accessibilityLabel={label}
-            hitSlop={8}
-          >
-            <View style={styles.tabIconWrap}>
-              {options.tabBarIcon?.({
-                focused: isFocused,
-                color: isFocused ? D.color.accent : D.color.inkTertiary,
-                size: 22,
-              })}
-            </View>
-            <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>
-              {label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
-  );
-
-  return (
-    <SafeAreaView edges={['bottom']} style={styles.safeArea}>
-      {Platform.OS === 'ios' ? (
-        <View style={styles.blurContainer}>
-          <BlurView intensity={glass.navigation.blur} tint="extraLight" style={StyleSheet.absoluteFill} />
-          <View style={[StyleSheet.absoluteFill, styles.blurTint]} />
-          {tabBar}
-        </View>
-      ) : (
-        <View style={[styles.blurContainer, styles.androidBg]}>
-          {tabBar}
-        </View>
-      )}
-
-      {/* Floating Camera Button — außerhalb des overflow:hidden blurContainer, damit der
-          pulsierende Glow des Buttons nicht am oberen Rand abgeschnitten wird. */}
-      <View style={[styles.fabWrap, { marginLeft: -FAB_SIZE / 2 }]} pointerEvents="box-none">
-        <CameraButton onPress={() => router.push('/einstieg')} size={FAB_SIZE} />
-      </View>
-    </SafeAreaView>
-  );
-}
-
+/** Bereich nach dem Onboarding (Gäste wie erkannte Kunden). Die Start-Ansicht mit
+ * Header + swipebaren Top-Tabs liegt in `(start)/`; Einstellungen (über das Zahnrad im
+ * Header) und die Versorgungsdetailseite werden darüber gepusht; die Aufgaben (Glocke)
+ * öffnen als Sheet-Modal — eine Übersicht, kein Prozess, daher kein fullScreenModal. Ebenso
+ * „Mein Profil“ (aus den Einstellungen oder der Aufgabe „Profil vervollständigen“). */
 export default function AppLayout() {
   return (
-    <Tabs
-      tabBar={(props) => <PremiumTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
-    >
-      <Tabs.Screen
-        name="dashboard/index"
-        options={{
-          title: 'Dashboard',
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="clock" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="einstellungen/index"
-        options={{
-          title: 'Profil',
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="user" size={size} color={color} />
-          ),
-        }}
-      />
-      {/* Versorgungsdetail: Teil des Tab-Stacks (per Card-Tap erreichbar), aber keine
-          eigene Tab-Bar-Kachel — sonst erscheint sie als sichtbarer dritter Tab. */}
-      <Tabs.Screen name="dashboard/[id]" options={{ href: null }} />
-    </Tabs>
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(start)" />
+      <Stack.Screen name="einstellungen/index" />
+      <Stack.Screen name="dashboard/[id]" />
+      <Stack.Screen name="aufgaben" options={{ presentation: 'modal' }} />
+      <Stack.Screen name="profil" options={{ presentation: 'modal' }} />
+    </Stack>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    backgroundColor: 'transparent',
-    position: 'relative',
-  },
-  blurContainer: {
-    overflow: 'hidden',
-    borderTopWidth: 0.5,
-    borderTopColor: D.color.glassBorder,
-    position: 'relative',
-  },
-  blurTint: {
-    backgroundColor: 'rgba(247,249,252,0.35)',
-  },
-  androidBg: {
-    backgroundColor: D.color.bgSoft,
-    borderTopColor: D.color.glassBorder,
-  },
-  tabBar: {
-    flexDirection: 'row',
-    paddingTop: 10,
-    paddingBottom: Platform.OS === 'android' ? 8 : 0,
-    minHeight: 56,
-    position: 'relative',
-  },
-  tab: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-    minHeight: 44,
-  },
-  tabIconWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 24,
-  },
-  tabLabel: {
-    fontSize: 10,
-    fontWeight: D.font.medium,
-    color: D.color.inkTertiary,
-    letterSpacing: 0.2,
-  },
-  tabLabelActive: {
-    color: D.color.accent,
-    fontWeight: D.font.semibold,
-  },
-  fabWrap: {
-    // Schwebt bewusst nur knapp über der Tab-Bar (statt weiter in die Scene hinein) —
-    // ein größerer negativer top-Wert ließ den runden Touch-Bereich des FABs bis in
-    // scrollbaren Dashboard-Content hineinreichen und konkurrierte dort um Taps.
-    position: 'absolute',
-    top: -16,
-    left: '50%',
-    zIndex: 20,
-    pointerEvents: 'auto',
-  },
-});

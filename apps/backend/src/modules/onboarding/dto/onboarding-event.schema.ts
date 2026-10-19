@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { WARENKORB_MAX } from '@sanime/domain';
 
 // Mirrors @sanime/domain's OnboardingEvent discriminated union directly, so
 // validation can't drift from the domain truth. The two completion events
@@ -52,6 +53,14 @@ export const onboardingEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('ZURUECK') }),
   z.object({ type: z.literal('AGB_AKZEPTIERT'), version: z.string().min(1) }),
   z.object({ type: z.literal('DATENSCHUTZ_AKZEPTIERT'), version: z.string().min(1) }),
+  // Versionen sind nur die Behauptung des Clients — der Server ersetzt sie
+  // durch die des geprüften Grants (OnboardingService.patchInner).
+  z.object({
+    type: z.literal('EINWILLIGUNG_UEBERNOMMEN'),
+    einwilligungsToken: z.string().min(1).optional(),
+    agbVersion: z.string().min(1),
+    datenschutzVersion: z.string().min(1),
+  }),
   z.object({
     type: z.literal('REZEPT_OCR_ABGESCHLOSSEN'),
     uri: z.string().min(1),
@@ -69,28 +78,30 @@ export const onboardingEventSchema = z.discriminatedUnion('type', [
     produkte: z.array(produktSchema).optional(),
   }),
   z.object({ type: z.literal('KRANKENKASSE_UEBERSPRUNGEN'), produkte: z.array(produktSchema).optional() }),
-  z.object({ type: z.literal('SUPPLY_AUSGEWAEHLT'), produkt: produktSchema }),
-  z.object({ type: z.literal('KATALOG_PRODUKT_VORGEMERKT'), produktId: z.string().min(1) }),
   // produkt is accepted but always re-fetched/re-validated server-side in
-  // OnboardingService — same "never trust the client's product data" rule as
-  // SUPPLY_AUSGEWAEHLT.
-  z.object({ type: z.literal('KATALOG_PRODUKT_SELBSTZAHLER_GEWAEHLT'), produkt: produktSchema }),
-  z.object({ type: z.literal('ZURUECK_KATALOG') }),
-  z.object({ type: z.literal('KRANKHEITSBILD_STARTEN') }),
-  // krankheitsbildId is the only thing that matters — produkte, if the
-  // client sends anything at all, is always discarded and recomputed
-  // server-side (same discipline as KRANKENKASSE_OCR_ABGESCHLOSSEN).
+  // OnboardingService — "never trust the client's product data".
+  z.object({ type: z.literal('SUPPLY_AUSGEWAEHLT'), produkt: produktSchema }),
+  // Nur IDs zählen — `produkte` füllt der Server aus dem Katalog, was der
+  // Client dort schickt, wird verworfen. krankheitsbildId: optionaler Kontext
+  // aus der sessionlosen Discovery, muss eine bekannte Taxonomie-ID sein.
   z.object({
-    type: z.literal('KRANKHEITSBILD_AUSGEWAEHLT'),
-    krankheitsbildId: z.string().min(1),
+    type: z.literal('WARENKORB_UEBERNOMMEN'),
+    artikel: z
+      .array(z.object({ produktId: z.string().uuid(), krankheitsbildId: z.string().min(1).optional() }))
+      .min(1)
+      .max(WARENKORB_MAX),
     produkte: z.array(produktSchema).optional(),
   }),
-  z.object({ type: z.literal('KRANKHEITSBILD_PRODUKT_VORGEMERKT'), produktId: z.string().min(1) }),
-  z.object({ type: z.literal('KRANKHEITSBILD_PRODUKT_SELBSTZAHLER_GEWAEHLT'), produkt: produktSchema }),
-  z.object({ type: z.literal('ZURUECK_KRANKHEITSBILD') }),
+  z.object({ type: z.literal('REZEPT_FUER_POSITION'), produktId: z.string().uuid() }),
+  z.object({ type: z.literal('REZEPT_HINZUFUEGEN') }),
+  z.object({ type: z.literal('REZEPT_BEARBEITEN'), produktId: z.string().uuid() }),
+  z.object({ type: z.literal('WEITER_KRANKENKASSE_BEKANNT') }),
+  z.object({ type: z.literal('REZEPT_ZUGEORDNET') }),
+  z.object({ type: z.literal('POSITION_OHNE_REZEPT'), produktId: z.string().uuid(), ohneRezept: z.boolean() }),
+  z.object({ type: z.literal('ZURUECK_CHECKOUT') }),
+  z.object({ type: z.literal('TERMIN_WAEHLEN') }),
   z.object({ type: z.literal('TERMIN_VORSCHLAEGE_BERECHNET'), vorschläge: z.array(terminSlotSchema) }),
   z.object({ type: z.literal('TERMIN_AUSGEWAEHLT'), termin: terminSlotSchema }),
-  z.object({ type: z.literal('AUFTRAG_BESTAETIGT') }),
   z.object({ type: z.literal('KONTAKT_ERFASST'), email: z.string().nullable(), telefon: z.string().min(1) }),
   z.object({ type: z.literal('OTP_VERIFIZIERT') }),
   z.object({ type: z.literal('ZAHLUNG_FEHLGESCHLAGEN') }),

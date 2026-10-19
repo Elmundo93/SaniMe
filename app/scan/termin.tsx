@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
+import { einblenden } from '../../lib/einblenden';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
@@ -9,9 +10,8 @@ import { GlassCard } from '../../components/ui/GlassCard';
 import { Screen } from '../../components/ui/Screen';
 import { ScrollContainer } from '../../components/ui/ScrollContainer';
 import { ScreenHeader } from '../../components/ui/ScreenHeader';
-import { StepCounter } from '../../components/onboarding/StepCounter';
 import { MiniKalender } from '../../components/onboarding/MiniKalender';
-import { useOnboardingStore, STATUS_META, schrittInfo } from '../../store/onboardingStore';
+import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { terminAusKalenderdatum, terminAusVorschlag } from '../../lib/terminplanung';
@@ -57,22 +57,12 @@ export default function TerminplanungScreen() {
 
   if (!ready || !session) return <OnboardingLoadingView />;
 
+  // Die Terminwahl ist eine Speiche des Checkouts: Zurück wie Bestätigen
+  // führen zur vorhandenen Kasse im Stack zurück.
   const handleZurück = async () => {
-    // Die beiden Selbstzahler-Pfade erreichen TERMINPLANUNG direkt aus
-    // LEISTUNGSUEBERSICHT bzw. KRANKHEITSBILD_EMPFEHLUNG (nie über
-    // VERSORGUNGSAUSWAHL) — plain ZURUECK hat zwar auch dort eine gültige
-    // (unbedingte) FSM-Regel, würde aber auf eine VERSORGUNGSAUSWAHL mit
-    // leerer Produktliste führen. Das richtige Event zu wählen ist hier
-    // Aufgabe des Screens, nicht der FSM (siehe onboarding.test.ts).
-    const event =
-      session.eintrittspfad === 'KATALOG_SELBSTZAHLER'
-        ? { type: 'ZURUECK_KATALOG' as const }
-        : session.eintrittspfad === 'KRANKHEITSBILD_SELBSTZAHLER'
-          ? { type: 'ZURUECK_KRANKHEITSBILD' as const }
-          : { type: 'ZURUECK' as const };
-    const result = await dispatch(event);
+    const result = await dispatch({ type: 'ZURUECK' });
     if (result.ok) {
-      router.replace(STATUS_META[result.session.status].route as any);
+      router.dismissTo(STATUS_META[result.session.status].route as any);
     } else {
       zeigeDispatchFehler();
     }
@@ -81,7 +71,7 @@ export default function TerminplanungScreen() {
   const bestätigen = async (termin: TerminSlot) => {
     const result = await dispatch({ type: 'TERMIN_AUSGEWAEHLT', termin });
     if (result.ok) {
-      router.push(STATUS_META[result.session.status].route as any);
+      router.dismissTo(STATUS_META[result.session.status].route as any);
     } else {
       zeigeDispatchFehler();
     }
@@ -98,25 +88,15 @@ export default function TerminplanungScreen() {
     await bestätigen(terminAusKalenderdatum(session, datum));
   };
 
-  const { aktuell, gesamt } = schrittInfo(session);
-
   return (
     <Screen edges={['top', 'bottom']}>
         <ScreenHeader
           title="Termin wählen"
           onBack={handleZurück}
-          right={
-            <StepCounter
-              aktuellerSchritt={aktuell}
-              gesamtSchritte={gesamt}
-              variant="light"
-              label={`${aktuell}/${gesamt}`}
-            />
-          }
         />
 
         <ScrollContainer contentContainerStyle={styles.scrollContent}>
-          <Animated.View entering={FadeInDown.delay(40).springify()}>
+          <Animated.View entering={einblenden(40)}>
             <Text style={styles.hinweis}>
               Wir haben passende Termine für deine Lieferung berechnet — basierend auf Bearbeitungsdauer, Lieferzeit und Verfügbarkeit.
             </Text>
@@ -126,7 +106,7 @@ export default function TerminplanungScreen() {
             const { tag, zeit } = formatTermin(termin);
             const ausgewählt = termin.id === ausgewähltId;
             return (
-              <Animated.View key={termin.id} entering={FadeInDown.delay(100 + i * 80).springify().damping(18)}>
+              <Animated.View key={termin.id} entering={einblenden(100 + i * 80)}>
                 <TouchableOpacity
                   onPress={async () => {
                     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -154,7 +134,7 @@ export default function TerminplanungScreen() {
             );
           })}
 
-          <Animated.View entering={FadeInDown.delay(420).springify()}>
+          <Animated.View entering={einblenden(420)}>
             <TouchableOpacity
               onPress={() => setZeigeKalender((v) => !v)}
               style={styles.kalenderToggle}
@@ -168,7 +148,7 @@ export default function TerminplanungScreen() {
           </Animated.View>
 
           {zeigeKalender && (
-            <Animated.View entering={FadeInDown.delay(60).springify()}>
+            <Animated.View entering={einblenden(60)}>
               <GlassCard padding={16} radius={D.radius.md}>
                 <MiniKalender onAuswahl={handleKalenderAuswahl} />
               </GlassCard>

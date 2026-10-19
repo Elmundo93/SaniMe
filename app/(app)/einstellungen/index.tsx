@@ -8,20 +8,21 @@ import {
   Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
+import { einblenden } from '../../../lib/einblenden';
 import { Feather } from '@expo/vector-icons';
-import { GlassCard } from '../../../components/ui/GlassCard';
 import { Avatar } from '../../../components/ui/Avatar';
+import { BackButton } from '../../../components/ui/BackButton';
 import { Section } from '../../../components/ui/Section';
 import { HeroGlow } from '../../../components/ui/HeroGlow';
 import { Screen } from '../../../components/ui/Screen';
 import { ScrollContainer } from '../../../components/ui/ScrollContainer';
-import { ProfilFeld } from '../../../components/settings/ProfilFeld';
 import { VollstaendigkeitsBadge, vollstaendigkeitsLabel } from '../../../components/settings/VollstaendigkeitsBadge';
 import { berechneProfilVollstaendigkeit } from '../../../lib/vollstaendigkeit';
-import { useAuthStore } from '../../../store/authStore';
+import { selectProfil, useAuthStore } from '../../../store/authStore';
 import { requestDataExport, getDataExport, requestDeletion } from '../../../lib/api/auth';
 import { ApiError } from '../../../lib/api/client';
+import { einwilligungWiderrufen, ladeEinwilligungsToken, vergesseEinwilligungsToken } from '../../../lib/einwilligung';
 import { D, durations } from '@sanime/design-system';
 
 const NICHT_ZUGEORDNET_HINWEIS =
@@ -98,9 +99,10 @@ export default function EinstellungenScreen() {
   const router = useRouter();
   const benutzer = useAuthStore((s) => s.benutzer);
   const abmelden = useAuthStore((s) => s.abmelden);
-  const aktualisiereBenutzer = useAuthStore((s) => s.aktualisiereBenutzer);
 
-  const { profil, krankenkasse, lieferung } = berechneProfilVollstaendigkeit(benutzer);
+  const profil = useAuthStore(selectProfil);
+  const { gesamt } = berechneProfilVollstaendigkeit(profil);
+  const name = `${profil?.vorname ?? ''} ${profil?.nachname ?? ''}`.trim();
 
   const [exportStatus, setExportStatus] = useState<ExportStatus>('idle');
   const [exportDownloadUrl, setExportDownloadUrl] = useState<string | null>(null);
@@ -110,7 +112,45 @@ export default function EinstellungenScreen() {
     exportAbgebrochen.current = true;
   }, []);
 
-  const bearbeitenOnEdit = (feld: (wert: string) => void) => (benutzer ? feld : undefined);
+  // Dauerhafte Einwilligung (AGB/Datenschutz gelten bis zur nächsten
+  // Textänderung) — hier sicht- und widerrufbar.
+  const [einwilligungGespeichert, setEinwilligungGespeichert] = useState(false);
+  useEffect(() => {
+    ladeEinwilligungsToken().then((t) => setEinwilligungGespeichert(!!t));
+  }, []);
+
+  const handleEinwilligungen = () => {
+    if (!einwilligungGespeichert) {
+      Alert.alert(
+        'Meine Einwilligungen',
+        'Es ist keine dauerhafte Einwilligung gespeichert. Vor Ihrer nächsten Versorgung fragen wir AGB und Datenschutz erneut ab.',
+      );
+      return;
+    }
+    Alert.alert(
+      'Meine Einwilligungen',
+      'Ihre Zustimmung zu AGB und Datenschutz gilt für künftige Versorgungen, bis sich die Texte ändern. Nach einem Widerruf fragen wir vor jeder neuen Versorgung erneut. Laufende Versorgungen sind davon nicht betroffen.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Widerrufen',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await einwilligungWiderrufen();
+              setEinwilligungGespeichert(false);
+              Alert.alert('Widerrufen', 'Vor Ihrer nächsten Versorgung fragen wir AGB und Datenschutz erneut ab.');
+            } catch {
+              Alert.alert(
+                'Widerruf nicht möglich',
+                'Bitte überprüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const handleAbmelden = () => {
     Alert.alert('Abmelden', 'Möchten Sie sich wirklich abmelden?', [
@@ -120,7 +160,10 @@ export default function EinstellungenScreen() {
         style: 'destructive',
         onPress: async () => {
           await abmelden();
-          router.replace('/(app)/dashboard');
+          // Ein anderer Mensch könnte dieses Gerät weiter nutzen — die
+          // gespeicherte Einwilligung nur lokal vergessen (kein Widerruf).
+          await vergesseEinwilligungsToken();
+          router.dismissTo('/dashboard');
         },
       },
     ]);
@@ -186,145 +229,41 @@ export default function EinstellungenScreen() {
     );
   };
 
-  const initiale = benutzer
-    ? `${benutzer.vorname[0]}${benutzer.nachname[0]}`.toUpperCase()
-    : '?';
+  const initiale = `${profil?.vorname?.charAt(0) ?? ''}${profil?.nachname?.charAt(0) ?? ''}`.toUpperCase() || '?';
 
   return (
     <Screen background={<HeroGlow />}>
         {/* Großer Titel */}
         <Animated.View entering={FadeIn.duration(durations.slow)} style={styles.header}>
+          <BackButton onPress={() => router.back()} style={styles.zurueck} />
           <Text style={styles.headerTitel}>Einstellungen</Text>
         </Animated.View>
 
         <ScrollContainer contentContainerStyle={styles.scrollContent}>
-          {/* Profil-Hero */}
-          <Animated.View entering={FadeInDown.delay(80).springify().damping(18)}>
-            <GlassCard style={styles.profileCard} padding={20} radius={D.radius.lg}>
-              <Avatar initials={initiale} size={60} fontSize={D.font.xl} variant="gradient" />
-              <View style={styles.profileInfo}>
-                <Text style={styles.profileName}>
-                  {benutzer ? `${benutzer.vorname} ${benutzer.nachname}` : 'Gast'}
-                </Text>
-                <Text style={styles.profileSub}>
-                  {benutzer?.telefon ?? 'Noch nicht erkannt'}
-                </Text>
-              </View>
-            </GlassCard>
-          </Animated.View>
-
-          {/* Profil */}
-          <Animated.View entering={FadeInDown.delay(140).springify().damping(18)}>
-            <Section
-              titel="Profil"
-              collapsible
-              headerRight={<VollstaendigkeitsBadge fehlend={profil} />}
-              headerAccessibilityLabel={`Profil, ${vollstaendigkeitsLabel(profil)}`}
-            >
-              <ProfilFeld
-                label="Vorname"
-                wert={benutzer?.vorname ?? ''}
-                ausgefuellt={Boolean(benutzer?.vorname)}
-                onEdit={bearbeitenOnEdit((wert) => aktualisiereBenutzer({ vorname: wert }))}
-              />
-              <ProfilFeld
-                label="Nachname"
-                wert={benutzer?.nachname ?? ''}
-                ausgefuellt={Boolean(benutzer?.nachname)}
-                onEdit={bearbeitenOnEdit((wert) => aktualisiereBenutzer({ nachname: wert }))}
-              />
-              <ProfilFeld
-                label="Telefon"
-                wert={benutzer?.telefon ?? ''}
-                ausgefuellt={Boolean(benutzer?.telefon)}
-                keyboardType="phone-pad"
-                onEdit={bearbeitenOnEdit((wert) => aktualisiereBenutzer({ telefon: wert }))}
-              />
-              <ProfilFeld
-                label="E-Mail"
-                wert={benutzer?.email ?? ''}
-                ausgefuellt={Boolean(benutzer?.email)}
-                keyboardType="email-address"
-                onEdit={bearbeitenOnEdit((wert) => aktualisiereBenutzer({ email: wert }))}
-              />
-            </Section>
-          </Animated.View>
-
-          {/* Krankenkasse */}
-          <Animated.View entering={FadeInDown.delay(190).springify().damping(18)}>
-            <Section
-              titel="Krankenkasse"
-              collapsible
-              headerRight={<VollstaendigkeitsBadge fehlend={krankenkasse} />}
-              headerAccessibilityLabel={`Krankenkasse, ${vollstaendigkeitsLabel(krankenkasse)}`}
-            >
-              <ProfilFeld
-                label="Krankenkasse"
-                wert={benutzer?.krankenkasse ?? ''}
-                ausgefuellt={Boolean(benutzer?.krankenkasse)}
-                onEdit={bearbeitenOnEdit((wert) => aktualisiereBenutzer({ krankenkasse: wert }))}
-              />
-              <ProfilFeld
-                label="Versichertennummer"
-                wert={benutzer?.versichertenNr ?? ''}
-                ausgefuellt={Boolean(benutzer?.versichertenNr)}
-                onEdit={bearbeitenOnEdit((wert) => aktualisiereBenutzer({ versichertenNr: wert }))}
-              />
-            </Section>
-          </Animated.View>
-
-          {/* Lieferung */}
-          <Animated.View entering={FadeInDown.delay(240).springify().damping(18)}>
-            <Section
-              titel="Lieferung"
-              collapsible
-              headerRight={<VollstaendigkeitsBadge fehlend={lieferung} />}
-              headerAccessibilityLabel={`Lieferung, ${vollstaendigkeitsLabel(lieferung)}`}
-            >
-              <ProfilFeld
-                label="Straße & Hausnummer"
-                wert={benutzer?.lieferadresse?.strasse ?? ''}
-                ausgefuellt={Boolean(benutzer?.lieferadresse?.strasse)}
-                onEdit={bearbeitenOnEdit((wert) =>
-                  aktualisiereBenutzer({
-                    lieferadresse: { ...(benutzer?.lieferadresse ?? { strasse: '', plz: '', ort: '' }), strasse: wert },
-                  }),
-                )}
-              />
-              <ProfilFeld
-                label="PLZ"
-                wert={benutzer?.lieferadresse?.plz ?? ''}
-                ausgefuellt={Boolean(benutzer?.lieferadresse?.plz)}
-                keyboardType="numeric"
-                onEdit={bearbeitenOnEdit((wert) =>
-                  aktualisiereBenutzer({
-                    lieferadresse: { ...(benutzer?.lieferadresse ?? { strasse: '', plz: '', ort: '' }), plz: wert },
-                  }),
-                )}
-              />
-              <ProfilFeld
-                label="Ort"
-                wert={benutzer?.lieferadresse?.ort ?? ''}
-                ausgefuellt={Boolean(benutzer?.lieferadresse?.ort)}
-                onEdit={bearbeitenOnEdit((wert) =>
-                  aktualisiereBenutzer({
-                    lieferadresse: { ...(benutzer?.lieferadresse ?? { strasse: '', plz: '', ort: '' }), ort: wert },
-                  }),
-                )}
-              />
-              <TouchableOpacity onPress={() => {}} style={styles.item} accessibilityLabel="Rechnungsadresse" activeOpacity={0.6}>
-                <View style={styles.itemIconWrap}>
-                  <Feather name="file-text" size={18} color={D.color.inkSecondary} />
-                </View>
+          {/* Alle Nutzerdaten liegen gesammelt im Modal „Mein Profil“. */}
+          <Animated.View entering={einblenden(140)}>
+            <Section titel="Profil">
+              <TouchableOpacity
+                onPress={() => router.push('/profil')}
+                style={styles.item}
+                accessibilityRole="button"
+                accessibilityLabel={`Mein Profil, ${name || 'Name fehlt'}, ${vollstaendigkeitsLabel(gesamt)}`}
+                activeOpacity={0.6}
+              >
+                <Avatar initials={initiale} size={40} />
                 <View style={styles.itemBody}>
-                  <Text style={styles.itemLabel}>Rechnungsadresse</Text>
+                  <Text style={styles.itemLabel}>Mein Profil</Text>
+                  <Text style={styles.itemWert} numberOfLines={1}>
+                    {name || 'Jetzt Daten eintragen'}
+                  </Text>
                 </View>
+                <VollstaendigkeitsBadge fehlend={gesamt} />
                 <Feather name="chevron-right" size={20} color={D.color.inkTertiary} />
               </TouchableOpacity>
             </Section>
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(290).springify().damping(18)}>
+          <Animated.View entering={einblenden(290)}>
             <SettingsGruppe
               titel="Benachrichtigungen"
               items={[
@@ -334,22 +273,16 @@ export default function EinstellungenScreen() {
             />
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(340).springify().damping(18)}>
-            <SettingsGruppe
-              titel="Dokumente"
-              items={[
-                { icon: 'folder', label: 'Meine Rezepte', onPress: () => {} },
-                { icon: 'check-circle', label: 'Genehmigungen', onPress: () => {} },
-                { icon: 'file', label: 'Schreiben & Bescheide', onPress: () => {} },
-              ]}
-            />
-          </Animated.View>
-
-          <Animated.View entering={FadeInDown.delay(390).springify().damping(18)}>
+          <Animated.View entering={einblenden(390)}>
             <SettingsGruppe
               titel="Datenschutz"
               items={[
-                { icon: 'clipboard', label: 'Meine Einwilligungen', onPress: () => {} },
+                {
+                  icon: 'clipboard',
+                  label: 'Meine Einwilligungen',
+                  wert: einwilligungGespeichert ? 'Dauerhaft erteilt' : undefined,
+                  onPress: handleEinwilligungen,
+                },
                 {
                   icon: 'download',
                   label: 'Daten exportieren',
@@ -361,7 +294,7 @@ export default function EinstellungenScreen() {
             />
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(440).springify().damping(18)}>
+          <Animated.View entering={einblenden(440)}>
             <SettingsGruppe
               titel="Hilfe"
               items={[
@@ -373,7 +306,7 @@ export default function EinstellungenScreen() {
           </Animated.View>
 
           {benutzer && (
-            <Animated.View entering={FadeInDown.delay(490).springify().damping(18)}>
+            <Animated.View entering={einblenden(490)}>
               <Section titel="Account">
                 <TouchableOpacity
                   onPress={handleAbmelden}
@@ -405,8 +338,12 @@ export default function EinstellungenScreen() {
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 20,
-    paddingTop: 8,
+    paddingTop: 4,
     paddingBottom: 14,
+  },
+  zurueck: {
+    marginLeft: -10,
+    marginBottom: 4,
   },
   headerTitel: {
     fontSize: D.font.hero,
@@ -418,26 +355,6 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: 4,
     gap: 0,
-  },
-  profileCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginBottom: 24,
-  },
-  profileInfo: {
-    flex: 1,
-    gap: 3,
-  },
-  profileName: {
-    fontSize: D.font.lg,
-    fontWeight: D.font.bold,
-    color: D.color.ink,
-    letterSpacing: -0.3,
-  },
-  profileSub: {
-    fontSize: D.font.sm,
-    color: D.color.inkSecondary,
   },
   item: {
     flexDirection: 'row',

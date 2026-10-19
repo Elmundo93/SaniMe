@@ -18,7 +18,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
-import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
+import { findePosition } from '@sanime/domain';
+import { useOnboardingStore, STATUS_META, schrittInfo } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { useGlowPulse } from '../../hooks/useGlowPulse';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
@@ -35,7 +36,7 @@ const FRAME_H = FRAME_W * 1.41; // DIN A5 proportional
 
 export default function RezeptScanScreen() {
   const router = useRouter();
-  const { ready } = useOnboardingGuard('REZEPT_AUFNAHME');
+  const { session, ready } = useOnboardingGuard('REZEPT_AUFNAHME');
   const dispatch = useOnboardingStore((s) => s.dispatch);
   const [permission, requestPermission] = useCameraPermissions();
   const [aufgenommen, setAufgenommen] = useState(false);
@@ -43,12 +44,20 @@ export default function RezeptScanScreen() {
   const cameraRef = useRef<CameraView>(null);
   const glowStyle = useGlowPulse();
 
-  if (!ready) return <OnboardingLoadingView />;
+  if (!ready || !session) return <OnboardingLoadingView />;
+
+  // Gehört die Bestellung schon (Positionen im Checkout), führt Zurück an die
+  // Kasse statt auf die Leistungsübersicht.
+  const zurKasse = session.positionen.length > 0;
+  const fuerProdukt = findePosition(session, session.aktivePositionId)?.produkt;
+  const schritt = schrittInfo(session);
 
   const handleZurück = async () => {
-    const result = await dispatch({ type: 'ZURUECK' });
+    const result = await dispatch(zurKasse ? { type: 'ZURUECK_CHECKOUT' } : { type: 'ZURUECK' });
     if (result.ok) {
-      router.replace(STATUS_META[result.session.status].route as any);
+      // Zurück an die Kasse: zur vorhandenen Kasse im Stack, keine zweite darüber.
+      if (zurKasse) router.dismissTo(STATUS_META[result.session.status].route as any);
+      else router.replace(STATUS_META[result.session.status].route as any);
     } else {
       zeigeDispatchFehler();
     }
@@ -130,6 +139,14 @@ export default function RezeptScanScreen() {
           accessibilityLabel="Foto aus Galerie wählen"
         >
           <Text style={styles.abbrechen}>Foto aus Galerie wählen</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={handleZurück}
+          style={{ marginTop: 8, minHeight: 44, justifyContent: 'center' }}
+          accessibilityRole="button"
+          accessibilityLabel={zurKasse ? 'Zurück zur Kasse' : 'Zurück'}
+        >
+          <Text style={styles.abbrechen}>{zurKasse ? 'Zurück zur Kasse' : 'Zurück'}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -223,14 +240,15 @@ export default function RezeptScanScreen() {
       {/* Hinweis oben */}
       <CameraOverlayHeader
         onBack={handleZurück}
-        schritt={STATUS_META.REZEPT_AUFNAHME.schritt}
-        icon="x"
-        accessibilityLabel="Schließen"
+        schritt={schritt?.aktuell ?? 1}
+        gesamtSchritte={schritt?.gesamt}
+        icon={zurKasse ? 'arrow-left' : 'x'}
+        accessibilityLabel={zurKasse ? 'Zurück zur Kasse' : 'Schließen'}
       />
 
       {/* Hinweis unten */}
       <SafeAreaView style={styles.bottomHint} edges={['bottom']}>
-        <Text style={styles.hinweisText}>Positioniere dein Rezept</Text>
+        <Text style={styles.hinweisText}>{fuerProdukt ? `Rezept für ${fuerProdukt.name}` : 'Positioniere dein Rezept'}</Text>
         <Text style={styles.hinweisSubText}>Achte auf gute Beleuchtung</Text>
 
         <View style={styles.controlsRow}>

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
+import { TouchableOpacity, View, StyleSheet } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -110,7 +111,7 @@ export function CameraButton({ onPress, size = 72 }: CameraButtonProps) {
             />
 
             <View style={styles.content}>
-              <Text style={[styles.icon, { fontSize: size * 0.32 }]}>+</Text>
+              <Feather name="camera" size={Math.round(size * 0.4)} color="#FFFFFF" />
             </View>
           </View>
         </TouchableOpacity>
@@ -137,11 +138,5 @@ const styles = StyleSheet.create({
   content: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  icon: {
-    color: '#FFFFFF',
-    fontWeight: '200',
-    lineHeight: undefined,
-    includeFontPadding: false,
   },
 });

@@ -3,6 +3,7 @@ import { OnboardingSessionsRepository } from '../onboarding/onboarding-sessions.
 import { OnboardingSessionClaimAdapter } from '../onboarding/ports/onboarding-session-claim.adapter';
 import { AuthModule } from '../auth/auth.module';
 import { ConsentsRepository } from '../consents/consents.repository';
+import { ConsentGrantsRepository } from '../consents/consent-grants.repository';
 import { InsurancePoliciesRepository } from '../health-data/insurance-policies.repository';
 import { OcrResultsRepository } from '../health-data/ocr-results.repository';
 import { SupplyOrderModule } from '../supply-order/supply-order.module';
@@ -26,6 +27,7 @@ import { ONBOARDING_SESSION_CLAIM_PORT } from './ports/onboarding-session-claim.
     CustomersService,
     OnboardingSessionsRepository,
     ConsentsRepository,
+    ConsentGrantsRepository,
     InsurancePoliciesRepository,
     OcrResultsRepository,
     { provide: ONBOARDING_SESSION_CLAIM_PORT, useClass: OnboardingSessionClaimAdapter },

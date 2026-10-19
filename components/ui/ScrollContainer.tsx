@@ -14,6 +14,9 @@ export function ScrollContainer({ contentContainerStyle, children }: ScrollConta
     <ScrollView
       style={styles.scroll}
       showsVerticalScrollIndicator={false}
+      // Ohne das schließt der erste Tap auf ein anderes Feld/einen Button nur die
+      // Tastatur (Layout springt, zweiter Tap nötig) — siehe DatenFeld.
+      keyboardShouldPersistTaps="handled"
       contentContainerStyle={[styles.content, contentContainerStyle]}
     >
       {children}
