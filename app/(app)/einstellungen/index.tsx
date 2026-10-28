@@ -24,7 +24,7 @@ import { requestDataExport, getDataExport, requestDeletion } from '../../../lib/
 import { ApiError } from '../../../lib/api/client';
 import { einwilligungWiderrufen, ladeEinwilligungsToken, vergesseEinwilligungsToken } from '../../../lib/einwilligung';
 import { D, durations } from '@sanime/design-system';
-import { pushAbmelden } from '../../../lib/push';
+import { pushAbmelden, pushEinstellungen } from '../../../lib/push';
 
 const NICHT_ZUGEORDNET_HINWEIS =
   'Diese Funktion ist nur für erkannte Kunden verfügbar. Scanne deine Krankenkassenkarte, damit wir dich zuordnen können.';
@@ -270,8 +270,7 @@ export default function EinstellungenScreen() {
             <SettingsGruppe
               titel="Benachrichtigungen"
               items={[
-                { icon: 'bell', label: 'Push-Benachrichtigungen', onPress: () => {} },
-                { icon: 'mail', label: 'E-Mail-Benachrichtigungen', onPress: () => {} },
+                { icon: 'bell', label: 'Push-Benachrichtigungen', onPress: () => pushEinstellungen(!!benutzer) },
               ]}
             />
           </Animated.View>

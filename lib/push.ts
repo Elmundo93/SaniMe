@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Alert, Linking, Platform } from 'react-native';
 import { requireOptionalNativeModule } from 'expo';
 import { useRouter } from 'expo-router';
 import { request } from './api/client';
@@ -60,6 +60,34 @@ export async function pushNachBestellungAnbieten(): Promise<void> {
   if (!zustimmen) return;
   const ergebnis = await push.requestPermissionsAsync();
   if (ergebnis.status === 'granted') await registrieren();
+}
+
+// Einstellungen → Push-Benachrichtigungen: Stand zeigen und den nächsten
+// sinnvollen Schritt anbieten (erlauben bzw. in den iOS-Einstellungen ändern —
+// einmal abgelehnt, kann nur noch das System die Erlaubnis erteilen).
+export async function pushEinstellungen(istKunde: boolean): Promise<void> {
+  if (!push) {
+    Alert.alert('Benachrichtigungen', 'Diese App-Version kann noch keine Benachrichtigungen empfangen.');
+    return;
+  }
+  const { status, canAskAgain } = await push.getPermissionsAsync();
+  if (status === 'granted') {
+    Alert.alert('Benachrichtigungen sind an', 'Wir melden uns, wenn es Neuigkeiten zu deiner Versorgung gibt. Ausschalten kannst du sie in den iOS-Einstellungen.', [
+      { text: 'OK', style: 'cancel' },
+      { text: 'iOS-Einstellungen', onPress: () => Linking.openSettings() },
+    ]);
+    if (istKunde) await registrieren();
+    return;
+  }
+  if (!canAskAgain) {
+    Alert.alert('Benachrichtigungen sind aus', 'Du kannst sie in den iOS-Einstellungen für SaniMe einschalten.', [
+      { text: 'Abbrechen', style: 'cancel' },
+      { text: 'iOS-Einstellungen', onPress: () => Linking.openSettings() },
+    ]);
+    return;
+  }
+  const ergebnis = await push.requestPermissionsAsync();
+  if (ergebnis.status === 'granted' && istKunde) await registrieren();
 }
 
 // Beim App-Start eines bekannten Kunden: Tokens können sich ändern.
