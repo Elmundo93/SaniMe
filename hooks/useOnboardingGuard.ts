@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useRouter } from 'expo-router';
+import { useIsFocused, useRouter } from 'expo-router';
 import { useOnboardingStore, STATUS_META } from '../store/onboardingStore';
 import type { OnboardingSession, OnboardingStatus } from '@sanime/domain';
 
@@ -32,10 +32,16 @@ export function useOnboardingGuard(
   const session = useOnboardingStore((s) => s.session);
   const isLoading = useOnboardingStore((s) => s.isLoading);
   const router = useRouter();
+  const fokussiert = useIsFocused();
   const erlaubt = Array.isArray(expected) ? expected : [expected];
 
   useEffect(() => {
-    if (isLoading) return;
+    // Nur der sichtbare Screen leitet um. Die Scan-Screens bleiben unter dem
+    // aktuellen im Stack gemountet — ohne diese Bedingung sah z.B. die
+    // Rezeptaufnahme nach jedem Statuswechsel und jeder Feldkorrektur
+    // „falscher Status“ und ersetzte den sichtbaren Screen erneut (Seite
+    // öffnete doppelt, Layout sprang bei jeder Eingabe).
+    if (isLoading || !fokussiert) return;
     if (!session) {
       router.replace('/onboarding');
       return;
@@ -49,7 +55,7 @@ export function useOnboardingGuard(
       router.replace(fehlendeRoute as any);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, session?.status, session?.ocrResult]);
+  }, [isLoading, fokussiert, session?.status, session?.ocrResult]);
 
   const pflichtfelderVorhanden = !session || !fehlendesPflichtfeldRoute(session, options);
 
