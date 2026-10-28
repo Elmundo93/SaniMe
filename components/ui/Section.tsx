@@ -52,11 +52,14 @@ export function Section({
       <View style={styles.headerRightRow}>
         {headerRight}
         {aktionLabel && onAktion && (
+          // Volle 44×44-Touchfläche (der Text allein ist ~16 pt hoch); der negative
+          // Rand hält die Kopfzeile trotzdem so flach wie vorher. Der Name enthält
+          // das sichtbare Wort („Termin ändern“), damit Sprachsteuerung ihn findet.
           <TouchableOpacity
             onPress={onAktion}
-            hitSlop={8}
+            style={styles.aktionFlaeche}
             accessibilityRole="button"
-            accessibilityLabel={`${titel} bearbeiten`}
+            accessibilityLabel={`${titel} ${aktionLabel.toLocaleLowerCase('de-DE')}`}
           >
             <Text style={styles.aktion}>{aktionLabel}</Text>
           </TouchableOpacity>
@@ -123,6 +126,15 @@ const styles = StyleSheet.create({
     color: D.color.inkTertiary,
     textTransform: 'uppercase',
     letterSpacing: 0.9,
+  },
+  aktionFlaeche: {
+    minHeight: 44,
+    minWidth: 44,
+    marginVertical: -14,
+    paddingHorizontal: 8,
+    marginRight: -8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   aktion: {
     fontSize: D.font.sm,
