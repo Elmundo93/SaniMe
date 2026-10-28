@@ -1,5 +1,6 @@
 import { BEDARF_KATALOG, type Bedarf } from './bedarf';
 import { KRANKHEITSBILD_KATALOG } from './krankheitsbild';
+import type { Produkt } from './types';
 
 // Discovery Engine, Ebene 1: deterministische, pure Funktionen — von der App
 // (on-device Vorschläge, Sprach-Abgleich) und vom Backend (Query-Expansion für
@@ -130,6 +131,58 @@ export function findeHilfe(text: string): HilfeTreffer[] {
     .sort((a, b) => b.anzahl - a.anzahl)
     .map<HilfeTreffer>(({ kb }) => ({ typ: 'krankheitsbild', id: kb.id, titel: kb.bezeichnung, icon: kb.icon }));
   return [...bedarfe, ...krankheitsbilder];
+}
+
+// ─── Verordnung → passende Versorgungen ─────────────────────────────────────
+
+// Floskeln des Verordnungstexts, die nichts über das Hilfsmittel sagen.
+const VERORDNUNGS_FLOSKELN = new Set([
+  'nach', 'genehmigung', 'gkv', 'kasse', 'krankenkasse', 'verordnung', 'versorgung', 'hilfsmittel',
+  'stueck', 'stk', 'paar', 'neu', 'neuversorgung', 'folgeversorgung', 'ersatz',
+]);
+// Deutsche Komposita: „Gehstock“ soll „Unterarmgehstützen“ finden. Ab dieser
+// Länge zählt auch der Wortanfang eines eigenen Begriffs (nicht der Synonyme).
+const STAMM_LAENGE = 5;
+// Ein einzelner Synonym-Treffer im Beschreibungstext (1 Punkt, z.B. „Stockhalter“
+// beim Rollator für „Gehstock“) reicht nicht für „passend“.
+const MIN_PUNKTE = 2;
+
+interface Treffer {
+  produkt: Produkt;
+  punkte: number;
+  index: number;
+}
+
+function bewerte(produkt: Produkt, eigene: string[], synonyme: string[]): number {
+  const name = normalisiere(produkt.name);
+  const kategorie = normalisiere(produkt.kategorie);
+  const text = normalisiere([produkt.kurzbeschreibung ?? '', produkt.beschreibung, ...produkt.merkmale].join(' '));
+  let punkte = 0;
+  for (const begriff of [...eigene, ...synonyme]) {
+    const stamm = eigene.includes(begriff) && begriff.length > STAMM_LAENGE + 1 ? begriff.slice(0, STAMM_LAENGE) : null;
+    if (name.includes(begriff)) punkte += 4;
+    else if (stamm && name.includes(stamm)) punkte += 2;
+    else if (kategorie.includes(begriff)) punkte += 3;
+    else if (stamm && kategorie.includes(stamm)) punkte += 1;
+    else if (text.includes(begriff)) punkte += 1;
+  }
+  return punkte;
+}
+
+/** Teilt die Versorgungen in die zum Verordnungstext passenden (nach Relevanz,
+ * bei Gleichstand in Katalogreihenfolge) und die übrigen. Nur eine Sortierhilfe
+ * für die Auswahl — nie eine automatische Entscheidung, der Nutzer wählt selbst. */
+export function rankeNachVerordnung(produkte: Produkt[], verordnung: string): { passend: Produkt[]; weitere: Produkt[] } {
+  const eigene = suchwoerter(verordnung).filter((w) => !VERORDNUNGS_FLOSKELN.has(w) && !/^\d+x?$/.test(w));
+  const synonyme = erweitereSuchbegriffe(eigene.join(' ')).filter((b) => !eigene.includes(b));
+  if (eigene.length === 0) return { passend: [], weitere: produkte };
+
+  const bewertet: Treffer[] = produkte.map((produkt, index) => ({ produkt, punkte: bewerte(produkt, eigene, synonyme), index }));
+  const passend = bewertet
+    .filter((t) => t.punkte >= MIN_PUNKTE)
+    .sort((a, b) => b.punkte - a.punkte || a.index - b.index)
+    .map((t) => t.produkt);
+  return { passend, weitere: produkte.filter((p) => !passend.includes(p)) };
 }
 
 // ─── Vorschläge & Tippfehler ────────────────────────────────────────────────

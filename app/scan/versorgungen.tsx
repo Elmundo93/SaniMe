@@ -22,16 +22,23 @@ import { ScanSchrittZaehler } from '../../components/onboarding/ScanSchrittZaehl
 import { useWarenkorbStore } from '../../store/warenkorbStore';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '@sanime/design-system';
+import { rankeNachVerordnung, type Produkt } from '@sanime/domain';
 
 export default function VersorgungsauswahlScreen() {
   const router = useRouter();
   const { session, ready } = useOnboardingGuard('VERSORGUNGSAUSWAHL');
   const dispatch = useOnboardingStore((s) => s.dispatch);
 
-  // Liegt ein passender Kassenartikel schon im Warenkorb, ist er vorausgewählt.
+  // Liegt ein passender Kassenartikel schon im Warenkorb, ist er vorausgewählt —
+  // aber nur, wenn seine Position noch kein Rezept hat: sonst würde das neue
+  // Rezept dessen Rezept still ersetzen (SUPPLY_AUSGEWAEHLT überschreibt).
   const imWarenkorb = useWarenkorbStore((s) => s.artikel);
   const [ausgewähltId, setAusgewähltId] = useState<string | null>(
-    session?.verfügbareProdukte.find((p) => imWarenkorb.some((a) => a.produktId === p.id))?.id ?? null,
+    session?.verfügbareProdukte.find(
+      (p) =>
+        imWarenkorb.some((a) => a.produktId === p.id) &&
+        !session.positionen.some((pos) => pos.produkt.id === p.id && pos.rezept),
+    )?.id ?? null,
   );
   const [loading, setLoading] = useState(false);
 
@@ -39,7 +46,19 @@ export default function VersorgungsauswahlScreen() {
 
   const produkte = session.verfügbareProdukte;
   const ocrResult = session.ocrResult;
+  // Zum Verordnungstext passende Versorgungen zuerst — nur Sortierhilfe, keine Vorauswahl.
+  const { passend, weitere } = rankeNachVerordnung(produkte, ocrResult?.hilfsmittel ?? '');
   const ausgewählt = produkte.find((p) => p.id === ausgewähltId);
+
+  const karte = (produkt: Produkt, index: number) => (
+    <ProduktKarte
+      key={produkt.id}
+      produkt={produkt}
+      index={index}
+      ausgewählt={produkt.id === ausgewähltId}
+      onAuswählen={() => setAusgewähltId(produkt.id)}
+    />
+  );
 
   const handleZurück = async () => {
     const result = await dispatch({ type: 'ZURUECK' });
@@ -90,21 +109,25 @@ export default function VersorgungsauswahlScreen() {
             </View>
           </Animated.View>
 
-          <Animated.View entering={einblenden(140)}>
-            <Text style={styles.produkteAnzahl}>
-              {produkte.length} passende Versorgung{produkte.length !== 1 ? 'en' : ''} gefunden
-            </Text>
-          </Animated.View>
+          {passend.length > 0 && (
+            <Animated.View entering={einblenden(140)}>
+              <Text style={styles.produkteAnzahl} accessibilityRole="header">
+                Passend zu deiner Verordnung ({passend.length})
+              </Text>
+            </Animated.View>
+          )}
+          {passend.map((produkt, i) => karte(produkt, i))}
 
-          {produkte.map((produkt, i) => (
-            <ProduktKarte
-              key={produkt.id}
-              produkt={produkt}
-              index={i}
-              ausgewählt={produkt.id === ausgewähltId}
-              onAuswählen={() => setAusgewähltId(produkt.id)}
-            />
-          ))}
+          {weitere.length > 0 && (
+            <Animated.View entering={einblenden(140)}>
+              <Text style={styles.produkteAnzahl} accessibilityRole="header">
+                {passend.length > 0
+                  ? `Weitere Versorgungen (${weitere.length})`
+                  : `${weitere.length} Versorgung${weitere.length !== 1 ? 'en' : ''} zur Auswahl`}
+              </Text>
+            </Animated.View>
+          )}
+          {weitere.map((produkt, i) => karte(produkt, passend.length + i))}
 
           <Animated.View entering={einblenden(500)}>
             <View style={styles.hinweisBox}>

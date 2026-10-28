@@ -3,12 +3,14 @@ import {
   findeBedarfe,
   findeHilfe,
   normalisiere,
+  rankeNachVerordnung,
   schlageVor,
   schreibvorschlag,
   suchwoerter,
 } from './katalogSuche';
 import { BEDARF_KATALOG, findeBedarf } from './bedarf';
 import { KATALOG_FILTER, filterChipLabel, pruefeFilter } from './katalogFilter';
+import type { Produkt } from './types';
 
 describe('normalisiere', () => {
   it('lowercases, spells out umlauts and strips punctuation', () => {
@@ -124,5 +126,33 @@ describe('pruefeFilter', () => {
     expect(filterChipLabel(einsatzort, 'aussen')).toBe('Draußen');
     expect(filterChipLabel(gewicht, '8')).toBe('bis 8 kg');
     expect(filterChipLabel(belastbarkeit, '130')).toBe('mind. 130 kg');
+  });
+});
+
+describe('rankeNachVerordnung', () => {
+  function produkt(id: string, name: string, kategorie: string, beschreibung = ''): Produkt {
+    return { id, name, hersteller: 'H', hilfsmittelNr: '00.00.00.0001', beschreibung, eigenanteil: 10, lieferzeit: '3 Werktage', kategorie, merkmale: [] };
+  }
+  const ROLLATOR = produkt('rollator', 'Leichtgewicht-Rollator Alu', 'Rollatoren', 'Faltbar, mit Stockhalter-Aufnahme.');
+  const ROLLSTUHL = produkt('rollstuhl', 'Rollstuhl Aktiv SB 40', 'Rollstühle');
+  const STUETZEN = produkt('stuetzen', 'Unterarmgehstützen-Paar', 'Gehhilfen', 'Paar Unterarmgehstützen mit anatomischem Griff.');
+  const STRUEMPFE = produkt('struempfe', 'Kompressionsstrümpfe Klasse 2', 'Kompression');
+  const KATALOG = [ROLLATOR, ROLLSTUHL, STUETZEN, STRUEMPFE];
+
+  it('stellt bei „Gehstock“ die Gehstützen nach vorn — über den Wortstamm im Kompositum', () => {
+    const { passend, weitere } = rankeNachVerordnung(KATALOG, '1x Gehstock mit ergonomischen Handgriff, nach Genehmigung der GKV');
+    expect(passend.map((p) => p.id)).toEqual(['stuetzen']);
+    // Nur ein Synonym im Beschreibungstext („Stockhalter“) reicht nicht.
+    expect(weitere.map((p) => p.id)).toEqual(['rollator', 'rollstuhl', 'struempfe']);
+  });
+
+  it('findet Produkte über Synonyme und Umlaut-Schreibweisen', () => {
+    expect(rankeNachVerordnung(KATALOG, 'Gehwagen mit Sitz').passend.map((p) => p.id)).toEqual(['rollator']);
+    expect(rankeNachVerordnung(KATALOG, 'Kompressionsstruempfe KKL 2').passend.map((p) => p.id)).toEqual(['struempfe']);
+  });
+
+  it('lässt die Reihenfolge unverändert, wenn der Text nichts Verwertbares enthält', () => {
+    expect(rankeNachVerordnung(KATALOG, '1x nach Genehmigung der GKV')).toEqual({ passend: [], weitere: KATALOG });
+    expect(rankeNachVerordnung(KATALOG, '')).toEqual({ passend: [], weitere: KATALOG });
   });
 });
