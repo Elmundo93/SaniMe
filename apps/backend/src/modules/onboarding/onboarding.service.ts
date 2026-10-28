@@ -477,8 +477,12 @@ export class OnboardingService {
     if (!telefonVerifiziert(session)) {
       throw new BadRequestException('Telefonnummer ist noch nicht bestätigt');
     }
+    // Die Bestätigung entfällt nur für einen erkannten Kunden, von dem wir schon
+    // eine Telefonnummer haben — wer per Rezept/Karte erkannt wurde, aber nie
+    // eine Nummer hinterlegt hat, muss sie jetzt angeben (Rückruf, Notfall).
     const bekannt = await this.customers.istBekannterBesteller(tenant, row.customerId, session.krankenkasse?.versichertenNr ?? '');
-    if (!bekannt && !(session.customerContact.telefon && session.customerContact.telefonVerifiziert)) {
+    const telefonBekannt = bekannt && !!(await this.customers.findById(tenant, row.customerId!))?.phone;
+    if (!telefonBekannt && !(session.customerContact.telefon && session.customerContact.telefonVerifiziert)) {
       throw new BadRequestException(TELEFON_BESTAETIGEN);
     }
   }

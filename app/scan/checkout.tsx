@@ -123,7 +123,11 @@ export default function CheckoutScreen() {
 
   if (!ready || !session) return <OnboardingLoadingView />;
 
-  const bereitsEingeloggt = bestelltFuerSichSelbst(!!benutzer, benutzer?.versichertenNr, session.krankenkasse?.versichertenNr);
+  // Kontaktschritt entfällt nur, wenn der erkannte Kunde schon eine Nummer
+  // hinterlegt hat — per Rezept/Karte erkannt heißt nicht „Telefon bekannt“.
+  // Spiegelt OnboardingService.pruefeKontakt.
+  const bereitsEingeloggt =
+    bestelltFuerSichSelbst(!!benutzer, benutzer?.versichertenNr, session.krankenkasse?.versichertenNr) && !!benutzer?.telefon;
   const zahlungFaellig = zahlungBeimCheckoutFaellig(session);
   const betragJetzt = betragBeimCheckoutEuro(session);
   const zuzahlungSpaeter = voraussichtlicheZuzahlungEuro(session);

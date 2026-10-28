@@ -665,6 +665,37 @@ describe('Onboarding Warenkorb (e2e)', () => {
     expect(current.body.versorgungId).toBeNull();
   });
 
+  it('fragt einen per Rezept erkannten Kunden ohne Telefonnummer danach und hinterlegt Telefon und E-Mail', async () => {
+    const db = app.get<Database>(DRIZZLE);
+    const nr = `G${String(Date.now()).slice(-9)}`;
+    const [kunde] = await db
+      .insert(customers)
+      .values({ organizationId: DEFAULT_ORGANIZATION_ID, firstName: 'Ohne', lastName: 'Telefon', insuredNumber: nr })
+      .returning();
+
+    const { auth, patchEvent, complete } = await neueSessionMitConsent();
+    await request(app.getHttpServer()).post('/api/v1/customers/match').set('Authorization', auth).send({ insuredNumber: nr }).expect(201);
+    await patchEvent({ type: 'WEITER' }).expect(200);
+    const scan = rezeptScan('Rollator');
+    await patchEvent({ ...scan, result: { ...scan.result, krankenkasse: { name: 'AOK Niedersachsen', versichertenNr: nr } } }).expect(200);
+    await patchEvent({ type: 'WEITER_KRANKENKASSE_BEKANNT' }).expect(200);
+    const res = await patchEvent({ type: 'WEITER' }).expect(200);
+    await patchEvent({ type: 'SUPPLY_AUSGEWAEHLT', produkt: res.body.session.verfügbareProdukte[0] }).expect(200);
+
+    // Erkannt, aber ohne hinterlegte Nummer → Bestätigung ist Pflicht.
+    const ohneTelefon = await complete().expect(400);
+    expect(ohneTelefon.body.message).toContain('Telefonnummer');
+
+    const telefon = testTelefon();
+    const kontakt = await patchEvent({ type: 'KONTAKT_ERFASST', email: 'ohne.telefon@example.org', telefon }).expect(200);
+    await patchEvent({ type: 'OTP_VERIFIZIERT' }, kontakt.body.devCode).expect(200);
+    await complete().expect(201);
+
+    const [danach] = await db.select().from(customers).where(eq(customers.id, kunde.id));
+    expect(danach.phone).toBeTruthy();
+    expect(danach.email).toBe('ohne.telefon@example.org');
+  });
+
   it('verlangt die Telefonbestätigung, wenn ein erkannter Kunde für eine andere Person bestellt — die Versorgung gehört dieser Person', async () => {
     const db = app.get<Database>(DRIZZLE);
     const eigeneNr = `E${String(Date.now()).slice(-9)}`;

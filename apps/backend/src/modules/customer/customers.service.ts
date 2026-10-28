@@ -75,6 +75,14 @@ export class CustomersService {
         }));
       customerId = kunde.id;
       await this.claimPort.claimSession(daten.sessionId, customerId);
+    } else {
+      // Erkannter Kunde: Telefon/E-Mail aus dieser Bestellung füllen nur Lücken —
+      // eine hinterlegte Nummer wird nie still überschrieben.
+      const kunde = await this.customers.findById(tenant, customerId);
+      const patch: { phone?: string; email?: string } = {};
+      if (kunde && !kunde.phone && daten.telefon) patch.phone = daten.telefon;
+      if (kunde && !kunde.email && daten.email) patch.email = daten.email;
+      if (Object.keys(patch).length > 0) await this.customers.update(tenant, customerId, patch);
     }
 
     if (!daten.adresse?.strasse || !daten.adresse.plz) return { customerId, addressId: null };

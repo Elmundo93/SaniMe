@@ -376,6 +376,9 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
       if (!bestehender.email && session.customerContact.email) {
         patch.email = session.customerContact.email;
       }
+      if (!bestehender.telefon && session.customerContact.telefon) {
+        patch.telefon = session.customerContact.telefon;
+      }
       if (!bestehender.krankenkasse && session.krankenkasse?.name) {
         patch.krankenkasse = session.krankenkasse.name;
       }
