@@ -36,6 +36,17 @@ export class CustomersService {
     return { customer, addresses };
   }
 
+  // Die Session gehört schon einem Kunden und die Bestellung ist für ihn selbst
+  // (gleiche oder keine Versichertennummer). Nur dann entfällt die
+  // Telefonbestätigung an der Kasse — eine neue Person braucht eine bestätigte
+  // Nummer (Rückruf bei Notfall, Rückfragen zur Versorgung).
+  async istBekannterBesteller(tenant: TenantContext, customerId: string | null, versichertenNr: string): Promise<boolean> {
+    if (!customerId) return false;
+    if (!normNr(versichertenNr)) return true;
+    const kunde = await this.customers.findById(tenant, customerId);
+    return !!kunde && (!normNr(kunde.insuredNumber) || normNr(kunde.insuredNumber) === normNr(versichertenNr));
+  }
+
   findById(tenant: TenantContext, id: string) {
     return this.customers.findById(tenant, id);
   }
@@ -47,7 +58,10 @@ export class CustomersService {
   // Versichertennummer ordnet dem bestehenden Kunden zu, sonst entsteht ein
   // neuer. Die Rezeptadresse wird zur (Liefer-)Adresse des Kunden.
   async uebernehmeAusBestellung(tenant: TenantContext, daten: KundeAusBestellung): Promise<{ customerId: string; addressId: string | null }> {
-    let customerId = daten.customerId;
+    // Bestellt ein erkannter Kunde für eine andere versicherte Person (andere
+    // Versichertennummer), gehört die Versorgung dieser Person — nicht dem
+    // Besteller. Die Session wandert zu ihr, wie die Anzeige in der App.
+    let customerId = (await this.istBekannterBesteller(tenant, daten.customerId, daten.versichertenNr)) ? daten.customerId : null;
     if (!customerId) {
       const bekannt = await this.customers.findByInsuredNumber(tenant, daten.versichertenNr);
       const kunde =
@@ -72,6 +86,10 @@ export class CustomersService {
     const neu = await this.addresses.create({ customerId, ...daten.adresse, isDefault: vorhanden.length === 0 });
     return { customerId, addressId: neu.id };
   }
+}
+
+function normNr(nr: string | null | undefined): string {
+  return (nr ?? '').replace(/\s+/g, '').toUpperCase();
 }
 
 function normAdresse(strasse: string): string {

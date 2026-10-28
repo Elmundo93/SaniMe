@@ -38,6 +38,7 @@ import { createPaymentIntent, devZahlungSimulieren } from '../../lib/api/onboard
 import { resolveStripePublishableKey } from '../../lib/api/config';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { pushNachBestellungAnbieten } from '../../lib/push';
+import { bestelltFuerSichSelbst } from '../../lib/besteller';
 import { formatEuro, anzahlText } from '../../lib/katalogAnzeige';
 import { gleicheProdukte, warenkorbAbgleich } from '../../lib/warenkorb';
 import { D } from '@sanime/design-system';
@@ -79,7 +80,9 @@ export default function CheckoutScreen() {
   const dispatch = useOnboardingStore((s) => s.dispatch);
   const einreichen = useOnboardingStore((s) => s.einreichen);
   const abschliessen = useOnboardingStore((s) => s.abschliessen);
-  const bereitsEingeloggt = useAuthStore((s) => !!s.benutzer);
+  // Nur wer für sich selbst bestellt, überspringt die Telefonbestätigung —
+  // dieselbe Regel prüft der Server (CustomersService.istBekannterBesteller).
+  const benutzer = useAuthStore((s) => s.benutzer);
   // Vorab im Profil eingetragene Kontaktdaten vorbelegen (bleiben editierbar).
   const vorabProfil = useAuthStore((s) => s.vorabProfil);
   const otpFlow = useOtpVerification(dispatch, vorabProfil?.telefon ?? '');
@@ -116,6 +119,7 @@ export default function CheckoutScreen() {
 
   if (!ready || !session) return <OnboardingLoadingView />;
 
+  const bereitsEingeloggt = bestelltFuerSichSelbst(!!benutzer, benutzer?.versichertenNr, session.krankenkasse?.versichertenNr);
   const zahlungFaellig = zahlungBeimCheckoutFaellig(session);
   const betragJetzt = betragBeimCheckoutEuro(session);
   const zuzahlungSpaeter = voraussichtlicheZuzahlungEuro(session);
@@ -229,7 +233,7 @@ export default function CheckoutScreen() {
     const result = await einreichen();
     if (!result.ok) {
       setZahlungLäuft(false);
-      zeigeDispatchFehler();
+      if (!telefonBestaetigenStatt(result.reason)) zeigeDispatchFehler();
       return;
     }
     await zumDashboard();
@@ -297,11 +301,19 @@ export default function CheckoutScreen() {
 
       setZahlungsHinweis('Zahlung wird bestätigt…');
       await wartenAufAbschluss();
-    } catch {
+    } catch (e) {
       setZahlungLäuft(false);
       setZahlungsHinweis(null);
-      zeigeDispatchFehler();
+      if (!telefonBestaetigenStatt(e instanceof Error ? e.message : undefined)) zeigeDispatchFehler();
     }
+  };
+
+  // Verlangt der Server eine bestätigte Nummer (neue Person), direkt dorthin
+  // statt einer allgemeinen Fehlermeldung.
+  const telefonBestaetigenStatt = (grund: string | undefined): boolean => {
+    if (!grund?.includes('Telefonnummer')) return false;
+    setSubstep('kontakt');
+    return true;
   };
 
   // Polls the backend's own session state — never assumes success from

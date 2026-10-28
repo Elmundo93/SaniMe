@@ -40,6 +40,9 @@ import type { InsurancePolicy, NewOcrResultRow, OnboardingSessionRow } from '../
 
 const VERIFICATION_PURPOSE = 'onboarding_phone';
 
+// Die App erkennt diese Meldung und führt zur Telefonbestätigung.
+export const TELEFON_BESTAETIGEN = 'Bitte bestätige deine Telefonnummer, um die Bestellung abzuschließen.';
+
 @Injectable()
 export class OnboardingService {
   constructor(
@@ -109,9 +112,7 @@ export class OnboardingService {
     if (domainSession.status !== 'CHECKOUT' && domainSession.status !== 'CHECKOUT_FEHLGESCHLAGEN') {
       throw new BadRequestException('Zahlung ist in diesem Status nicht möglich');
     }
-    if (!telefonVerifiziert(domainSession)) {
-      throw new BadRequestException('Telefonnummer ist noch nicht bestätigt');
-    }
+    await this.pruefeKontakt(tenant, row, domainSession);
     // Kassenartikel werden ohne Zahlung eingereicht — die gesetzliche
     // Zuzahlung zieht der Leistungserbringer später ein (siehe
     // zahlungBeimCheckoutFaellig in @sanime/domain).
@@ -315,6 +316,8 @@ export class OnboardingService {
       throw new BadRequestException(result.reason);
     }
 
+    await this.pruefeKontakt(tenant, row, domainSession);
+
     // Ohne Kunden sähe der Besteller seine Versorgung nie (GET /supplies
     // verlangt eine zugeordnete Session) und es gäbe keine Lieferadresse.
     const rezeptMitPerson = domainSession.positionen.find((p) => p.rezept?.patient.name)?.rezept ?? null;
@@ -399,6 +402,19 @@ export class OnboardingService {
     });
 
     return { supplyId: supplyIds[0], supplyIds };
+  }
+
+  // Neue Person (Neukunde oder Bestellung für eine andere Versichertennummer)
+  // → bestätigte Telefonnummer nötig. Vorher reichte „keine Nummer angegeben“,
+  // und die App übersprang die Bestätigung für jeden schon erkannten Nutzer.
+  private async pruefeKontakt(tenant: TenantContext, row: OnboardingSessionRow, session: OnboardingSession) {
+    if (!telefonVerifiziert(session)) {
+      throw new BadRequestException('Telefonnummer ist noch nicht bestätigt');
+    }
+    const bekannt = await this.customers.istBekannterBesteller(tenant, row.customerId, session.krankenkasse?.versichertenNr ?? '');
+    if (!bekannt && !(session.customerContact.telefon && session.customerContact.telefonVerifiziert)) {
+      throw new BadRequestException(TELEFON_BESTAETIGEN);
+    }
   }
 
   private async getRowOrThrow(tenant: TenantContext, sessionId: string): Promise<OnboardingSessionRow> {

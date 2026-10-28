@@ -11,6 +11,7 @@ import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { useOnboardingStore } from '../../store/onboardingStore';
 import { selectProfil, useAuthStore } from '../../store/authStore';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
+import { bestelltFuerSichSelbst } from '../../lib/besteller';
 
 // Notfalllieferung an der Kasse: kein eigener Schritt der Bestellung, nur ein
 // Vermerk (NOTFALL_ANGEFRAGT) — nach dem Absenden ruft unser Team an.
@@ -18,13 +19,14 @@ export default function CheckoutNotfallScreen() {
   const router = useRouter();
   const { session, ready } = useOnboardingGuard('CHECKOUT');
   const dispatch = useOnboardingStore((s) => s.dispatch);
-  // Ein bekannter Kunde überspringt die Telefonbestätigung der Kasse — er
-  // nennt die Rückrufnummer hier; ein Neukunde bestätigt sie gleich danach.
-  const bekannt = useAuthStore((s) => !!s.benutzer);
+  // Wer für sich selbst bestellt, überspringt die Telefonbestätigung der
+  // Kasse — er nennt die Rückrufnummer hier; alle anderen bestätigen sie danach.
+  const benutzer = useAuthStore((s) => s.benutzer);
   const telefon = useAuthStore((s) => selectProfil(s)?.telefon ?? '');
   const [laedt, setLaedt] = useState(false);
 
   if (!ready || !session) return <OnboardingLoadingView />;
+  const bekannt = bestelltFuerSichSelbst(!!benutzer, benutzer?.versichertenNr, session.krankenkasse?.versichertenNr);
 
   const absenden = async (notfall: NotfallAnfrage) => {
     setLaedt(true);

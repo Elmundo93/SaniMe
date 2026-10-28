@@ -9,7 +9,7 @@ import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
 import { DRIZZLE, type Database } from '../src/db/client';
 import { AGB_VERSION, DATENSCHUTZ_VERSION } from '@sanime/domain';
-import { auditEntries, consentGrants, consents, customerAddresses, notifications, orders } from '../src/db/schema';
+import { auditEntries, consentGrants, consents, customerAddresses, customers, notifications, onboardingSessions, orders, supplies } from '../src/db/schema';
 import { SupplyOrderService } from '../src/modules/supply-order/supply-order.service';
 import { DEFAULT_ORGANIZATION_ID, DEFAULT_TENANT_CONTEXT } from '../src/common/repository/tenant-context';
 
@@ -582,6 +582,40 @@ describe('Onboarding Warenkorb (e2e)', () => {
     const current = await request(app.getHttpServer()).get('/api/v1/onboarding-sessions/current').set('Authorization', auth).expect(200);
     expect(current.body.status).toBe('CHECKOUT');
     expect(current.body.versorgungId).toBeNull();
+  });
+
+  it('verlangt die Telefonbestätigung, wenn ein erkannter Kunde für eine andere Person bestellt — die Versorgung gehört dieser Person', async () => {
+    const db = app.get<Database>(DRIZZLE);
+    const eigeneNr = `E${String(Date.now()).slice(-9)}`;
+    const andereNr = `F${String(Date.now()).slice(-9)}`;
+    const [besteller] = await db
+      .insert(customers)
+      .values({ organizationId: DEFAULT_ORGANIZATION_ID, firstName: 'Test', lastName: 'Besteller', insuredNumber: eigeneNr })
+      .returning();
+
+    const { sessionId, auth, patchEvent, complete } = await neueSessionMitConsent();
+    // Wiedererkannt per Kartenabgleich — die Session gehört jetzt dem Besteller.
+    await request(app.getHttpServer()).post('/api/v1/customers/match').set('Authorization', auth).send({ insuredNumber: eigeneNr }).expect(201);
+
+    await patchEvent({ type: 'WEITER' }).expect(200);
+    const scan = rezeptScan('Rollator');
+    await patchEvent({ ...scan, result: { ...scan.result, krankenkasse: { name: 'AOK Niedersachsen', versichertenNr: andereNr } } }).expect(200);
+    await patchEvent({ type: 'WEITER_KRANKENKASSE_BEKANNT' }).expect(200);
+    const res = await patchEvent({ type: 'WEITER' }).expect(200);
+    await patchEvent({ type: 'SUPPLY_AUSGEWAEHLT', produkt: res.body.session.verfügbareProdukte[0] }).expect(200);
+
+    const ohneTelefon = await complete().expect(400);
+    expect(ohneTelefon.body.message).toContain('Telefonnummer');
+
+    await kontakt(patchEvent, '+491511234572');
+    const done = await complete().expect(201);
+
+    const [supply] = await db.select().from(supplies).where(eq(supplies.id, done.body.supplyId));
+    expect(supply.customerId).not.toBe(besteller.id);
+    const [person] = await db.select().from(customers).where(eq(customers.id, supply.customerId!));
+    expect(person.insuredNumber).toBe(andereNr);
+    const [session] = await db.select().from(onboardingSessions).where(eq(onboardingSessions.id, sessionId));
+    expect(session.customerId).toBe(person.id);
   });
 
   it('kauft einen Kassenartikel ohne Rezept zum Selbstzahlerpreis — nur über die Zahlung abschließbar', async () => {
