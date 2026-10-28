@@ -52,6 +52,6 @@ describe('Notfalllieferung', () => {
     expect(notfallMoeglich({ ...BASIS, status: 'DELIVERED' })).toBe(false);
     const angefragt = { ...BASIS, notfall: { grund: 'STURZGEFAHR' as const, erreichbarkeit: 'VORMITTAG' as const, angefragtAm: '2026-10-02T10:00:00Z' } };
     expect(notfallMoeglich(angefragt)).toBe(false);
-    expect(notfallText(angefragt)).toContain('vormittags');
+    expect(notfallText(angefragt)).toContain('Wir rufen dich vormittags zwischen 8 und 12 Uhr an');
   });
 });

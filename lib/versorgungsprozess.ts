@@ -1,4 +1,4 @@
-import { ERREICHBARKEITEN, erwarteteAntwortBis, GENEHMIGUNGSFRIST_MIT_GUTACHTEN_TAGE } from '@sanime/domain';
+import { erwarteteAntwortBis, GENEHMIGUNGSFRIST_MIT_GUTACHTEN_TAGE, type Erreichbarkeit } from '@sanime/domain';
 import type { Versorgung } from '../types';
 
 // „Wie geht es weiter?“ einer Versorgung — ein Satz zum Stand, was als
@@ -83,7 +83,13 @@ export function notfallMoeglich(v: Versorgung): boolean {
   return !v.notfall && ['PENDING_REVIEW', 'PENDING_INSURANCE', 'APPROVED', 'PROCESSING'].includes(v.status);
 }
 
+const ANRUF_ZEIT: Record<Erreichbarkeit, string> = {
+  VORMITTAG: 'vormittags zwischen 8 und 12 Uhr',
+  NACHMITTAG: 'nachmittags zwischen 12 und 18 Uhr',
+  GANZTAGS: 'so bald wie möglich',
+};
+
 export function notfallText(v: Versorgung): string | null {
   if (!v.notfall) return null;
-  return `Du hast eine Notfalllieferung angefragt. Wir rufen dich an (${ERREICHBARKEITEN[v.notfall.erreichbarkeit].toLowerCase()}) und klären, wie wir dich schneller versorgen können.`;
+  return `Du hast eine Notfalllieferung angefragt. Wir rufen dich ${ANRUF_ZEIT[v.notfall.erreichbarkeit]} an und klären, wie wir dich schneller versorgen können.`;
 }
