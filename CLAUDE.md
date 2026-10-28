@@ -41,7 +41,7 @@ Always run `npm run typecheck` and `npm run lint` after app changes; also run `n
 ```bash
 npm run backend:dev          # node --watch ts-node — NOT `nest start`/`nest build`, see the gotcha below
 npm run backend:typecheck    # tsc --noEmit -p tsconfig.build.json
-npm run backend:lint         # eslint "{src,test}/**/*.ts"
+npm run backend:lint         # eslint "{src,test}/**/*.ts" — needs globby@11 as a devDependency (@typescript-eslint/typescript-estree requires it; it was missing from the lockfile and lint crashed until 2026-10-28)
 npm run backend:test         # jest — unit/integration, needs the docker-compose Postgres running
 npm run backend:test:e2e     # jest --config ./test/jest-e2e.json
 npm run backend:db:generate  # drizzle-kit generate — after any schema/*.ts change
