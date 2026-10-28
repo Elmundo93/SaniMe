@@ -53,6 +53,9 @@ export type OnboardingEvent =
   // Kassenartikel ohne Rezept zum Selbstzahlerpreis kaufen (bzw. zurück).
   | { type: 'POSITION_OHNE_REZEPT'; produktId: string; ohneRezept: boolean }
   | { type: 'ZURUECK_CHECKOUT' }
+  // Zurück aus der Datenprüfung, wenn die Krankenkasse schon bekannt war und
+  // der Kartenschritt deshalb übersprungen wurde.
+  | { type: 'ZURUECK_REZEPTPRUEFUNG' }
   | { type: 'TERMIN_WAEHLEN' }
   | { type: 'TERMIN_VORSCHLAEGE_BERECHNET'; vorschläge: TerminSlot[] }
   | { type: 'TERMIN_AUSGEWAEHLT'; termin: TerminSlot }
@@ -286,6 +289,12 @@ export const TRANSITIONS: TransitionRule<OnboardingStatus, OnboardingEvent, Onbo
   { from: 'DATENPRUEFUNG', event: 'REZEPT_ZUGEORDNET', to: 'CHECKOUT', guard: rezeptZuordenbar },
   { from: 'DATENPRUEFUNG', event: 'ZURUECK_CHECKOUT', to: 'CHECKOUT', guard: bearbeitetZugeordnetesRezept },
   { from: 'DATENPRUEFUNG', event: 'ZURUECK', to: 'KRANKENKASSE_AUFNAHME' },
+  {
+    from: 'DATENPRUEFUNG',
+    event: 'ZURUECK_REZEPTPRUEFUNG',
+    to: 'REZEPT_PRUEFUNG',
+    guard: (s) => s.krankenkasse !== null && !bearbeitetZugeordnetesRezept(s),
+  },
   { from: 'VERSORGUNGSAUSWAHL', event: 'SUPPLY_AUSGEWAEHLT', to: 'CHECKOUT', guard: kassenartikelMitRezept },
   { from: 'VERSORGUNGSAUSWAHL', event: 'ZURUECK', to: 'DATENPRUEFUNG' },
 
@@ -341,6 +350,7 @@ function applyEventData(session: OnboardingSession, event: OnboardingEvent): Onb
   switch (event.type) {
     case 'WEITER':
     case 'ZURUECK':
+    case 'ZURUECK_REZEPTPRUEFUNG':
       return session;
     case 'AGB_AKZEPTIERT':
       return {

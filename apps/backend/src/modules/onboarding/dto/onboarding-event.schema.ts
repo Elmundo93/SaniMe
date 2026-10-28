@@ -99,6 +99,7 @@ export const onboardingEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('REZEPT_ZUGEORDNET') }),
   z.object({ type: z.literal('POSITION_OHNE_REZEPT'), produktId: z.string().uuid(), ohneRezept: z.boolean() }),
   z.object({ type: z.literal('ZURUECK_CHECKOUT') }),
+  z.object({ type: z.literal('ZURUECK_REZEPTPRUEFUNG') }),
   z.object({ type: z.literal('TERMIN_WAEHLEN') }),
   z.object({ type: z.literal('TERMIN_VORSCHLAEGE_BERECHNET'), vorschläge: z.array(terminSlotSchema) }),
   z.object({ type: z.literal('TERMIN_AUSGEWAEHLT'), termin: terminSlotSchema }),

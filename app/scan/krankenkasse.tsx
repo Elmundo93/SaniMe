@@ -55,6 +55,10 @@ const { width, height } = Dimensions.get('window');
 const CARD_W = width * 0.82;
 const CARD_H = CARD_W * 0.628; // Standard Scheckkartenformat
 
+// Ohne Karte geht es zur Datenprüfung, wo Kasse und Versichertennummer
+// eingetragen werden — dieser Screen erscheint nur, solange sie unbekannt sind.
+const UEBERSPRINGEN_TEXT = 'Ohne Karte weiter — Daten selbst eintragen';
+
 export default function KrankenkasseScreen() {
   const router = useRouter();
   const { session, ready } = useOnboardingGuard('KRANKENKASSE_AUFNAHME');
@@ -203,14 +207,17 @@ export default function KrankenkasseScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           onPress={handleGalerie}
-          style={{ marginTop: 16 }}
+          style={styles.textButton}
           accessibilityRole="button"
           accessibilityLabel="Foto aus Galerie wählen"
         >
           <Text style={styles.abbrechen}>Foto aus Galerie wählen</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={handleÜberspringen} style={{ marginTop: 16 }} accessibilityRole="button">
-          <Text style={styles.abbrechen}>Karte bereits hinterlegt — überspringen</Text>
+        <TouchableOpacity onPress={handleÜberspringen} style={styles.textButton} accessibilityRole="button">
+          <Text style={styles.abbrechen}>{UEBERSPRINGEN_TEXT}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleZurück} style={styles.textButton} accessibilityRole="button">
+          <Text style={styles.abbrechen}>Zurück</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -289,9 +296,8 @@ export default function KrankenkasseScreen() {
           style={styles.überspringenButton}
           hitSlop={12}
           accessibilityRole="button"
-          accessibilityLabel="Karte bereits hinterlegt, überspringen"
         >
-          <Text style={styles.überspringenText}>Karte bereits hinterlegt — überspringen</Text>
+          <Text style={styles.überspringenText}>{UEBERSPRINGEN_TEXT}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     </View>
@@ -317,6 +323,7 @@ const styles = StyleSheet.create({
   },
   permissionButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
   abbrechen: { color: 'rgba(255,255,255,0.5)', fontSize: 15 },
+  textButton: { marginTop: 8, minHeight: 44, justifyContent: 'center' },
   overlay: { ...StyleSheet.absoluteFill, zIndex: 1 },
   dimm: { backgroundColor: 'rgba(0,0,0,0.62)' },
   mitteRow: { flexDirection: 'row', height: CARD_H + 20 },

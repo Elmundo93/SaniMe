@@ -16,7 +16,14 @@ import { useFeldKorrektur } from '../../hooks/useFeldKorrektur';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '@sanime/design-system';
-import { findePosition, hatPflichtfelderKomplett } from '@sanime/domain';
+import { findePosition, hatPflichtfelderKomplett, type ConfidenceLevel } from '@sanime/domain';
+import { pruefAmpel, pruefeIk, pruefeVersichertenNr } from '../../lib/ocr/validatoren';
+
+// Die Datenprüfung zeigt keine Ampel je Feld — nur Werte mit falscher
+// Prüfziffer werden als „bitte prüfen“ markiert.
+function nurBeiFehler(ampel: ConfidenceLevel | undefined): ConfidenceLevel | undefined {
+  return ampel === 'medium' ? ampel : undefined;
+}
 
 export default function DatenpruefungScreen() {
   const router = useRouter();
@@ -36,7 +43,15 @@ export default function DatenpruefungScreen() {
 
   const handleZurück = async () => {
     await korrekturenAbwarten();
-    const result = await dispatch(bearbeitet ? { type: 'ZURUECK_CHECKOUT' } : { type: 'ZURUECK' });
+    // Ist die Krankenkasse bekannt, gab es keinen Kartenschritt — Zurück führt
+    // dann direkt zur Rezeptprüfung statt auf eine Karte, die keiner braucht.
+    const result = await dispatch(
+      bearbeitet
+        ? { type: 'ZURUECK_CHECKOUT' }
+        : session.krankenkasse
+          ? { type: 'ZURUECK_REZEPTPRUEFUNG' }
+          : { type: 'ZURUECK' },
+    );
     if (result.ok) {
       if (bearbeitet) router.dismissTo(STATUS_META[result.session.status].route as any);
       else router.replace(STATUS_META[result.session.status].route as any);
@@ -102,9 +117,15 @@ export default function DatenpruefungScreen() {
               <DatenFeld
                 label="Versichertennummer"
                 wert={ocr.krankenkasse.versichertenNr}
+                confidence={nurBeiFehler(pruefAmpel(ocr.krankenkasse.versichertenNr, pruefeVersichertenNr))}
                 onEdit={(w) => feldKorrigiert((o) => ({ krankenkasse: { ...o.krankenkasse, versichertenNr: w } }))}
               />
-              {ocr.krankenkasse.ik && <DatenFeld label="IK-Nummer" wert={ocr.krankenkasse.ik} confidence="high" />}
+              <DatenFeld
+                label="IK-Nummer"
+                wert={ocr.krankenkasse.ik ?? ''}
+                confidence={nurBeiFehler(pruefAmpel(ocr.krankenkasse.ik, pruefeIk))}
+                onEdit={(w) => feldKorrigiert((o) => ({ krankenkasse: { ...o.krankenkasse, ik: w } }))}
+              />
             </GlassCard>
           </Animated.View>
 

@@ -22,6 +22,12 @@ export function DatenFeld({ label, wert, confidence, onEdit }: DatenFeldProps) {
     confidence === 'medium' ? D.color.warning : D.color.error;
 
   const zeigeWarnung = confidence === 'low' || confidence === 'medium';
+  const warnText = confidence === 'medium' ? 'Bitte prüfen — KI unsicher' : 'Bitte korrigieren — nicht lesbar';
+  // Das Label überdeckt die Kindtexte für Screenreader — Wert und Warnung
+  // müssen deshalb ausdrücklich darin stehen.
+  const a11yLabel = [label, wertLokal || 'leer', zeigeWarnung && warnText, onEdit && 'zum Bearbeiten antippen']
+    .filter(Boolean)
+    .join(', ');
 
   return (
     <View style={[styles.feld, zeigeWarnung && styles.feldWarnung]}>
@@ -45,14 +51,14 @@ export function DatenFeld({ label, wert, confidence, onEdit }: DatenFeldProps) {
           disabled={!onEdit}
           activeOpacity={0.7}
           accessibilityRole={onEdit ? 'button' : undefined}
-          accessibilityLabel={onEdit ? `${label}, ${wertLokal || 'leer'}, zum Bearbeiten antippen` : label}
+          accessibilityLabel={a11yLabel}
         >
           <Text style={styles.feldWert}>{wertLokal || '—'}</Text>
           {zeigeWarnung && (
             <View style={styles.feldHinweisRow}>
               <Feather name="alert-circle" size={11} color={konfidenzFarbe} />
               <Text style={[styles.feldHinweis, { color: konfidenzFarbe }]}>
-                {confidence === 'medium' ? 'Bitte prüfen — KI unsicher' : 'Bitte korrigieren — nicht lesbar'}
+                {warnText}
               </Text>
             </View>
           )}

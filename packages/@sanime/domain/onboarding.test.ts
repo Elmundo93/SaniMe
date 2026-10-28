@@ -118,6 +118,28 @@ describe('onboarding FSM — Rezept zuerst', () => {
     expect(session.status).toBe('DATENPRUEFUNG');
   });
 
+  it('führt aus der Datenprüfung zur Rezeptprüfung zurück, wenn die Karte übersprungen wurde', () => {
+    const rezeptMitKasse: OcrResult = { ...REZEPT, krankenkasse: KRANKENKASSE };
+    const session = schritte(
+      leistungsuebersicht(),
+      { type: 'WEITER' },
+      { type: 'REZEPT_OCR_ABGESCHLOSSEN', uri: 'file://rezept.jpg', result: rezeptMitKasse, confidence: CONFIDENCE },
+      { type: 'WEITER_KRANKENKASSE_BEKANNT' },
+      { type: 'ZURUECK_REZEPTPRUEFUNG' },
+    );
+    expect(session.status).toBe('REZEPT_PRUEFUNG');
+    expect(session.ocrResult?.hilfsmittel).toBe(REZEPT.hilfsmittel);
+  });
+
+  it('lässt ZURUECK_REZEPTPRUEFUNG ohne bekannte Krankenkasse nicht zu', () => {
+    const session = schritte(leistungsuebersicht(), { type: 'WEITER' }, ...REZEPT_SCAN.slice(0, 2), {
+      type: 'KRANKENKASSE_UEBERSPRUNGEN',
+      produkte: [],
+    });
+    expect(session.status).toBe('DATENPRUEFUNG');
+    expect(transition(session, { type: 'ZURUECK_REZEPTPRUEFUNG' }).ok).toBe(false);
+  });
+
   it('überschreibt eine bekannte Krankenkasse nicht mit den Daten eines weiteren Rezepts', () => {
     const anderesRezept: OcrResult = { ...REZEPT, krankenkasse: { name: 'Andere Kasse', versichertenNr: 'B987654320' } };
     let session = schritte(leistungsuebersicht(), { type: 'WEITER' }, ...REZEPT_SCAN, { type: 'ZURUECK' }, { type: 'ZURUECK' }, { type: 'ZURUECK' });

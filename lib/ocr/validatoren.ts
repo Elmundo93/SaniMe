@@ -119,3 +119,11 @@ export function wendeValidatorenAn(felder: RezeptFelder): RezeptFelder {
 
   return ergebnis;
 }
+
+// Ampel für Felder ohne eigene OCR-Confidence (LANR, IK, Versichertennummer,
+// Ausstellungsdatum): grün nur mit bestandener Prüfung, sonst „bitte prüfen“.
+// Wird nach jeder Korrektur neu berechnet; leer = keine Ampel.
+export function pruefAmpel(wert: string | undefined, gueltig: (wert: string) => boolean): ConfidenceLevel | undefined {
+  if (!wert) return undefined;
+  return gueltig(wert) ? 'high' : 'medium';
+}

@@ -23,6 +23,7 @@ import { useFeldKorrektur } from '../../hooks/useFeldKorrektur';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { pruefeArchivTreffer } from '../../lib/archivAbgleich';
+import { pruefAmpel, pruefeDatumPlausibel, pruefeLanr } from '../../lib/ocr/validatoren';
 import { D } from '@sanime/design-system';
 import { hatPflichtfelderRezept } from '@sanime/domain';
 
@@ -145,7 +146,12 @@ export default function ReviewScreen() {
                 confidence={confidence?.arzt}
                 onEdit={(w) => feldKorrigiert((o) => ({ arzt: { ...o.arzt, name: w } }))}
               />
-              {ocr.arzt.lanr && <DatenFeld label="LANR" wert={ocr.arzt.lanr} confidence="high" />}
+              <DatenFeld
+                label="LANR"
+                wert={ocr.arzt.lanr ?? ''}
+                confidence={pruefAmpel(ocr.arzt.lanr, pruefeLanr)}
+                onEdit={(w) => feldKorrigiert((o) => ({ arzt: { ...o.arzt, lanr: w } }))}
+              />
             </GlassCard>
           </Animated.View>
 
@@ -165,8 +171,19 @@ export default function ReviewScreen() {
                 confidence={confidence?.hilfsmittel}
                 onEdit={(w) => feldKorrigiert(() => ({ hilfsmittel: w }))}
               />
-              {ocr.hilfsmittelNr && <DatenFeld label="Hilfsmittel-Nr." wert={ocr.hilfsmittelNr} confidence="high" />}
-              <DatenFeld label="Ausstellungsdatum" wert={ocr.datum} confidence="high" />
+              {!!ocr.hilfsmittelNr && (
+                <DatenFeld
+                  label="Hilfsmittel-Nr."
+                  wert={ocr.hilfsmittelNr}
+                  onEdit={(w) => feldKorrigiert(() => ({ hilfsmittelNr: w }))}
+                />
+              )}
+              <DatenFeld
+                label="Ausstellungsdatum"
+                wert={ocr.datum}
+                confidence={pruefAmpel(ocr.datum, (d) => pruefeDatumPlausibel(d))}
+                onEdit={(w) => feldKorrigiert(() => ({ datum: w }))}
+              />
             </GlassCard>
           </Animated.View>
 
