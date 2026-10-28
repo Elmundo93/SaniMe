@@ -11,10 +11,10 @@ export class OnboardingSessionsRepository extends TenantScopedRepository {
     super(db);
   }
 
-  async create(tenant: TenantContext, sessionSecretHash: string) {
+  async create(tenant: TenantContext, sessionSecretHash: string, customerId: string | null = null) {
     const [row] = await this.db
       .insert(onboardingSessions)
-      .values({ organizationId: tenant.organizationId, sessionSecretHash, status: 'WILLKOMMEN' })
+      .values({ organizationId: tenant.organizationId, sessionSecretHash, status: 'WILLKOMMEN', customerId })
       .returning();
     return row;
   }

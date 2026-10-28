@@ -8,8 +8,11 @@ export interface ProposedSlot {
   end: string;
 }
 
+// Mit dem Secret der bisherigen Sitzung (falls vorhanden): war sie schon einem
+// Kunden zugeordnet, bleibt er in der neuen Bestellung bekannt und sieht seine
+// Versorgungen weiter. Nach dem Abmelden gibt es kein Secret mehr.
 export function create(): Promise<{ sessionId: string; sessionSecret: string }> {
-  return request('POST', '/onboarding-sessions', { auth: false });
+  return request('POST', '/onboarding-sessions');
 }
 
 export function getCurrent(): Promise<OnboardingSession> {

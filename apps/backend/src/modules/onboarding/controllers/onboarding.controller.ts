@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, NotFoundException, Param, Patch, Post, Req, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, HttpCode, NotFoundException, Param, Patch, Post, Req, UseGuards, UseInterceptors } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import type { OnboardingEvent } from '@sanime/domain';
@@ -17,9 +17,12 @@ export class OnboardingController {
     private readonly config: ConfigService,
   ) {}
 
+  // Bewusst ohne Guard: ein optionales Bearer-Secret der bisherigen Sitzung
+  // überträgt nur deren Kundenzuordnung (siehe OnboardingService.createSession).
   @Post()
-  createSession() {
-    return this.onboarding.createSession(DEFAULT_TENANT_CONTEXT);
+  createSession(@Headers('authorization') authorization?: string) {
+    const vorgaenger = /^Bearer (.+)$/.exec(authorization ?? '')?.[1];
+    return this.onboarding.createSession(DEFAULT_TENANT_CONTEXT, vorgaenger);
   }
 
   @Get('current')

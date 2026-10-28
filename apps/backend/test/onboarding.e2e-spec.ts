@@ -504,6 +504,21 @@ describe('Onboarding Warenkorb (e2e)', () => {
 
     const liste = await request(app.getHttpServer()).get('/api/v1/supplies').set('Authorization', auth).expect(200);
     expect(liste.body.map((s: { id: string }) => s.id)).toContain(done.body.supplyId);
+
+    // Nächste Bestellung auf demselben Gerät: mit dem alten Secret bleibt der
+    // Kunde bekannt und sieht seine Versorgungen weiter — ohne bzw. mit einem
+    // unbekannten Secret startet die Sitzung ohne Kunden (403 statt fremder Daten).
+    const folge = await request(app.getHttpServer()).post('/api/v1/onboarding-sessions').set('Authorization', auth).expect(201);
+    const folgeListe = await request(app.getHttpServer())
+      .get('/api/v1/supplies')
+      .set('Authorization', `Bearer ${folge.body.sessionSecret}`)
+      .expect(200);
+    expect(folgeListe.body.map((s: { id: string }) => s.id)).toContain(done.body.supplyId);
+    for (const header of [undefined, 'Bearer unbekanntes-secret']) {
+      const anfrage = request(app.getHttpServer()).post('/api/v1/onboarding-sessions');
+      const neu = await (header ? anfrage.set('Authorization', header) : anfrage).expect(201);
+      await request(app.getHttpServer()).get('/api/v1/supplies').set('Authorization', `Bearer ${neu.body.sessionSecret}`).expect(403);
+    }
     // Der Auftrag trägt die Lieferadresse vom Rezept.
     const db = app.get<Database>(DRIZZLE);
     const [auftrag] = await db.select().from(orders).where(eq(orders.supplyId, done.body.supplyId));

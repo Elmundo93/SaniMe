@@ -14,6 +14,7 @@ import {
   terminNachGenehmigung,
   NOTFALL_GRUENDE,
   voraussichtlicheZuzahlungEuro,
+  wirdEingereicht,
   zahlungBeimCheckoutFaellig,
   type ClientOnboardingEvent,
   type WarenkorbArtikel,
@@ -221,6 +222,8 @@ export default function CheckoutScreen() {
   // bereits angelegt — scheitert danach nur das lokale Aufräumen, navigieren
   // wir trotzdem weiter (gleiche Begründung wie in wartenAufAbschluss).
   const zumDashboard = async () => {
+    // Vor abschliessen() bestimmen — danach ist die lokale Session geleert.
+    const mitKrankenkasse = !!session?.positionen.some(wirdEingereicht);
     try {
       await abschliessen();
     } catch {
@@ -228,7 +231,7 @@ export default function CheckoutScreen() {
     }
     router.replace('/dashboard');
     // Erst auf dem Dashboard fragen — die Bestellung ist dann sichtbar durch.
-    pushNachBestellungAnbieten();
+    pushNachBestellungAnbieten(mitKrankenkasse);
   };
 
   const handleEinreichen = async () => {

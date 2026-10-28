@@ -41,7 +41,9 @@ async function registrieren(): Promise<void> {
 // Nach einer Bestellung: im passenden Moment fragen (das System fragt nur
 // einmal — ohne Erklärung davor lehnen viele ab). Schon erlaubt → still
 // registrieren. Erfolgreich oder nicht, die Bestellung ist davon unabhängig.
-export async function pushNachBestellungAnbieten(): Promise<void> {
+/** mitKrankenkasse: die Bestellung enthält einen eingereichten Kassenartikel —
+ * dann ist die Kassenentscheidung die Neuigkeit, sonst Lieferung und Termin. */
+export async function pushNachBestellungAnbieten(mitKrankenkasse: boolean): Promise<void> {
   if (!push) return;
   const { status, canAskAgain } = await push.getPermissionsAsync();
   if (status === 'granted') return registrieren();
@@ -49,7 +51,9 @@ export async function pushNachBestellungAnbieten(): Promise<void> {
   const zustimmen = await new Promise<boolean>((resolve) =>
     Alert.alert(
       'Benachrichtigen, wenn es Neuigkeiten gibt?',
-      'Wir sagen dir Bescheid, sobald deine Krankenkasse entschieden hat und du deinen Liefertermin wählen kannst.',
+      mitKrankenkasse
+        ? 'Wir sagen dir Bescheid, sobald deine Krankenkasse entschieden hat und du deinen Liefertermin wählen kannst.'
+        : 'Wir sagen dir Bescheid, wenn sich bei deiner Lieferung oder deinem Termin etwas ändert.',
       [
         { text: 'Später', style: 'cancel', onPress: () => resolve(false) },
         { text: 'Ja, benachrichtigen', onPress: () => resolve(true) },

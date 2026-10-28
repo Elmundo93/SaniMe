@@ -66,9 +66,27 @@ export class OnboardingService {
     @Inject(VERIFICATION_PROVIDER) private readonly verification: VerificationProvider,
   ) {}
 
-  async createSession(tenant: TenantContext) {
+  /** Neue Bestellung. Schickt das Gerät das Secret seiner bisherigen Sitzung mit
+   * und war diese schon einem Kunden zugeordnet, bleibt der Kunde bekannt — sonst
+   * sähe er mitten in der neuen Bestellung seine Versorgungen nicht mehr (GET
+   * /supplies verlangt eine zugeordnete Sitzung). Gleiche Vertrauensstufe wie
+   * bisher: wer das alte Secret hat, sieht diese Versorgungen ohnehin. Ein
+   * unbekanntes Secret ist kein Fehler, die Sitzung startet dann ohne Kunden. */
+  async createSession(tenant: TenantContext, vorgaengerSecret?: string) {
+    const vorgaenger = vorgaengerSecret ? await this.sessions.findBySecretHash(sha256(vorgaengerSecret)) : null;
+    const customerId = vorgaenger?.organizationId === tenant.organizationId ? vorgaenger.customerId : null;
     const secret = randomBytes(32).toString('base64url');
-    const row = await this.sessions.create(tenant, sha256(secret));
+    const row = await this.sessions.create(tenant, sha256(secret), customerId);
+    if (customerId) {
+      await this.auditService.record({
+        tenant,
+        actorType: 'customer',
+        actorId: customerId,
+        eventType: 'SessionFromPreviousSession',
+        resourceType: 'onboarding_session',
+        resourceId: row.id,
+      });
+    }
     return { sessionId: row.id, sessionSecret: secret };
   }
 
