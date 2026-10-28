@@ -26,8 +26,16 @@ function fakeConfig(): ConfigService {
   } as unknown as ConfigService;
 }
 
-function waitForJob(ms = 200) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+// Der Job läuft im Hintergrund (InProcessJobQueue) — auf sein Ergebnis warten
+// statt eine feste Zeit zu schlafen; 200 ms reichten unter Last nicht.
+async function waitForStatus<T extends { status: string }>(read: () => Promise<T | null>, status: string, timeoutMs = 10_000) {
+  const ende = Date.now() + timeoutMs;
+  let aktuell = await read();
+  while (aktuell?.status !== status && Date.now() < ende) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    aktuell = await read();
+  }
+  return aktuell;
 }
 
 describe('DataExportGenerateJobHandler (integration)', () => {
@@ -61,9 +69,7 @@ describe('DataExportGenerateJobHandler (integration)', () => {
     });
 
     await jobQueue.enqueue('data-export.generate', { requestId: created.id });
-    await waitForJob();
-
-    const after = await requests.findById(DEFAULT_TENANT_CONTEXT, created.id);
+    const after = await waitForStatus(() => requests.findById(DEFAULT_TENANT_CONTEXT, created.id), 'ready');
     expect(after?.status).toBe('ready');
     expect(after?.storageKey).toBe(`exports/${created.id}.json`);
     expect(after?.expiresAt).not.toBeNull();
