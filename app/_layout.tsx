@@ -4,6 +4,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StripeProvider } from '@stripe/stripe-react-native';
 import { useAuthStore } from '../store/authStore';
+import { schluesselbundNachNeuinstallationLeeren } from '../lib/secureStorage';
 import { useOnboardingStore } from '../store/onboardingStore';
 import { resolveStripePublishableKey } from '../lib/api/config';
 import { pushTokenAuffrischen, usePushNavigation } from '../lib/push';
@@ -30,6 +31,8 @@ export default function RootLayout() {
     // token (the current session's bearer secret) to call the real backend,
     // so authLaden() must resolve first.
     (async () => {
+      // Vor allen Stores: nach einer Neuinstallation den Schlüsselbund leeren.
+      await schluesselbundNachNeuinstallationLeeren();
       await authLaden();
       await onboardingLaden();
       SplashScreen.hideAsync();
