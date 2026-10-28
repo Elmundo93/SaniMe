@@ -42,7 +42,7 @@ Always run `npm run typecheck` and `npm run lint` after app changes; also run `n
 npm run backend:dev          # node --watch ts-node — NOT `nest start`/`nest build`, see the gotcha below
 npm run backend:typecheck    # tsc --noEmit -p tsconfig.build.json
 npm run backend:lint         # eslint "{src,test}/**/*.ts" — needs globby@11 as a devDependency (@typescript-eslint/typescript-estree requires it; it was missing from the lockfile and lint crashed until 2026-10-28)
-npm run backend:test         # jest — unit/integration, needs the docker-compose Postgres running
+npm run backend:test         # jest — unit/integration, needs the docker-compose Postgres running; runs against its own DB (see below)
 npm run backend:test:e2e     # jest --config ./test/jest-e2e.json
 npm run backend:db:generate  # drizzle-kit generate — after any schema/*.ts change
 npm run backend:db:migrate   # drizzle-kit migrate
@@ -52,6 +52,8 @@ npm run backend:versorgung-status -- AntragVersendet [supplyId]   # dev: set a V
 `docker compose -f apps/backend/docker-compose.yml up -d` starts Postgres + MinIO (S3-compatible object storage for document uploads) before `backend:dev`/`backend:test*`. Copy `apps/backend/.env.example` to `apps/backend/.env` first (`DATABASE_URL`, `STORAGE_*`, `VERIFICATION_CODE_PEPPER`, `ADMIN_JWT_SECRET` — the last two must be real values, not the checked-in placeholders, outside local dev).
 
 **Critical gotcha**: `apps/backend/src/main.ts` boots fine under `ts-jest`/`tsx` but a plain `nest build && node dist/main.js` (or `nest start`) crashes with `ERR_MODULE_NOT_FOUND` resolving `@sanime/domain/types` — `@sanime/domain` is deliberately raw, unbuilt TypeScript (same convention as `@sanime/design-system`), and plain Node's native TS/ESM handling can't follow its extensionless internal imports the way `ts-node`'s require hook can. `start`/`start:dev` are already wired to `ts-node` for this reason — don't "fix" them back to `nest start`/`nest build`.
+
+Both backend Jest configs run against a **separate test database** (`<dev db name>_test` on the same Postgres, or `TEST_DATABASE_URL`): `test/support/global-setup.ts` creates it if missing, applies all migrations and runs the seeds (except admin) once per run; `test/support/setup-env.ts` points `DATABASE_URL` at it before any spec's `dotenv/config`. Before 2026-10-28 tests wrote into the dev DB — orders and customers from e2e runs showed up in the app during manual testing, and the data-export test collided with a running `backend:dev`.
 
 Always run `npm run backend:typecheck` after backend changes; run `npm run backend:test`/`backend:test:e2e` when touching anything under `apps/backend/src/modules/` or `packages/@sanime/domain/` (the FSM the backend and app both import).
 

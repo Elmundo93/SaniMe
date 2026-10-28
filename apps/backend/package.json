@@ -88,6 +88,10 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "setupFiles": [
+      "<rootDir>/../test/support/setup-env.ts"
+    ],
+    "globalSetup": "<rootDir>/../test/support/global-setup.ts"
   }
 }
