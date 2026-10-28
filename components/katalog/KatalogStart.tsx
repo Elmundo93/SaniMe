@@ -8,13 +8,15 @@ import type { Kategorie } from '../../lib/api/catalog';
 
 import { AbschnittTitel, KatalogHinweis, KatalogKarte, KatalogLaden, KATALOG_LADEFEHLER } from './KatalogKarten';
 import { KatalogSuchfeld } from './KatalogSuchfeld';
+import { usePersonalisierterKatalog } from '../../hooks/usePersonalisierterKatalog';
 
 // Je Gruppe sichtbare Karten vor „Alle anzeigen“.
 const HILFE_VORSCHAU = 4;
 
-// Katalog-Start, gerendert im Entdecken-Tab und unter /katalog (Einstieg aus
-// Vollbild-Modals). Drei gleichwertige Zugänge in fester Reihenfolge: Suche
-// (mit Mikrofon) → „Wobei brauchst du Hilfe?“ → Kategorien. Keine horizontalen
+// Katalog-Start, gerendert im Katalog-Tab und unter /katalog (Einstieg aus
+// Vollbild-Modals). Zugänge in fester Reihenfolge: Suche (mit Mikrofon) →
+// personalisierter Katalog (nur für Kunden mit Versorgungen) → Kategorien →
+// „Wobei brauchst du Hilfe?“. Keine horizontalen
 // Scroller (Wischgeste der Start-Tabs). Sessionlos: nichts hier ruft starten() —
 // erst „Zur Kasse“ im Warenkorb beginnt einen Prozess.
 export function KatalogStart() {
@@ -48,6 +50,8 @@ export function KatalogStart() {
  
 
   const hauptkategorien = kategorien.filter((k) => k.parentId === null);
+  const fuerDich = usePersonalisierterKatalog(kategorien);
+  const fuerDichLeer = fuerDich.produkte.length === 0 && fuerDich.kategorien.length === 0;
   const zuHilfe = (t: Pick<HilfeTreffer, 'typ' | 'id'>) =>
     router.push({ pathname: '/katalog/hilfe/[typ]/[id]', params: { typ: t.typ, id: t.id } });
 
@@ -59,6 +63,34 @@ export function KatalogStart() {
         onHilfe={zuHilfe}
         onKategorie={(id) => router.push({ pathname: '/katalog/kategorie/[id]', params: { id } })}
       />
+      {!fuerDichLeer && (
+        <>
+          <AbschnittTitel titel="Personalisierter Katalog" />
+          <Text style={styles.hinweis}>Passend zu deinen Versorgungen — berechnet auf deinem Gerät.</Text>
+          {fuerDich.produkte.map(({ produkt, zu }, i) => (
+            <KatalogKarte
+              key={produkt.id}
+              icon="plus-circle"
+              titel={produkt.name}
+              untertitel={`Passt zu: ${zu}`}
+              index={i}
+              onPress={() => router.push({ pathname: '/katalog/produkt/[id]', params: { id: produkt.id } })}
+              accessibilityHint="Zeigt das Produkt"
+            />
+          ))}
+          {fuerDich.kategorien.map(({ kategorie, bedarf }, i) => (
+            <KatalogKarte
+              key={kategorie.id}
+              icon={kategorie.icon}
+              titel={kategorie.name}
+              untertitel={`Ebenfalls bei „${bedarf}“`}
+              index={fuerDich.produkte.length + i}
+              onPress={() => router.push({ pathname: '/katalog/kategorie/[id]', params: { id: kategorie.id } })}
+              accessibilityHint="Zeigt die Produkte dieser Kategorie"
+            />
+          ))}
+        </>
+      )}
       <AbschnittTitel titel="Kategorien" />
       {ladend ? (
         <KatalogLaden />
@@ -125,6 +157,7 @@ export function KatalogStart() {
 
 const styles = StyleSheet.create({
   wrap: { gap: 12 },
+  hinweis: { ...typography.caption, color: D.color.inkSecondary, marginTop: -4 },
   gruppe: { ...typography.caption, color: D.color.inkSecondary, fontWeight: D.font.semibold, marginTop: 2 },
   platzhalter: { ...typography.caption, color: D.color.inkSecondary, textAlign: 'center', marginTop: 12 },
 });

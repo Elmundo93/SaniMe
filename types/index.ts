@@ -38,6 +38,8 @@ export interface Versorgung {
   id: string;
   status: OrderStatus;
   produkt: string;
+  // Katalog-Produkt hinter der Versorgung (personalisierter Katalog).
+  produktId: string;
   hilfsmittelNr: string;
   arzt: string;
   krankenkasse: string;

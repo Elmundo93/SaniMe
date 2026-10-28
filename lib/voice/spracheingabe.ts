@@ -6,7 +6,7 @@ type SprachModul = typeof import('expo-speech-recognition');
 // Das native Modul ist nur in einem Dev-Client/Build enthalten, der nach dem
 // Hinzufügen von expo-speech-recognition neu gebaut wurde — nicht in Expo Go
 // und nicht in älteren Dev-Clients. Ein statischer Import würfe dann schon beim
-// Laden und risse jeden Screen mit Suchfeld (u. a. den Entdecken-Tab) mit. Das
+// Laden und risse jeden Screen mit Suchfeld (u. a. den Katalog-Tab) mit. Das
 // Mikrofon ist immer nur ein zweiter Weg neben dem Textfeld: fehlt das Modul,
 // wird es einfach nicht angeboten.
 // Erst prüfen, ob das native Modul existiert — ein Ladefehler des Pakets selbst

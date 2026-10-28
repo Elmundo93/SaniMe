@@ -61,6 +61,7 @@ export function mapSupplyRowToVersorgung(row: SupplyRow): Versorgung {
     id: row.id,
     status,
     produkt: row.productNameSnapshot,
+    produktId: row.productId,
     hilfsmittelNr: row.hilfsmittelNrSnapshot ?? '',
     selbstzahler: !row.hilfsmittelNrSnapshot,
     antragVersendetAm: row.insuranceSubmittedAt ?? undefined,

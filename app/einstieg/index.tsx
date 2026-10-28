@@ -15,7 +15,7 @@ import { D } from '@sanime/design-system';
 // Nutzer wählt hier den Einstieg. Nur „Rezept scannen“ startet einen Prozess;
 // „Beschreiben“ und „Katalog“ führen in die sessionlose Discovery (/katalog
 // ist eine eigene Route, weil aus diesem Vollbild-Modal nicht sauber in den
-// Entdecken-Tab gesprungen werden kann).
+// Katalog-Tab gesprungen werden kann).
 export default function EinstiegScreen() {
   const router = useRouter();
   const prozessStarten = useOnboardingStore((s) => s.prozessStarten);

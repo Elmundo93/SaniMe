@@ -7,7 +7,7 @@ import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { KatalogStart } from '../../components/katalog/KatalogStart';
 
 // Eigenständiger Katalog-Start für Einstiege aus Vollbild-Modals (`/einstieg`),
-// aus denen nicht sauber in den Entdecken-Tab gesprungen werden kann. Ein
+// aus denen nicht sauber in den Katalog-Tab gesprungen werden kann. Ein
 // `?categoryId=` (ältere Links) führt direkt zur Kategorie.
 export default function KatalogScreen() {
   const router = useRouter();

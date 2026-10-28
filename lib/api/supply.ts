@@ -25,6 +25,7 @@ export interface OpenActionRow {
 export interface SupplyRow {
   id: string;
   customerId: string | null;
+  productId: string;
   productNameSnapshot: string;
   manufacturerNameSnapshot: string;
   hilfsmittelNrSnapshot: string | null;

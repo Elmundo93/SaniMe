@@ -16,7 +16,7 @@ import { D } from '@sanime/design-system';
 const FAB_SIZE = 72;
 
 /** Start-Ansicht: Header (Glocke · Logo · Einstellungen), swipebare Top-Tabs
- * (Versorgungen / Entdecken / Warenkorb) und der schwebende Kamera-Button für eine neue
+ * (Versorgungen / Katalog / Warenkorb) und der schwebende Kamera-Button für eine neue
  * Versorgung. Lädt die Versorgungshistorie einmal für die Tabs und das Aufgaben-Modal. */
 export default function StartLayout() {
   const router = useRouter();
@@ -42,8 +42,8 @@ export default function StartLayout() {
 
   const tabs: StartTabConfig[] = [
     { name: 'dashboard', titel: 'Versorgungen', icon: 'package' },
-    // Offene Aufgaben zählt allein die Glocke — Entdecken ist der Katalog-Start.
-    { name: 'entdecken', titel: 'Entdecken', icon: 'compass' },
+    // Offene Aufgaben zählt allein die Glocke — Katalog ist der Katalog-Start.
+    { name: 'entdecken', titel: 'Katalog', icon: 'grid' },
     { name: 'warenkorb', titel: 'Warenkorb', icon: 'shopping-cart' },
   ];
 
@@ -67,7 +67,7 @@ export default function StartLayout() {
           initialRouteName="dashboard"
         >
           <TopTabs.Screen name="dashboard" options={{ title: 'Versorgungen' }} />
-          <TopTabs.Screen name="entdecken" options={{ title: 'Entdecken' }} />
+          <TopTabs.Screen name="entdecken" options={{ title: 'Katalog' }} />
           <TopTabs.Screen name="warenkorb" options={{ title: 'Warenkorb' }} />
         </TopTabs>
       </SafeAreaView>

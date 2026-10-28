@@ -5,6 +5,7 @@ const BASIS: Versorgung = {
   id: 'v1',
   status: 'PENDING_REVIEW',
   produkt: 'Rollator (Platzhalter)',
+  produktId: 'p1',
   hilfsmittelNr: '00.00.00.0001',
   arzt: 'Dr. Beispiel',
   krankenkasse: 'Beispiel-BKK',
