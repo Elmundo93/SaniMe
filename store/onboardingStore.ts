@@ -325,7 +325,15 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     // Abschluss schon als Kundenadresse an den Auftrag gehängt.
     const rezeptAdresse = session.positionen.find((p) => p.rezept?.patient.adresse)?.rezept?.patient.adresse ?? null;
 
-    if (!useAuthStore.getState().benutzer) {
+    // Bestellt jemand mit einer anderen Versichertennummer als der lokal
+    // gespeicherten (z.B. für ein Familienmitglied), gilt ab jetzt die Person
+    // vom Rezept — so zeigt die App, für wen die neuen Versorgungen sind.
+    // Gleiche oder fehlende Nummer: nur Lücken füllen (Profilkorrekturen bleiben).
+    const bisher = useAuthStore.getState().benutzer;
+    const neueNr = normNr(session.krankenkasse?.versichertenNr);
+    const anderePerson = !!bisher && !!neueNr && !!normNr(bisher.versichertenNr) && normNr(bisher.versichertenNr) !== neueNr;
+
+    if (!bisher || anderePerson) {
       // Darf nie fehlschlagen, solange der Checkout eine bestätigte Telefonnummer
       // verlangt — schlägt trotzdem hart fehl statt
       // onboardingAbschliessen() zu erreichen, denn genau diese Kombination
@@ -334,7 +342,10 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
       // Eine reine Selbstzahler-Bestellung hat nie ein Rezept — vorname/
       // nachname/krankenkasse bleiben dann leer statt hart zu crashen; nur die
       // Telefonnummer ist immer Pflicht (der Checkout verlangt sie).
-      if (!session.customerContact.telefon) {
+      // Wer schon bekannt war, hat die Telefonbestätigung übersprungen — dann
+      // bleibt die Nummer des Geräts.
+      const telefon = session.customerContact.telefon || bisher?.telefon || '';
+      if (!telefon) {
         throw new Error('abschliessen(): Telefonnummer fehlt, kann keinen Benutzer anlegen');
       }
       const rezept = session.positionen.find((p) => p.rezept)?.rezept ?? null;
@@ -350,7 +361,7 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
           vorname: vollerName.split(' ').slice(0, -1).join(' '),
           nachname: vollerName.split(' ').slice(-1).join(''),
           email: session.customerContact.email ?? undefined,
-          telefon: session.customerContact.telefon,
+          telefon,
           krankenkasse: session.krankenkasse?.name ?? '',
           versichertenNr: session.krankenkasse?.versichertenNr ?? '',
           lieferadresse: rezeptAdresse ?? undefined,
@@ -390,3 +401,7 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     useVersorgungStore.getState().laden().catch(() => {});
   },
 }));
+
+function normNr(nummer: string | undefined): string {
+  return (nummer ?? '').trim().toUpperCase();
+}
