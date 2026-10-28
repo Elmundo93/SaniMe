@@ -8,10 +8,11 @@ import { AppModule } from '../src/app.module';
 import { seedAdminWithPermissions } from './helpers/seed-admin';
 import { configureApp } from '../src/bootstrap';
 import { DRIZZLE, type Database } from '../src/db/client';
-import { AGB_VERSION, DATENSCHUTZ_VERSION } from '@sanime/domain';
+import { AGB_VERSION, DATENSCHUTZ_VERSION, REZEPT_VERSORGUNG_NICHT_VERFUEGBAR } from '@sanime/domain';
 import { auditEntries, consentGrants, consents, customerAddresses, customers, notifications, onboardingSessions, orders, supplies } from '../src/db/schema';
 import { testTelefon } from './support/test-telefon';
 import { SupplyOrderService } from '../src/modules/supply-order/supply-order.service';
+import { CatalogService } from '../src/modules/catalog/catalog.service';
 import { DEFAULT_ORGANIZATION_ID, DEFAULT_TENANT_CONTEXT } from '../src/common/repository/tenant-context';
 
 // The real full-slice proof of Layer 2: create session -> accept consents ->
@@ -285,6 +286,8 @@ describe('Onboarding Warenkorb (e2e)', () => {
   let adminToken: string;
   let idempotencyCounter = 0;
   let kassenartikel: { id: string }[];
+  // Kassenartikel mit Größen/Ausführungen (Entwicklungsdaten: Rollator mit zwei Sitzhöhen).
+  let mitGroesse: { id: string; varianten: { id: string; attribute: { label: string } }[] };
   let selbstzahlerId: string;
   let nichtBestellbarId: string;
 
@@ -349,14 +352,81 @@ describe('Onboarding Warenkorb (e2e)', () => {
     adminToken = (await seedAdminWithPermissions(app, [])).token;
     const products = await request(app.getHttpServer()).get('/api/v1/products?limit=100').expect(200);
     type P = { id: string; hilfsmittelNr?: string; verfuegbar: boolean };
-    kassenartikel = products.body.filter((p: P) => p.hilfsmittelNr && p.verfuegbar).slice(0, 2);
-    selbstzahlerId = products.body.find((p: P) => !p.hilfsmittelNr && p.verfuegbar).id;
+    // Artikel mit Varianten brauchen eine Größe — die allgemeinen Tests nehmen solche ohne.
+    type D = P & { varianten: { id: string; attribute: { label: string } }[] };
+    const detail = async (p: P): Promise<D> => (await request(app.getHttpServer()).get(`/api/v1/products/${p.id}`).expect(200)).body;
+    kassenartikel = [];
+    for (const p of products.body.filter((x: P) => x.hilfsmittelNr && x.verfuegbar)) {
+      const d = await detail(p);
+      if (d.varianten.length > 0) mitGroesse ??= d;
+      else if (kassenartikel.length < 2) kassenartikel.push(d);
+      if (mitGroesse && kassenartikel.length === 2) break;
+    }
+    for (const p of products.body.filter((x: P) => !x.hilfsmittelNr && x.verfuegbar)) {
+      if ((await detail(p)).varianten.length === 0) {
+        selbstzahlerId = p.id;
+        break;
+      }
+    }
     nichtBestellbarId = products.body.find((p: P) => !p.verfuegbar).id;
     expect(kassenartikel).toHaveLength(2);
+    expect(mitGroesse).toBeDefined();
   });
 
   afterAll(async () => {
     await app.close();
+  });
+
+  it('lehnt den Rezept-Weg ab, solange es keine bestellbaren Kassenartikel gibt — der Warenkorb geht weiter', async () => {
+    // Katalog v1 in Produktion: nur Selbstzahler. Die Test-DB hat Platzhalter-Kassenartikel,
+    // deshalb wird die Verfügbarkeit hier gezielt abgeschaltet.
+    const spy = jest.spyOn(app.get(CatalogService), 'rezeptVersorgungVerfuegbar').mockResolvedValue(false);
+    try {
+      expect((await request(app.getHttpServer()).get('/api/v1/catalog/angebot').expect(200)).body).toEqual({ rezeptVersorgung: false });
+      const { patchEvent } = await neueSessionMitConsent();
+      const res = await patchEvent({ type: 'WEITER' }).expect(400);
+      expect(res.body.message).toBe(REZEPT_VERSORGUNG_NICHT_VERFUEGBAR);
+      await patchEvent(warenkorb(selbstzahlerId)).expect(200);
+      expect((await patchEvent({ type: 'REZEPT_HINZUFUEGEN' })).status).toBe(400);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('verlangt bei Artikeln mit Varianten eine Größe und hält sie bis zur Versorgung fest', async () => {
+    const { patchEvent, complete } = await neueSessionMitConsent();
+    const [erste, zweite] = mitGroesse.varianten;
+
+    const ohne = await patchEvent(warenkorb(mitGroesse.id)).expect(400);
+    expect(ohne.body.message).toContain('Größe');
+    // Fremde Variante bzw. Variante für ein Produkt ohne Varianten.
+    await patchEvent({ type: 'WARENKORB_UEBERNOMMEN', artikel: [{ produktId: mitGroesse.id, varianteId: '51000000-0000-0000-0000-000000000004' }] }).expect(400);
+    await patchEvent({ type: 'WARENKORB_UEBERNOMMEN', artikel: [{ produktId: selbstzahlerId, varianteId: erste.id }] }).expect(400);
+
+    let res = await patchEvent({ type: 'WARENKORB_UEBERNOMMEN', artikel: [{ produktId: mitGroesse.id, varianteId: erste.id }] }).expect(200);
+    expect(res.body.session.positionen[0].variante).toEqual({ id: erste.id, bezeichnung: erste.attribute.label });
+    // Der Warenkorb gewinnt: eine andere Größe ersetzt die erste.
+    res = await patchEvent({ type: 'WARENKORB_UEBERNOMMEN', artikel: [{ produktId: mitGroesse.id, varianteId: zweite.id }] }).expect(200);
+    expect(res.body.session.positionen[0].variante.id).toBe(zweite.id);
+
+    await kontakt(patchEvent, testTelefon());
+    await patchEvent({ type: 'REZEPT_FUER_POSITION', produktId: mitGroesse.id }).expect(200);
+    await patchEvent(rezeptScan('Rollator')).expect(200);
+    await patchEvent({ type: 'WEITER' }).expect(200);
+    await patchEvent({
+      type: 'KRANKENKASSE_OCR_ABGESCHLOSSEN',
+      uri: 'file:///lokal/egk.jpg',
+      krankenkasse: { name: 'Techniker Krankenkasse', versichertenNr: 'A123456789' },
+      confidence: 'high',
+    }).expect(200);
+    res = await patchEvent({ type: 'REZEPT_ZUGEORDNET' }).expect(200);
+    // Auch nach dem Rezept-Spoke (Neuladen aus der DB) ist die Größe noch da.
+    expect(res.body.session.positionen[0].variante.bezeichnung).toBe(zweite.attribute.label);
+
+    const done = await complete().expect(201);
+    const supply = await request(app.getHttpServer()).get(`/api/v1/supplies/${done.body.supplyId}`).set('Authorization', `Bearer ${adminToken}`).expect(200);
+    expect(supply.body.variantLabelSnapshot).toBe(zweite.attribute.label);
+    expect(supply.body.productVariantId).toBe(zweite.id);
   });
 
   it('übernimmt einen gemischten Warenkorb direkt in den Checkout, Produkte kommen aus dem Katalog', async () => {
@@ -608,6 +678,8 @@ describe('Onboarding Warenkorb (e2e)', () => {
 
     const [supply] = await db.select().from(supplies).where(eq(supplies.id, done.body.supplyId));
     expect(supply.customerId).not.toBe(besteller.id);
+    // Steuersatz des Produkts wird für die spätere Rechnung festgehalten.
+    expect([7, 19]).toContain(supply.vatRateSnapshotPercent);
     const [person] = await db.select().from(customers).where(eq(customers.id, supply.customerId!));
     expect(person.insuredNumber).toBe(andereNr);
     const [session] = await db.select().from(onboardingSessions).where(eq(onboardingSessions.id, sessionId));

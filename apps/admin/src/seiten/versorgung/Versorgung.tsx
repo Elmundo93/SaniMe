@@ -55,7 +55,10 @@ export function Versorgung() {
         </div>
         <div>
           <dt>Produkt:</dt>
-          <dd>{d.supply.productNameSnapshot}</dd>
+          <dd>
+            {d.supply.productNameSnapshot}
+            {d.supply.variantLabelSnapshot ? ` · ${d.supply.variantLabelSnapshot}` : ''}
+          </dd>
         </div>
         <div>
           <dt>Krankenkasse:</dt>
@@ -161,6 +164,7 @@ function VersorgungKarte({ detail }: { detail: VersorgungsDetail }) {
         <dt>Produkt</dt>
         <dd>
           {s.productNameSnapshot}
+          {s.variantLabelSnapshot ? ` · ${s.variantLabelSnapshot}` : ''}
           {s.manufacturerNameSnapshot ? <span className="klein"> · {s.manufacturerNameSnapshot}</span> : null}
         </dd>
         <dt>Abrechnung</dt>

@@ -14,7 +14,8 @@ interface WarenkorbState {
   artikel: WarenkorbArtikel[];
   geladen: boolean;
   laden: () => Promise<void>;
-  /** false, wenn der Warenkorb voll ist. */
+  /** false, wenn der Warenkorb voll ist. Ist das Produkt schon drin, gilt die
+   * neu gewählte Größe/Ausführung. */
   hinzufuegen: (artikel: WarenkorbArtikel) => Promise<boolean>;
   entfernen: (produktId: string) => Promise<void>;
   /** Übernimmt den Stand des Servers (z. B. ein Rezept-zuerst gewähltes Produkt). */
@@ -46,7 +47,14 @@ export const useWarenkorbStore = create<WarenkorbState>((set, get) => ({
   hinzufuegen: async (neu) => {
     await get().laden();
     const aktuell = get().artikel;
-    if (aktuell.some((a) => a.produktId === neu.produktId)) return true;
+    const vorhanden = aktuell.find((a) => a.produktId === neu.produktId);
+    if (vorhanden) {
+      if (vorhanden.varianteId === neu.varianteId) return true;
+      const artikel = aktuell.map((a) => (a.produktId === neu.produktId ? { ...a, varianteId: neu.varianteId } : a));
+      set({ artikel });
+      await speichern(artikel);
+      return true;
+    }
     if (aktuell.length >= WARENKORB_MAX) return false;
     const artikel = [...aktuell, neu];
     set({ artikel });

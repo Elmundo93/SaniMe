@@ -3,7 +3,7 @@ import { AccessibilityInfo, ActivityIndicator, Alert, Platform, StyleSheet, Text
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { D, typography } from '@sanime/design-system';
-import type { PassendeProdukte, Produkt, ProduktDetail, QaEintrag } from '@sanime/domain';
+import { variantenBezeichnung, type PassendeProdukte, type Produkt, type ProduktDetail, type QaEintrag } from '@sanime/domain';
 import { Screen } from '../../../components/ui/Screen';
 import { ScrollContainer } from '../../../components/ui/ScrollContainer';
 import { ScreenHeader } from '../../../components/ui/ScreenHeader';
@@ -56,7 +56,11 @@ export default function ProduktScreen() {
   const { id, krankheitsbildId } = useLocalSearchParams<{ id: string; krankheitsbildId?: string }>();
   const [produkt, setProdukt] = useState<ProduktDetail | null>(null);
   const [fehler, setFehler] = useState(false);
-  const [variantId, setVariantId] = useState<string | undefined>(undefined);
+  // Größe/Ausführung: bestimmt, was geliefert wird, und welches Zubehör passt.
+  // Liegt das Produkt schon im Warenkorb, ist dessen Auswahl vorbelegt.
+  const imKorbVariante = useWarenkorbStore((s) => s.artikel.find((a) => a.produktId === id)?.varianteId);
+  const [auswahl, setVariantId] = useState<string | undefined>(undefined);
+  const variantId = auswahl ?? imKorbVariante;
   const [passende, setPassende] = useState<PassendeProdukte | null>(null);
   const [ratgeber, setRatgeber] = useState<QaEintrag[]>([]);
   const [auswahlLaeuft, setAuswahlLaeuft] = useState(false);
@@ -97,17 +101,29 @@ export default function ProduktScreen() {
 
   const zuProdukt = (p: Produkt) => router.push({ pathname: '/katalog/produkt/[id]', params: { id: p.id } });
 
+  const mussWaehlen = !!produkt && produkt.varianten.length > 0;
+  const auswahlFehlt = mussWaehlen && !variantId;
+  // Im Warenkorb, aber mit anderer Größe gewählt → die CTA ändert die Auswahl.
+  const auswahlGeaendert = imWarenkorb && mussWaehlen && !!variantId && variantId !== imKorbVariante;
+  const gewaehlt = produkt?.varianten.find((v) => v.id === variantId);
+  const ctaText = auswahlGeaendert
+    ? `Auswahl ändern: ${gewaehlt ? variantenBezeichnung(gewaehlt) : ''}`
+    : imWarenkorb
+      ? 'Im Warenkorb · Zum Warenkorb'
+      : 'In den Warenkorb';
+
   const handleWarenkorb = async () => {
-    if (!produkt) return;
-    if (imWarenkorb) {
+    if (!produkt || auswahlFehlt) return;
+    if (imWarenkorb && !auswahlGeaendert) {
       router.navigate('/warenkorb' as any);
       return;
     }
     setAuswahlLaeuft(true);
     try {
-      const ok = await warenkorbHinzufuegen({ produktId: produkt.id, krankheitsbildId });
+      const ok = await warenkorbHinzufuegen({ produktId: produkt.id, krankheitsbildId, varianteId: variantId });
       if (ok) {
-        AccessibilityInfo.announceForAccessibility(`${produkt.name} liegt jetzt im Warenkorb`);
+        const groesse = gewaehlt ? `, ${variantenBezeichnung(gewaehlt)}` : '';
+        AccessibilityInfo.announceForAccessibility(`${produkt.name}${groesse} liegt jetzt im Warenkorb`);
       } else {
         Alert.alert('Dein Warenkorb ist voll', 'Bitte schließe zuerst eine Bestellung ab oder entferne einen Artikel aus dem Warenkorb.');
       }
@@ -205,18 +221,25 @@ export default function ProduktScreen() {
         ))}
         {produkt.varianten.length > 0 && (
           <View style={styles.varianten}>
-            <Text style={styles.variantenLabel}>Ausführung — bestimmt, welches Zubehör passt</Text>
+            <Text style={styles.variantenLabel} accessibilityRole="header">
+              Größe bzw. Ausführung wählen
+            </Text>
+            <Text style={styles.variantenHinweis}>Bestimmt, was wir liefern und welches Zubehör passt.</Text>
             <View style={styles.variantenChips}>
               {produkt.varianten.map((v) => {
                 const aktiv = v.id === variantId;
-                const label = typeof v.attribute.label === 'string' ? v.attribute.label : v.sku;
+                const label = variantenBezeichnung(v);
                 return (
+                  // „button“ statt „radio“: iOS kennt keinen Radio-Trait, VoiceOver
+                  // würde den Chip sonst nicht als bedienbar ansagen.
                   <TouchableOpacity
                     key={v.id}
-                    onPress={() => setVariantId(aktiv ? undefined : v.id)}
+                    onPress={() => setVariantId(v.id)}
                     style={[styles.chip, aktiv && styles.chipAktiv]}
                     accessibilityRole="button"
                     accessibilityState={{ selected: aktiv }}
+                    accessibilityLabel={label}
+                    accessibilityHint="Wählt diese Größe bzw. Ausführung"
                   >
                     <Text style={[styles.chipText, aktiv && styles.chipTextAktiv]}>{label}</Text>
                   </TouchableOpacity>
@@ -255,30 +278,41 @@ export default function ProduktScreen() {
             />
           </>
         )}
-        <Text style={styles.platzhalter}>Platzhalter-Produktdaten während der Entwicklung.</Text>
+        <Text style={styles.platzhalter}>
+          {/Platzhalter/.test(produkt.name)
+            ? 'Platzhalter-Produktdaten während der Entwicklung.'
+            : 'Herstellerneutral beschrieben: Die Marke kann je nach Lieferung abweichen, die genannten Merkmale gelten.'}
+        </Text>
       </ScrollContainer>
 
       <View style={styles.ctaLeiste}>
         {!bestellbar && <Text style={styles.ctaGrund}>Dieses Produkt ist derzeit nicht bestellbar. Schau dir gern ähnliche Produkte in der Kategorie an.</Text>}
+        {bestellbar && auswahlFehlt && <Text style={styles.ctaHinweis}>Bitte wähle zuerst oben eine Größe bzw. Ausführung.</Text>}
         {bestellbar && !!produkt.hilfsmittelNr && (
           <Text style={styles.ctaHinweis}>Für diesen Artikel brauchst du ein Rezept. Das fotografierst du an der Kasse.</Text>
         )}
         <TouchableOpacity
-          style={[styles.cta, imWarenkorb && styles.ctaImWarenkorb, (!bestellbar || auswahlLaeuft) && styles.ctaInaktiv]}
+          style={[
+            styles.cta,
+            imWarenkorb && !auswahlGeaendert && styles.ctaImWarenkorb,
+            (!bestellbar || auswahlLaeuft || auswahlFehlt) && styles.ctaInaktiv,
+          ]}
           onPress={handleWarenkorb}
-          disabled={!bestellbar || auswahlLaeuft}
+          disabled={!bestellbar || auswahlLaeuft || auswahlFehlt}
           accessibilityRole="button"
-          accessibilityState={{ disabled: !bestellbar || auswahlLaeuft, busy: auswahlLaeuft }}
-          accessibilityLabel={imWarenkorb ? 'Im Warenkorb. Zum Warenkorb' : 'In den Warenkorb'}
+          accessibilityState={{ disabled: !bestellbar || auswahlLaeuft || auswahlFehlt, busy: auswahlLaeuft }}
+          accessibilityLabel={ctaText.replace(' · ', '. ')}
         >
           {auswahlLaeuft ? (
             <ActivityIndicator color={D.color.inkInverted} />
           ) : (
             <View style={styles.ctaInhalt}>
-              <Feather name={imWarenkorb ? 'check' : 'shopping-cart'} size={18} color={imWarenkorb ? D.color.accent : D.color.inkInverted} />
-              <Text style={[styles.ctaText, imWarenkorb && styles.ctaTextImWarenkorb]}>
-                {imWarenkorb ? 'Im Warenkorb · Zum Warenkorb' : 'In den Warenkorb'}
-              </Text>
+              <Feather
+                name={imWarenkorb && !auswahlGeaendert ? 'check' : 'shopping-cart'}
+                size={18}
+                color={imWarenkorb && !auswahlGeaendert ? D.color.accent : D.color.inkInverted}
+              />
+              <Text style={[styles.ctaText, imWarenkorb && !auswahlGeaendert && styles.ctaTextImWarenkorb]}>{ctaText}</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -302,6 +336,7 @@ const styles = StyleSheet.create({
   nichtBestellbar: { color: D.color.error, fontWeight: D.font.semibold },
   varianten: { gap: 8, marginTop: 4 },
   variantenLabel: { ...typography.caption, fontWeight: D.font.semibold, color: D.color.inkSecondary },
+  variantenHinweis: { ...typography.caption, color: D.color.inkSecondary },
   variantenChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     minHeight: 48, paddingHorizontal: 16, borderRadius: D.radius.full, justifyContent: 'center',

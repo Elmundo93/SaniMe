@@ -12,13 +12,20 @@ import {
 } from '../schema';
 import { DEFAULT_ORGANIZATION_ID } from '../../common/repository/tenant-context';
 import { BEZIEHUNGEN, KATEGORIEN, MANUFACTURERS, PRODUKTE, SUPPLIER_ID, VARIANTEN } from './catalog.seed-data';
+import {
+  ENTWICKLUNG_BEZIEHUNGEN,
+  ENTWICKLUNG_MANUFACTURERS,
+  ENTWICKLUNG_PRODUKTE,
+  ENTWICKLUNG_VARIANTEN,
+  mitEntwicklungskatalog,
+} from './catalog.entwicklung.seed-data';
 
-// Placeholder catalog data for the pilot — per CLAUDE.md, never hardcode real
-// manufacturer/pricing/Hilfsmittelnummer data as if it were production. Die
-// Daten selbst stehen in catalog.seed-data.ts (dort auch gegen @sanime/domain
-// getestet); hier nur das Schreiben. Durchgehend Upserts statt DoNothing: eine
-// vor dem Katalogausbau geseedete DB hat Kategorien/Produkte schon (gleiche
-// UUIDs), aber ohne Hierarchie, slug, Attribute — die müssen nachgezogen werden.
+// Katalog v1 (herstellerneutrale Selbstzahler-Artikel, Richtpreise) plus — außer
+// in Produktion — die Entwicklungs-Platzhalter. Die Daten selbst stehen in
+// catalog.seed-data.ts / catalog.entwicklung.seed-data.ts (dort auch gegen
+// @sanime/domain getestet); hier nur das Schreiben. Durchgehend Upserts statt
+// DoNothing: eine vor dem Katalogausbau geseedete DB hat Kategorien/Produkte
+// schon (gleiche UUIDs) — die müssen nachgezogen werden.
 async function main() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
@@ -27,6 +34,11 @@ async function main() {
   const pool = createPool(databaseUrl);
   const db = createDatabase(pool);
   const org = DEFAULT_ORGANIZATION_ID;
+  const entwicklung = mitEntwicklungskatalog();
+  const hersteller = entwicklung ? [...MANUFACTURERS, ...ENTWICKLUNG_MANUFACTURERS] : MANUFACTURERS;
+  const produkte = entwicklung ? [...PRODUKTE, ...ENTWICKLUNG_PRODUKTE] : PRODUKTE;
+  const varianten = entwicklung ? [...VARIANTEN, ...ENTWICKLUNG_VARIANTEN] : VARIANTEN;
+  const beziehungen = entwicklung ? [...BEZIEHUNGEN, ...ENTWICKLUNG_BEZIEHUNGEN] : BEZIEHUNGEN;
 
   const idBySlug = new Map(KATEGORIEN.map((k) => [k.slug, k.id]));
   // Hauptkategorien zuerst — Unterkategorien verweisen per parent_id auf sie.
@@ -49,15 +61,15 @@ async function main() {
 
   await db
     .insert(manufacturers)
-    .values(MANUFACTURERS.map((m) => ({ ...m, organizationId: org })))
-    .onConflictDoNothing();
+    .values(hersteller.map((m) => ({ ...m, organizationId: org })))
+    .onConflictDoUpdate({ target: manufacturers.id, set: { name: sql`excluded.name` } });
 
   await db
     .insert(suppliers)
     .values({ id: SUPPLIER_ID, organizationId: org, name: 'SaniMe-Pilotlieferant (Platzhalter)' })
     .onConflictDoNothing();
 
-  for (const p of PRODUKTE) {
+  for (const p of produkte) {
     const values = {
       id: p.id,
       organizationId: org,
@@ -73,6 +85,7 @@ async function main() {
       features: p.merkmale,
       attributes: p.attribute ?? {},
       requiresApproval: p.requiresApproval,
+      vatRatePercent: p.mwstSatz ?? 19,
     };
     await db.insert(products).values(values).onConflictDoUpdate({ target: products.id, set: values });
 
@@ -81,7 +94,7 @@ async function main() {
       supplierId: SUPPLIER_ID,
       productId: p.id,
       deliveryTimeDays: p.angebot.lieferzeitTage,
-      // Bei Selbstzahlern der volle Preis (kein Festbetrag-Split) — Platzhalter.
+      // Bei Selbstzahlern der volle Preis (kein Festbetrag-Split) — Richtpreis.
       customerCopayCents: p.angebot.copayCents,
       selfPayPriceCents: p.angebot.selbstzahlerPreisCents ?? null,
       availability: p.angebot.availability ?? 'available',
@@ -100,18 +113,20 @@ async function main() {
       });
   }
 
-  for (const v of VARIANTEN) {
+  for (const v of varianten) {
     const values = { id: v.id, organizationId: org, productId: v.productId, sku: v.sku, attributes: v.attribute };
     await db.insert(productVariants).values(values).onConflictDoUpdate({ target: productVariants.id, set: values });
   }
 
-  await db
-    .insert(productRelations)
-    .values(BEZIEHUNGEN.map((b) => ({ ...b, organizationId: org })))
-    .onConflictDoNothing();
+  if (beziehungen.length > 0) {
+    await db
+      .insert(productRelations)
+      .values(beziehungen.map((b) => ({ ...b, organizationId: org })))
+      .onConflictDoNothing();
+  }
 
   await pool.end();
-  console.log('Catalog-Platzhalterdaten geseedet.');
+  console.log(`Katalog geseedet: ${produkte.length} Produkte${entwicklung ? ' (inkl. Entwicklungs-Platzhalter)' : ''}.`);
 }
 
 main()

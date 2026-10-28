@@ -100,6 +100,17 @@ export interface ProduktVariante {
   attribute: Record<string, string | number | boolean>;
 }
 
+/** Anzeigename einer Ausführung/Größe: `attribute.label` (z. B. „Größe M“), sonst die SKU. */
+export function variantenBezeichnung(variante: ProduktVariante): string {
+  return typeof variante.attribute.label === 'string' && variante.attribute.label ? variante.attribute.label : variante.sku;
+}
+
+/** Gewählte Ausführung/Größe einer Position — vom Server aus dem Katalog gefüllt. */
+export interface PositionsVariante {
+  id: string;
+  bezeichnung: string;
+}
+
 /** GET /products/:id/related — nach Beziehungsart gruppiert. */
 export type PassendeProdukte = Record<ProduktBeziehung, Produkt[]>;
 
@@ -194,6 +205,9 @@ export interface WarenkorbPosition {
   // Optionaler Kontext, wenn das Produkt aus einer Krankheitsbild-Empfehlung
   // kam — für Admin-Sichtbarkeit, keine Guard-Eingabe.
   krankheitsbildId: string | null;
+  // Gewählte Größe/Ausführung; Pflicht für Produkte mit Varianten (prüft der
+  // Server bei WARENKORB_UEBERNOMMEN). null = Produkt ohne Varianten.
+  variante: PositionsVariante | null;
 }
 
 export interface OnboardingSession {

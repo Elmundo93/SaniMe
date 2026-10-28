@@ -26,6 +26,7 @@ const PRODUCT_COLUMNS = {
   features: products.features,
   attributes: products.attributes,
   requiresApproval: products.requiresApproval,
+  vatRatePercent: products.vatRatePercent,
   categoryId: products.categoryId,
   categoryName: catalogCategories.name,
   categorySlug: catalogCategories.slug,

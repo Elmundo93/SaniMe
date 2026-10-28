@@ -3,7 +3,7 @@ import { customers } from './customers.schema';
 import { documents } from './documents.schema';
 import { ocrResults } from './health-data.schema';
 import { organizations } from './organizations.schema';
-import { products, supplierProducts } from './catalog.schema';
+import { products, productVariants, supplierProducts } from './catalog.schema';
 import { supplies } from './supply-order.schema';
 
 // Mirrors @sanime/domain's OnboardingSession, but as normalized DB columns
@@ -81,6 +81,8 @@ export const onboardingSessionPositions = pgTable(
     krankheitsbildId: text('krankheitsbild_id'),
     // Kassenartikel bewusst ohne Rezept zum Selbstzahlerpreis gekauft.
     withoutPrescription: boolean('without_prescription').notNull().default(false),
+    // Gewählte Größe/Ausführung (Pflicht bei Produkten mit Varianten).
+    productVariantId: uuid('product_variant_id').references(() => productVariants.id),
     sortOrder: integer('sort_order').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

@@ -16,13 +16,16 @@ export function kostenhinweis(produkt: Produkt): { titel: string; detail?: strin
       detail:
         [
           produkt.eigenanteil > 0 ? `Gesetzl. Zuzahlung bis ${formatEuro(produkt.eigenanteil)}` : null,
-          produkt.selbstzahlerPreis !== undefined ? `Ohne Rezept: ${formatEuro(produkt.selbstzahlerPreis)}` : null,
+          produkt.selbstzahlerPreis !== undefined ? `Ohne Rezept: ${formatEuro(produkt.selbstzahlerPreis)} inkl. MwSt.` : null,
         ]
           .filter(Boolean)
           .join(' · ') || undefined,
     };
   }
-  return { titel: produkt.eigenanteil > 0 ? formatEuro(produkt.eigenanteil) : 'Kostenlos' };
+  // Preisangabenverordnung: Endpreise für Verbraucher immer mit Hinweis auf die Umsatzsteuer.
+  return produkt.eigenanteil > 0
+    ? { titel: formatEuro(produkt.eigenanteil), detail: 'inkl. MwSt.' }
+    : { titel: 'Kostenlos' };
 }
 
 export function istBestellbar(produkt: Produkt): boolean {

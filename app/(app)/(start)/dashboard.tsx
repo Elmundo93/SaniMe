@@ -21,6 +21,7 @@ import { useOnboardingStore } from '../../../store/onboardingStore';
 import { abgeschlosseneVersorgungen, aktiveVersorgungen, offeneAufgaben } from '../../../lib/versorgungen';
 import { profilAufgabeOffen } from '../../../lib/vollstaendigkeit';
 import { zeigeDispatchFehler } from '../../../lib/onboardingNav';
+import { useRezeptVersorgung } from '../../../hooks/useRezeptVersorgung';
 import { D } from '@sanime/design-system';
 
 /** Tab „Versorgungen“: laufende Versorgungen bzw. der Einstieg in die erste, darunter
@@ -32,6 +33,7 @@ export default function VersorgungenTab() {
   const versorgungen = useVersorgungStore((s) => s.versorgungen);
   const laedt = useVersorgungStore((s) => s.laedt);
   const prozessStarten = useOnboardingStore((s) => s.prozessStarten);
+  const mitRezept = useRezeptVersorgung() !== false;
 
   const aktive = aktiveVersorgungen(versorgungen);
   const abgeschlossen = abgeschlosseneVersorgungen(versorgungen);
@@ -41,7 +43,7 @@ export default function VersorgungenTab() {
   const scanStarten = async () => {
     const result = await prozessStarten('REZEPT');
     if (result.ok) router.push(result.route as any);
-    else zeigeDispatchFehler();
+    else zeigeDispatchFehler(result.reason);
   };
 
   const begruessung = benutzer ? `Hallo ${benutzer.vorname}` : 'Willkommen bei SaniMe';
@@ -87,16 +89,20 @@ export default function VersorgungenTab() {
         </>
       ) : (
         <LeerHinweis
-          icon="file-text"
+          icon={mitRezept ? 'file-text' : 'shopping-bag'}
           titel="Noch keine Versorgung"
-          text="Fotografiere dein Rezept, den Rest übernehmen wir."
+          text={
+            mitRezept
+              ? 'Fotografiere dein Rezept, den Rest übernehmen wir.'
+              : 'Bestelle Hilfsmittel ohne Rezept bequem nach Hause. Bestellungen mit Rezept nehmen wir bald an.'
+          }
         >
           <TouchableOpacity
             style={styles.ctaButton}
-            onPress={scanStarten}
+            onPress={mitRezept ? scanStarten : () => router.navigate('/entdecken')}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityLabel="Jetzt Rezept scannen"
+            accessibilityLabel={mitRezept ? 'Jetzt Rezept scannen' : 'Katalog entdecken'}
           >
             <LinearGradient
               colors={[D.color.gradientTop, D.color.gradientBottom]}
@@ -104,16 +110,18 @@ export default function VersorgungenTab() {
               end={{ x: 1, y: 0 }}
               style={StyleSheet.absoluteFill}
             />
-            <Text style={styles.ctaLabel}>Jetzt Rezept scannen</Text>
+            <Text style={styles.ctaLabel}>{mitRezept ? 'Jetzt Rezept scannen' : 'Katalog entdecken'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.katalogLink}
-            onPress={() => router.navigate('/entdecken')}
-            accessibilityRole="button"
-            accessibilityLabel="Ohne Rezept: Katalog durchsuchen"
-          >
-            <Text style={styles.katalogLinkText}>Ohne Rezept? Katalog durchsuchen</Text>
-          </TouchableOpacity>
+          {mitRezept && (
+            <TouchableOpacity
+              style={styles.katalogLink}
+              onPress={() => router.navigate('/entdecken')}
+              accessibilityRole="button"
+              accessibilityLabel="Ohne Rezept: Katalog durchsuchen"
+            >
+              <Text style={styles.katalogLinkText}>Ohne Rezept? Katalog durchsuchen</Text>
+            </TouchableOpacity>
+          )}
         </LeerHinweis>
       )}
 

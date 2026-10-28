@@ -47,6 +47,13 @@ export class CatalogController {
     return categories.map(toKatalogKategorie);
   }
 
+  // Was der Katalog gerade anbietet — die App blendet ohne Kassenartikel die
+  // Rezept-Einstiege aus (der Server lehnt den Rezept-Weg dann ohnehin ab).
+  @Get('catalog/angebot')
+  async getAngebot() {
+    return { rezeptVersorgung: await this.catalog.rezeptVersorgungVerfuegbar(DEFAULT_TENANT_CONTEXT) };
+  }
+
   // Mapped to @sanime/domain's Produkt shape (not the raw joined repository
   // row) — this is what the app's /katalog browse screens and the onboarding
   // event payloads both expect. Pagination: limit + cursor (Offset als

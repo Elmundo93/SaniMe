@@ -190,6 +190,20 @@
       "when": 1793207211494,
       "tag": "0026_telekom_verify",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1793214725016,
+      "tag": "0027_umsatzsteuersatz",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1793214965977,
+      "tag": "0028_groessen_varianten",
+      "breakpoints": true
     }
   ]
 }

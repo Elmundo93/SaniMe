@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
-import type { OnboardingStatus, Produkt } from '@sanime/domain';
+import { variantenBezeichnung, type OnboardingStatus, type ProduktDetail } from '@sanime/domain';
 import { D } from '@sanime/design-system';
 import { einblenden } from '../../../lib/einblenden';
 import { formatEuro, anzahlText } from '../../../lib/katalogAnzeige';
@@ -30,8 +30,8 @@ const LAUFENDER_SCHRITT: Partial<Record<OnboardingStatus, string>> = {
 
 // Produkte zu IDs einzeln laden — beide Listen sind klein und verlassen als
 // Ganzes nie das Gerät; nicht mehr existierende IDs fallen raus.
-function useProdukte(ids: string[]): Produkt[] | null {
-  const [produkte, setProdukte] = useState<Produkt[] | null>(null);
+function useProdukte(ids: string[]): ProduktDetail[] | null {
+  const [produkte, setProdukte] = useState<ProduktDetail[] | null>(null);
   const schluessel = ids.join(',');
   useEffect(() => {
     let abgebrochen = false;
@@ -77,13 +77,29 @@ export default function WarenkorbTab() {
       ? session
       : null;
 
+  // Gewählte Größe je Produkt; undefined = Produkt hat Größen, aber keine ist gewählt.
+  const groesse = (p: ProduktDetail): string | null | undefined => {
+    if (p.varianten.length === 0) return null;
+    const v = p.varianten.find((x) => x.id === artikel.find((a) => a.produktId === p.id)?.varianteId);
+    return v ? variantenBezeichnung(v) : undefined;
+  };
+  const zurProduktseite = (id: string) => router.push({ pathname: '/katalog/produkt/[id]', params: { id } });
+
   const zurKasse = async () => {
     if (artikel.length === 0) return;
+    const ohneGroesse = (produkte ?? []).find((p) => groesse(p) === undefined);
+    if (ohneGroesse) {
+      Alert.alert('Größe fehlt', `Bitte wähle für „${ohneGroesse.name}“ noch eine Größe bzw. Ausführung.`, [
+        { text: 'Später', style: 'cancel' },
+        { text: 'Jetzt wählen', onPress: () => zurProduktseite(ohneGroesse.id) },
+      ]);
+      return;
+    }
     setKasseLaeuft(true);
     const result = await prozessStarten({ type: 'WARENKORB_UEBERNOMMEN', artikel, produkte: [] });
     setKasseLaeuft(false);
     if (result.ok) router.push(result.route as any);
-    else zeigeDispatchFehler();
+    else zeigeDispatchFehler(result.reason);
   };
 
   const liste = produkte ?? [];
@@ -164,8 +180,14 @@ export default function WarenkorbTab() {
               <Animated.View key={p.id} entering={einblenden(60 + Math.min(i, 8) * 50)}>
                 <WarenkorbZeile
                   produkt={p}
-                  onOeffnen={() => router.push({ pathname: '/katalog/produkt/[id]', params: { id: p.id } })}
+                  detail={groesse(p) ? `Größe/Ausführung: ${groesse(p)}` : undefined}
+                  onOeffnen={() => zurProduktseite(p.id)}
                   onEntfernen={() => entfernen(p.id)}
+                  aktion={
+                    groesse(p) === undefined
+                      ? { label: 'Größe wählen', icon: 'maximize-2', hervorgehoben: true, onPress: () => zurProduktseite(p.id) }
+                      : undefined
+                  }
                 />
               </Animated.View>
             ))
@@ -173,7 +195,7 @@ export default function WarenkorbTab() {
 
           <GlassCard padding={16} radius={D.radius.md}>
             <View style={styles.summeZeile}>
-              <Text style={styles.summeLabel}>Bei Bestellung zu zahlen</Text>
+              <Text style={styles.summeLabel}>Bei Bestellung zu zahlen (inkl. MwSt.)</Text>
               <Text style={styles.summeWert}>{formatEuro(selbstzahlerSumme)}</Text>
             </View>
             {kassenartikel > 0 && (

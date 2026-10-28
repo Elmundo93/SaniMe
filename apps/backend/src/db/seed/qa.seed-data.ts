@@ -88,7 +88,7 @@ export const QA_EINTRAEGE: SeedQaEintrag[] = [
     frage: 'Was zahlt die Pflegekasse bei einem Pflegegrad?',
     kurzantwort: 'Pflegehilfsmittel, die die Pflege zu Hause erleichtern — etwa Pflegebetten oder Verbrauchsmaterial.',
     antwort:
-      'Hast du einen Pflegegrad, kann die Pflegekasse Pflegehilfsmittel übernehmen. Dazu gehören technische Hilfen wie ein Pflegebett und zum Verbrauch bestimmte Produkte wie Einmalhandschuhe.\n\nFür Verbrauchsprodukte gibt es einen monatlichen Höchstbetrag. Technische Pflegehilfsmittel werden oft leihweise zur Verfügung gestellt.',
+      'Hast du einen Pflegegrad und wirst zu Hause gepflegt, kann die Pflegekasse Pflegehilfsmittel übernehmen. Dazu gehören technische Hilfen wie ein Pflegebett und zum Verbrauch bestimmte Produkte wie Einmalhandschuhe oder Bettschutzeinlagen zum Einmalgebrauch.\n\nFür Verbrauchsprodukte gibt es einen monatlichen Höchstbetrag (derzeit 42 €), ein Rezept brauchst du dafür nicht. Technische Pflegehilfsmittel werden oft leihweise zur Verfügung gestellt.\n\nÜber SaniMe kannst du diese Artikel derzeit nur selbst bezahlt bestellen — die Abrechnung mit der Pflegekasse bieten wir noch nicht an. Den Antrag auf Kostenübernahme kannst du direkt bei deiner Pflegekasse stellen.',
     quellen: [SGB_XI_40],
     links: [{ categorySlug: 'pflege-schlafen' }, { categorySlug: 'hygiene' }, { bedarfId: 'pflegen' }, { krankheitsbildId: 'pflegebett' }],
   },
@@ -97,7 +97,7 @@ export const QA_EINTRAEGE: SeedQaEintrag[] = [
     frage: 'Wie werden Inkontinenzartikel geliefert?',
     kurzantwort: 'In der Regel als Monatsbedarf, diskret verpackt nach Hause.',
     antwort:
-      'Inkontinenzartikel werden meist für einen Monat im Voraus geliefert. Mit Verordnung übernimmt die Kasse die Kosten für eine ausreichende Versorgung; du leistest die Zuzahlung für den Monatsbedarf.\n\nDie Lieferung kommt in neutraler Verpackung. Passt die Größe oder Saugstärke nicht, kannst du sie für die nächste Lieferung ändern.',
+      'Inkontinenzartikel werden meist für einen Monat im Voraus geliefert. Mit Verordnung übernimmt die Krankenkasse die Kosten für eine ausreichende Versorgung; du leistest die Zuzahlung für den Monatsbedarf.\n\nÜber SaniMe kannst du Inkontinenzartikel derzeit selbst bezahlt bestellen. Die Lieferung kommt in neutraler Verpackung. Die Saugstärke wählst du über den Filter in der Kategorie.',
     quellen: [SGB_V_33, SGB_V_61],
     links: [{ categorySlug: 'inkontinenzartikel' }, { krankheitsbildId: 'inkontinenz' }],
   },
@@ -117,7 +117,7 @@ export const QA_EINTRAEGE: SeedQaEintrag[] = [
     antwort:
       'Faltrollstühle lassen sich zusammenklappen und passen so in viele Kofferräume. Entscheidend sind Faltmaß und Gewicht: Je leichter, desto einfacher das Einladen.\n\nDie Fußrasten lassen sich bei vielen Modellen abnehmen, das spart zusätzlich Platz.',
     quellen: [HMV],
-    links: [{ categorySlug: 'rollstuehle' }, { productId: PRODUKT_IDS.rollstuhlAktiv }, { bedarfId: 'unterwegs' }],
+    links: [{ categorySlug: 'rollstuehle' }, { productId: PRODUKT_IDS.rollstuhlFalt }, { bedarfId: 'unterwegs' }],
   },
   {
     slug: 'rollator-bremsen-pruefen',

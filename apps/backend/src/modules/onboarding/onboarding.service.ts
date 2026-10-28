@@ -8,11 +8,14 @@ import {
   istKassenartikel,
   istNotfallAnfrage,
   MOBILNUMMER_FEHLER,
+  REZEPT_VERSORGUNG_NICHT_VERFUEGBAR,
   normalisiereMobilnummer,
   terminNachGenehmigung,
   telefonVerifiziert,
   transition,
+  variantenBezeichnung,
   zahlungBeimCheckoutFaellig,
+  type ArtikelVariante,
   type OcrKrankenkasse,
   type OcrResult,
   type OnboardingEvent,
@@ -32,7 +35,7 @@ import { SupplyOrderService } from '../supply-order/supply-order.service';
 import { VERIFICATION_PROVIDER, type VerificationProvider } from '../verification/ports/verification-provider.port';
 import { ConsentsRepository } from '../consents/consents.repository';
 import { ConsentGrantsRepository } from '../consents/consent-grants.repository';
-import { istVerfuegbar } from '../catalog/catalog.mapper';
+import { istVerfuegbar, toProduktVariante } from '../catalog/catalog.mapper';
 import { toOcrConfidence, toOcrResult, toProdukt } from './onboarding-session.mapper';
 import { OnboardingSessionPositionsRepository } from './onboarding-session-positions.repository';
 import { OnboardingSessionsRepository } from './onboarding-sessions.repository';
@@ -224,6 +227,7 @@ export class OnboardingService {
       // schickt nur IDs. Ob ein Artikel ein Rezept braucht, entscheidet allein
       // die Hilfsmittelnummer des Katalogprodukts.
       const produkte = [];
+      const varianten: ArtikelVariante[] = [];
       for (const artikel of event.artikel) {
         if (artikel.krankheitsbildId && !findeKrankheitsbild(artikel.krankheitsbildId)) {
           throw new BadRequestException('Unbekanntes Krankheitsbild');
@@ -234,9 +238,23 @@ export class OnboardingService {
         if (!istVerfuegbar(product)) {
           throw new BadRequestException(`„${product.name}“ ist derzeit nicht bestellbar`);
         }
+        // Hat ein Produkt Größen/Ausführungen, muss eine davon gewählt sein —
+        // sonst wüssten wir bei der Lieferung nicht, was wir schicken.
+        const katalogVarianten = await this.catalog.listVariants(tenant, product.id);
+        if (katalogVarianten.length > 0 || artikel.varianteId) {
+          const gewaehlt = katalogVarianten.find((v) => v.id === artikel.varianteId);
+          if (!gewaehlt) {
+            throw new BadRequestException(
+              katalogVarianten.length > 0
+                ? `Bitte wähle eine Größe bzw. Ausführung für „${product.name}“.`
+                : `„${product.name}“ gibt es nur in einer Ausführung.`,
+            );
+          }
+          varianten.push({ produktId: product.id, id: gewaehlt.id, bezeichnung: variantenBezeichnung(toProduktVariante(gewaehlt)) });
+        }
         produkte.push(toProdukt(product));
       }
-      augmentedEvent = { ...event, produkte };
+      augmentedEvent = { ...event, produkte, varianten };
     } else if (event.type === 'SUPPLY_AUSGEWAEHLT') {
       // Never trust the client's product data: the FSM guard branches on
       // hilfsmittelNr, so the catalog's own product is what it must see.
@@ -245,6 +263,14 @@ export class OnboardingService {
         throw new BadRequestException('Dieses Produkt ist derzeit nicht bestellbar');
       }
       augmentedEvent = { ...event, produkt: toProdukt(product) };
+    }
+
+    // Ohne bestellbare Kassenartikel endete der Rezept-Weg in einer leeren
+    // Versorgungsauswahl — die App blendet ihn aus, der Server erzwingt es.
+    const betrittRezeptWeg =
+      (event.type === 'WEITER' && domainSession.status === 'LEISTUNGSUEBERSICHT') || event.type === 'REZEPT_HINZUFUEGEN';
+    if (betrittRezeptWeg && !(await this.catalog.rezeptVersorgungVerfuegbar(tenant))) {
+      throw new BadRequestException(REZEPT_VERSORGUNG_NICHT_VERFUEGBAR);
     }
 
     const result = transition(domainSession, augmentedEvent);
@@ -366,11 +392,14 @@ export class OnboardingService {
           supplierProductId: position.supplierProductId,
           ocrResultId: eingereicht ? position.ocrResultId : null,
           productNameSnapshot: product.name,
+          productVariantId: position.productVariantId,
+          variantLabelSnapshot: domainSession.positionen.find((p) => p.produkt.id === position.productId)?.variante?.bezeichnung ?? null,
           manufacturerNameSnapshot: product.manufacturerName,
           hilfsmittelNrSnapshot: eingereicht ? product.hilfsmittelnummer : null,
           doctorNameSnapshot: eingereicht ? (rezept?.arzt.name ?? '') : '',
           insurerNameSnapshot: eingereicht ? (rezept?.krankenkasse.name ?? '') : '',
           customerCopaySnapshotCents: eingereicht ? (primaryOffer?.customerCopayCents ?? 0) : selbstGezahltCents(product, position.withoutPrescription),
+          vatRateSnapshotPercent: product.vatRatePercent,
           deliveryTimeLabelSnapshot: primaryOffer ? `${primaryOffer.deliveryTimeDays} Werktage` : 'unbekannt',
           deliveryAddressId: addressId,
           ohneGenehmigung: !eingereicht,
@@ -582,6 +611,8 @@ export class OnboardingService {
           await this.positions.upsert(tenant, row.id, artikel.produktId, {
             supplierProductId: product.offers[0]?.id ?? null,
             krankheitsbildId: artikel.krankheitsbildId ?? vorhanden?.krankheitsbildId ?? null,
+            // Vom Server geprüft (siehe patchInner) — nie die rohe Client-ID.
+            productVariantId: event.varianten?.find((v) => v.produktId === artikel.produktId)?.id ?? null,
             sortOrder: index,
           });
         }
@@ -698,17 +729,27 @@ export class OnboardingService {
 
   private async hydratePosition(
     tenant: TenantContext,
-    row: { productId: string; ocrResultId: string | null; krankheitsbildId: string | null; withoutPrescription: boolean },
+    row: {
+      productId: string;
+      ocrResultId: string | null;
+      krankheitsbildId: string | null;
+      withoutPrescription: boolean;
+      productVariantId: string | null;
+    },
     policy: InsurancePolicy | null,
   ): Promise<WarenkorbPosition> {
     const produkt = toProdukt(await this.catalog.getProduct(tenant, row.productId));
     const ocrRow = istKassenartikel(produkt) && row.ocrResultId ? await this.ocrResults.findById(tenant, row.ocrResultId) : null;
+    const variante = row.productVariantId
+      ? (await this.catalog.listVariants(tenant, row.productId)).find((v) => v.id === row.productVariantId)
+      : undefined;
     return {
       produkt,
       rezept: ocrRow ? toOcrResult(ocrRow, policy) : null,
       rezeptConfidence: ocrRow ? toOcrConfidence(ocrRow.confidence) : null,
       ohneRezept: istKassenartikel(produkt) && row.withoutPrescription,
       krankheitsbildId: row.krankheitsbildId,
+      variante: variante ? { id: variante.id, bezeichnung: variantenBezeichnung(toProduktVariante(variante)) } : null,
     };
   }
 }

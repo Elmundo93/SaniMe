@@ -74,6 +74,9 @@ export const products = pgTable('products', {
   features: jsonb('features').notNull().default([]),
   attributes: jsonb('attributes').notNull().default({}),
   requiresApproval: boolean('requires_approval').notNull().default(true),
+  // Umsatzsteuersatz in Prozent (19 regulär, 7 nach Anlage 2 UStG, z. B. Rollstühle
+  // Nr. 51, Krücken Nr. 52). Die Einstufung je Artikel muss steuerlich geprüft sein.
+  vatRatePercent: integer('vat_rate_percent').notNull().default(19),
   isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

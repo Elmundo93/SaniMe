@@ -37,12 +37,15 @@ export interface CreateSupplyFromOnboardingInput {
   supplierProductId: string | null;
   ocrResultId: string | null;
   productNameSnapshot: string;
+  productVariantId?: string | null;
+  variantLabelSnapshot?: string | null;
   manufacturerNameSnapshot: string;
   // Selbstzahler-Produkte (keine Hilfsmittelnummer) haben nichts zu snapshotten.
   hilfsmittelNrSnapshot: string | null;
   doctorNameSnapshot?: string;
   insurerNameSnapshot?: string;
   customerCopaySnapshotCents: number;
+  vatRateSnapshotPercent?: number;
   deliveryTimeLabelSnapshot: string;
   deliveryAddressId: string | null;
   // Selbstzahler-Versorgung: nach dem Eingang gleich freigegeben, ohne Antrag.
@@ -99,11 +102,14 @@ export class SupplyOrderService {
       supplierProductId: input.supplierProductId,
       ocrResultId: input.ocrResultId,
       productNameSnapshot: input.productNameSnapshot,
+      productVariantId: input.productVariantId ?? null,
+      variantLabelSnapshot: input.variantLabelSnapshot ?? null,
       manufacturerNameSnapshot: input.manufacturerNameSnapshot,
       hilfsmittelNrSnapshot: input.hilfsmittelNrSnapshot,
       doctorNameSnapshot: input.doctorNameSnapshot ?? '',
       insurerNameSnapshot: input.insurerNameSnapshot ?? '',
       customerCopaySnapshotCents: input.customerCopaySnapshotCents,
+      vatRateSnapshotPercent: input.vatRateSnapshotPercent ?? null,
       deliveryTimeLabelSnapshot: input.deliveryTimeLabelSnapshot,
       status: 'draft',
     });

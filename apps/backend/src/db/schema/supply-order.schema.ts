@@ -1,6 +1,6 @@
 import { boolean, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { customerAddresses } from './customers.schema';
-import { products, supplierProducts } from './catalog.schema';
+import { products, productVariants, supplierProducts } from './catalog.schema';
 import { ocrResults } from './health-data.schema';
 import { adminUsers } from './admin-users.schema';
 import { organizations } from './organizations.schema';
@@ -29,6 +29,9 @@ export const supplies = pgTable('supplies', {
   supplierProductId: uuid('supplier_product_id').references(() => supplierProducts.id),
   ocrResultId: uuid('ocr_result_id').references(() => ocrResults.id),
   productNameSnapshot: text('product_name_snapshot').notNull(),
+  // Gewählte Größe/Ausführung, z. B. „Größe M“ — null bei Produkten ohne Varianten.
+  productVariantId: uuid('product_variant_id').references(() => productVariants.id),
+  variantLabelSnapshot: text('variant_label_snapshot'),
   manufacturerNameSnapshot: text('manufacturer_name_snapshot').notNull(),
   // Nullable: a Selbstzahler product has no Hilfsmittelnummer to snapshot —
   // mirrors products.hilfsmittelnummer's own nullability.
@@ -40,6 +43,9 @@ export const supplies = pgTable('supplies', {
   doctorNameSnapshot: text('doctor_name_snapshot').notNull().default(''),
   insurerNameSnapshot: text('insurer_name_snapshot').notNull().default(''),
   customerCopaySnapshotCents: integer('customer_copay_snapshot_cents').notNull().default(0),
+  // Steuersatz bei Bestellung (Grundlage für Rechnung/Abrechnung). null = vor
+  // Einführung des Feldes angelegt.
+  vatRateSnapshotPercent: integer('vat_rate_snapshot_percent'),
   deliveryTimeLabelSnapshot: text('delivery_time_label_snapshot').notNull(),
   status: text('status').notNull().default('draft'),
   // Antrag an die Krankenkasse verschickt (AntragVersendet) bzw. von ihr

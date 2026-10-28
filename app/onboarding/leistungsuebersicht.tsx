@@ -22,8 +22,11 @@ import { Screen } from '../../components/ui/Screen';
 import { ScrollContainer } from '../../components/ui/ScrollContainer';
 import { AGB_VERSION, DATENSCHUTZ_VERSION } from '../../constants/legal';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
+import { useRezeptVersorgung } from '../../hooks/useRezeptVersorgung';
 
-const PROZESS_SCHRITTE: { icon: React.ComponentProps<typeof Feather>['name']; label: string }[] = [
+type ProzessSchritt = { icon: React.ComponentProps<typeof Feather>['name']; label: string };
+
+const PROZESS_SCHRITTE: ProzessSchritt[] = [
   { icon: 'camera', label: 'Rezept fotografieren' },
   { icon: 'shield', label: 'Krankenkassenkarte fotografieren' },
   { icon: 'activity', label: 'Versorgung auswählen' },
@@ -31,11 +34,19 @@ const PROZESS_SCHRITTE: { icon: React.ComponentProps<typeof Feather>['name']; la
   { icon: 'package', label: 'Status verfolgen' },
 ];
 
-function ProzessVisual() {
+// Katalog v1 (nur Selbstzahler, keine Rezeptversorgung): kein Rezept, keine Kasse.
+const PROZESS_SCHRITTE_OHNE_REZEPT: ProzessSchritt[] = [
+  { icon: 'shopping-bag', label: 'Produkte auswählen' },
+  { icon: 'credit-card', label: 'Bestellen und bezahlen' },
+  { icon: 'calendar', label: 'Liefertermin wählen' },
+  { icon: 'package', label: 'Status verfolgen' },
+];
+
+function ProzessVisual({ schritte }: { schritte: ProzessSchritt[] }) {
   return (
     <View style={styles.card}>
       <LinearGradient colors={['rgba(255,255,255,0.07)', 'rgba(255,255,255,0.02)']} style={StyleSheet.absoluteFill} />
-      {PROZESS_SCHRITTE.map((schritt, i) => (
+      {schritte.map((schritt, i) => (
         <Animated.View
           key={schritt.label}
           entering={einblenden(150 + i * 100)}
@@ -45,7 +56,7 @@ function ProzessVisual() {
             <Feather name={schritt.icon} size={16} color={D.color.gradientMid} />
           </View>
           <Text style={styles.prozessLabel}>{schritt.label}</Text>
-          {i < PROZESS_SCHRITTE.length - 1 && <View style={styles.prozessLinie} />}
+          {i < schritte.length - 1 && <View style={styles.prozessLinie} />}
         </Animated.View>
       ))}
     </View>
@@ -85,6 +96,7 @@ function SuccessRing() {
 export default function LeistungsuebersichtScreen() {
   const router = useRouter();
   const { session, ready } = useOnboardingGuard('LEISTUNGSUEBERSICHT');
+  const mitRezept = useRezeptVersorgung() !== false;
   const dispatch = useOnboardingStore((s) => s.dispatch);
   const [substep, setSubstep] = useState<0 | 1 | 2>(0);
 
@@ -117,7 +129,7 @@ export default function LeistungsuebersichtScreen() {
       if (pending) useOnboardingStore.getState().setPendingEinstiegEvent(null);
       router.push(STATUS_META[result.session.status].route as any);
     } else {
-      zeigeDispatchFehler();
+      zeigeDispatchFehler(result.reason);
     }
   };
 
@@ -144,11 +156,13 @@ export default function LeistungsuebersichtScreen() {
           {substep === 0 && (
             <Animated.View key="substep-0" entering={FadeIn.duration(300)} style={styles.substep}>
               <View style={styles.visualArea}>
-                <ProzessVisual />
+                <ProzessVisual schritte={mitRezept ? PROZESS_SCHRITTE : PROZESS_SCHRITTE_OHNE_REZEPT} />
               </View>
               <Animated.View entering={einblenden(700)} style={styles.textBlock}>
                 <Text style={styles.headline}>So läuft{'\n'}deine Versorgung.</Text>
-                <Text style={styles.sub}>Fünf Schritte, kein Papierkram — wir begleiten dich durch den ganzen Prozess.</Text>
+                <Text style={styles.sub}>
+                  {mitRezept ? 'Fünf' : 'Vier'} Schritte, kein Papierkram — wir begleiten dich durch den ganzen Prozess.
+                </Text>
               </Animated.View>
             </Animated.View>
           )}
@@ -160,7 +174,11 @@ export default function LeistungsuebersichtScreen() {
               </View>
               <Animated.View entering={einblenden(500)} style={styles.textBlock}>
                 <Text style={styles.headline}>Wir kümmern{'\n'}uns.</Text>
-                <Text style={styles.sub}>Krankenkasse, Unterlagen, Genehmigung — vollautomatisch. Du wirst benachrichtigt, sobald es Neuigkeiten gibt.</Text>
+                <Text style={styles.sub}>
+                  {mitRezept
+                    ? 'Krankenkasse, Unterlagen, Genehmigung — vollautomatisch. Du wirst benachrichtigt, sobald es Neuigkeiten gibt.'
+                    : 'Lieferung, Termin und auf Wunsch die Einweisung zu Hause. Du wirst benachrichtigt, sobald es Neuigkeiten gibt.'}
+                </Text>
               </Animated.View>
             </Animated.View>
           )}

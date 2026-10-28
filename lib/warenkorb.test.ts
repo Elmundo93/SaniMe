@@ -27,6 +27,7 @@ const position = (id: string, mitRezept = false): WarenkorbPosition => ({
   rezeptConfidence: null,
   ohneRezept: false,
   krankheitsbildId: null,
+  variante: null,
 });
 
 describe('warenkorbAbgleich', () => {
@@ -40,6 +41,15 @@ describe('warenkorbAbgleich', () => {
 
   it('behält Positionen mit erfasstem Rezept', () => {
     expect(warenkorbAbgleich([{ produktId: 'c' }], [position('a', true)])).toEqual([{ produktId: 'c' }, { produktId: 'a' }]);
+  });
+});
+
+describe('Größe/Ausführung', () => {
+  it('übernimmt die Größe einer Position und erkennt eine geänderte Größe', () => {
+    const mitGroesse = { ...position('a'), variante: { id: 'v-m', bezeichnung: 'Größe M' } };
+    expect(warenkorbAbgleich([], [mitGroesse])).toEqual([{ produktId: 'a', varianteId: 'v-m' }]);
+    expect(gleicheProdukte([{ produktId: 'a', varianteId: 'v-m' }], [{ produktId: 'a', varianteId: 'v-l' }])).toBe(false);
+    expect(gleicheProdukte([{ produktId: 'a', varianteId: 'v-m' }], [{ produktId: 'a', varianteId: 'v-m' }])).toBe(true);
   });
 });
 

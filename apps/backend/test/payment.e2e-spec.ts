@@ -209,7 +209,17 @@ describe('Payment flow (e2e)', () => {
   it('berechnet für einen Kassenartikel ohne Rezept den Selbstzahlerpreis und schließt nach der Zahlung als Selbstzahler-Versorgung ab', async () => {
     await driveNewSessionToCheckout();
     const produkte = await request(app.getHttpServer()).get('/api/v1/products?limit=100').expect(200);
-    const kassenartikel = produkte.body.find((p: { hilfsmittelNr?: string; selbstzahlerPreis?: number; verfuegbar: boolean }) => p.hilfsmittelNr && p.selbstzahlerPreis && p.verfuegbar);
+    // Ohne Varianten — sonst müsste zusätzlich eine Größe gewählt werden.
+    const kandidaten = produkte.body.filter((p: { hilfsmittelNr?: string; selbstzahlerPreis?: number; verfuegbar: boolean }) => p.hilfsmittelNr && p.selbstzahlerPreis && p.verfuegbar);
+    let kassenartikel: { id: string; selbstzahlerPreis: number } | undefined;
+    for (const p of kandidaten) {
+      const detail = await request(app.getHttpServer()).get(`/api/v1/products/${p.id}`).expect(200);
+      if (detail.body.varianten.length === 0) {
+        kassenartikel = p;
+        break;
+      }
+    }
+    if (!kassenartikel) throw new Error('Kein Kassenartikel ohne Varianten in den Testdaten');
     const current = await request(app.getHttpServer()).get('/api/v1/onboarding-sessions/current').set('Authorization', auth()).expect(200);
     const selbstzahler = current.body.positionen[0].produkt;
     await patchEvent({ type: 'WARENKORB_UEBERNOMMEN', artikel: [{ produktId: selbstzahler.id }, { produktId: kassenartikel.id }] }).expect(200);

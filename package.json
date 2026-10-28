@@ -28,7 +28,8 @@
     "backend:db:seed": "npm run db:seed --workspace apps/backend",
     "backend:versorgung-status": "npm run versorgung:status --workspace apps/backend --",
     "backend:admin-anlegen": "npm run admin:anlegen --workspace apps/backend --",
-    "backend:admin-2fa-zuruecksetzen": "npm run admin:2fa-zuruecksetzen --workspace apps/backend --"
+    "backend:admin-2fa-zuruecksetzen": "npm run admin:2fa-zuruecksetzen --workspace apps/backend --",
+    "backend:katalog-pruefliste": "npm run --silent katalog:pruefliste --workspace apps/backend"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

@@ -27,6 +27,7 @@ export interface SupplyRow {
   customerId: string | null;
   productId: string;
   productNameSnapshot: string;
+  variantLabelSnapshot: string | null;
   manufacturerNameSnapshot: string;
   hilfsmittelNrSnapshot: string | null;
   doctorNameSnapshot: string;

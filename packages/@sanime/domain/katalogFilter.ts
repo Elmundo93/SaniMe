@@ -27,6 +27,11 @@ export interface KatalogFilterDefinition {
   einheit?: string;
 }
 
+/** Ohne bestellbare Kassenartikel lehnt der Server den Rezept-Weg mit genau dieser
+ * Meldung ab; die App zeigt sie dann statt eines allgemeinen Fehlers. */
+export const REZEPT_VERSORGUNG_NICHT_VERFUEGBAR =
+  'Bestellungen mit Rezept nehmen wir bald an. Produkte ohne Rezept kannst du schon jetzt im Katalog bestellen.';
+
 /** Sonderschlüssel: filtert über den Angebotspreis (supplier_products), nicht über attributes. */
 export const PREIS_FILTER_SCHLUESSEL = 'preisEuro';
 
@@ -77,6 +82,31 @@ export const KATALOG_FILTER: Record<string, KatalogFilterDefinition[]> = {
   gehhilfen: [
     { schluessel: 'hoehenverstellbar', label: 'Höhe einstellbar', typ: 'bool', chipLabel: 'Höhe einstellbar' },
     PREIS,
+  ],
+  bandagen: [
+    {
+      schluessel: 'koerperstelle',
+      label: 'Für welche Stelle?',
+      typ: 'auswahl',
+      optionen: [
+        { wert: 'knie', label: 'Knie' },
+        { wert: 'handgelenk', label: 'Handgelenk' },
+        { wert: 'sprunggelenk', label: 'Sprunggelenk' },
+        { wert: 'ellenbogen', label: 'Ellenbogen' },
+      ],
+    },
+  ],
+  inkontinenzartikel: [
+    {
+      schluessel: 'saugstaerke',
+      label: 'Wie viel Schutz?',
+      typ: 'auswahl',
+      optionen: [
+        { wert: 'leicht', label: 'Leicht' },
+        { wert: 'mittel', label: 'Mittel' },
+        { wert: 'stark', label: 'Stark' },
+      ],
+    },
   ],
 };
 

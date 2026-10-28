@@ -9,6 +9,7 @@ import { ScreenHeader } from '../../components/ui/ScreenHeader';
 import { EinstiegOption } from '../../components/ui/EinstiegOption';
 import { useOnboardingStore } from '../../store/onboardingStore';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
+import { useRezeptVersorgung } from '../../hooks/useRezeptVersorgung';
 import { D } from '@sanime/design-system';
 
 // Ersetzt den früheren Direkt-Sprung des "+"-Buttons zu /scan/rezept — der
@@ -19,11 +20,15 @@ import { D } from '@sanime/design-system';
 export default function EinstiegScreen() {
   const router = useRouter();
   const prozessStarten = useOnboardingStore((s) => s.prozessStarten);
+  // Ohne bestellbare Kassenartikel gibt es den Rezept-Weg (noch) nicht —
+  // ausblenden statt in eine leere Versorgungsauswahl zu führen.
+  const mitRezept = useRezeptVersorgung() !== false;
+  const versatz = mitRezept ? 1 : 0;
 
   const handleRezept = async () => {
     const result = await prozessStarten('REZEPT');
     if (result.ok) router.push(result.route as any);
-    else zeigeDispatchFehler();
+    else zeigeDispatchFehler(result.reason);
   };
 
   return (
@@ -33,20 +38,24 @@ export default function EinstiegScreen() {
       <ScrollContainer contentContainerStyle={styles.scrollContent}>
         <Animated.View entering={einblenden(20)}>
           <Text style={styles.sub}>
-            Wähle, wie wir deine Versorgung am besten für dich finden.
+            {mitRezept
+              ? 'Wähle, wie wir deine Versorgung am besten für dich finden.'
+              : 'Finde passende Hilfsmittel und bestelle sie bequem nach Hause. Bestellungen mit Rezept nehmen wir bald an.'}
           </Text>
         </Animated.View>
 
-        <EinstiegOption
-          index={0}
-          icon="camera"
-          titel="Rezept scannen"
-          beschreibung="Fotografiere dein Rezept, den Rest übernehmen wir."
-          onPress={handleRezept}
-        />
+        {mitRezept && (
+          <EinstiegOption
+            index={0}
+            icon="camera"
+            titel="Rezept scannen"
+            beschreibung="Fotografiere dein Rezept, den Rest übernehmen wir."
+            onPress={handleRezept}
+          />
+        )}
 
         <EinstiegOption
-          index={1}
+          index={versatz}
           icon="message-circle"
           titel="Beschreiben, wobei du Hilfe brauchst"
           beschreibung="Im Alltag oder bei einer Erkrankung — per Text oder Sprache. Wir zeigen dir passende Hilfsmittel."
@@ -54,7 +63,7 @@ export default function EinstiegScreen() {
         />
 
         <EinstiegOption
-          index={2}
+          index={versatz + 1}
           icon="grid"
           titel="Katalog durchsuchen"
           beschreibung="Stöbere selbst — auch ohne Rezept, z. B. bei Selbstzahler-Artikeln."

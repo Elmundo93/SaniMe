@@ -29,6 +29,9 @@ export interface VersorgungsFilter {
 // weiter über SupplyOrderService (Statuswechsel, Aufgaben, Notfälle).
 // Listen enthalten bewusst keine Rezept-/Diagnosedaten (Datensparsamkeit);
 // die stehen nur in detail(), dessen Abruf im access_log landet.
+// Listen zeigen die gewählte Größe direkt am Produkt („Kniebandage · Größe M“).
+const produktMitVariante = sql<string>`${supplies.productNameSnapshot} || coalesce(' · ' || ${supplies.variantLabelSnapshot}, '')`;
+
 @Injectable()
 export class AdminReadRepository {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
@@ -52,7 +55,7 @@ export class AdminReadRepository {
         assignedAdminEmail: adminUsers.email,
         supplyStatus: supplies.status,
         kundeName: this.kundeName(),
-        produktName: supplies.productNameSnapshot,
+        produktName: produktMitVariante,
         kasse: supplies.insurerNameSnapshot,
         insuranceSubmittedAt: supplies.insuranceSubmittedAt,
       })
@@ -96,7 +99,7 @@ export class AdminReadRepository {
           createdAt: orders.createdAt,
           updatedAt: supplies.updatedAt,
           kundeName: this.kundeName(),
-          produktName: supplies.productNameSnapshot,
+          produktName: produktMitVariante,
           kasse: supplies.insurerNameSnapshot,
           selbstzahler: sql<boolean>`${supplies.hilfsmittelNrSnapshot} is null`,
           insuranceSubmittedAt: supplies.insuranceSubmittedAt,

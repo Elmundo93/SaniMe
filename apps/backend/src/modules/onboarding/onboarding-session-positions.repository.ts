@@ -5,7 +5,7 @@ import { onboardingSessionPositions, type NewOnboardingSessionPositionRow } from
 import { TenantScopedRepository } from '../../common/repository/tenant-scoped.repository';
 import type { TenantContext } from '../../common/repository/tenant-context';
 
-type PositionPatch = Partial<Pick<NewOnboardingSessionPositionRow, 'supplierProductId' | 'ocrResultId' | 'krankheitsbildId' | 'withoutPrescription' | 'sortOrder'>>;
+type PositionPatch = Partial<Pick<NewOnboardingSessionPositionRow, 'supplierProductId' | 'ocrResultId' | 'krankheitsbildId' | 'withoutPrescription' | 'productVariantId' | 'sortOrder'>>;
 
 // Warenkorb-Positionen einer Onboarding-Session — Schlüssel ist (Session, Produkt).
 @Injectable()

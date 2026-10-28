@@ -20,6 +20,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { D } from '@sanime/design-system';
 import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
+import { useAuthStore } from '../../store/authStore';
+import { useRezeptVersorgung } from '../../hooks/useRezeptVersorgung';
 import { Screen } from '../../components/ui/Screen';
 
 // Einzelnes Partikel-Element
@@ -77,6 +79,14 @@ export default function OnboardingScreen1() {
   const router = useRouter();
   const starten = useOnboardingStore((s) => s.starten);
   const dispatch = useOnboardingStore((s) => s.dispatch);
+  // Ohne Kassenartikel (Katalog v1) gibt es keinen Rezept-Weg: Willkommen führt
+  // dann in den Katalog, ohne Session — die Einwilligung holt „Zur Kasse“ nach
+  // (prozessStarten), erst dann werden Gesundheitsdaten verarbeitet.
+  // Kommt jemand über „Zur Kasse“ hierher (vorgemerktes Ereignis), geht es
+  // immer weiter zur Einwilligung.
+  const zurKasse = useOnboardingStore((s) => s.pendingEinstiegEvent !== null);
+  const mitRezept = useRezeptVersorgung() !== false;
+  const inDenKatalog = !mitRezept && !zurKasse;
   const particleProgress = useSharedValue(0);
   const docOpacity = useSharedValue(1);
   const docScale = useSharedValue(1);
@@ -168,11 +178,23 @@ export default function OnboardingScreen1() {
 
         {/* Text-Bereich */}
         <Animated.View entering={einblenden(1600)} style={styles.textArea}>
-          <Text style={styles.headline}>Scanne dein Rezept.</Text>
-          <Text style={styles.sub}>
-            Den Rest übernimmt SaniMe. Krankenkasse,
-            Genehmigung, Lieferung — alles automatisch.
-          </Text>
+          {mitRezept ? (
+            <>
+              <Text style={styles.headline}>Scanne dein Rezept.</Text>
+              <Text style={styles.sub}>
+                Den Rest übernimmt SaniMe. Krankenkasse,
+                Genehmigung, Lieferung — alles automatisch.
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.headline}>Hilfsmittel einfach bestellen.</Text>
+              <Text style={styles.sub}>
+                Finde, was dir im Alltag hilft, und lass es dir nach Hause liefern.
+                Bestellungen mit Rezept nehmen wir bald an.
+              </Text>
+            </>
+          )}
         </Animated.View>
 
         {/* Footer */}
@@ -185,6 +207,11 @@ export default function OnboardingScreen1() {
           <TouchableOpacity
             style={styles.button}
             onPress={async () => {
+              if (inDenKatalog) {
+                await useAuthStore.getState().onboardingAbschliessen();
+                router.replace('/entdecken');
+                return;
+              }
               const session = await starten();
               // Konnte starten() eine dauerhafte Einwilligung übernehmen, steht
               // die Session schon weiter — dann direkt dorthin statt WEITER.
@@ -197,7 +224,7 @@ export default function OnboardingScreen1() {
             }}
             activeOpacity={0.8}
             accessibilityRole="button"
-            accessibilityLabel="Weiter"
+            accessibilityLabel={inDenKatalog ? 'Katalog entdecken' : 'Weiter'}
           >
             <LinearGradient
               colors={[D.color.gradientTop, D.color.gradientBottom]}
@@ -205,7 +232,7 @@ export default function OnboardingScreen1() {
               end={{ x: 1, y: 0 }}
               style={StyleSheet.absoluteFill}
             />
-            <Text style={styles.buttonLabel}>Weiter</Text>
+            <Text style={styles.buttonLabel}>{inDenKatalog ? 'Katalog entdecken' : 'Weiter'}</Text>
           </TouchableOpacity>
         </Animated.View>
       </View>

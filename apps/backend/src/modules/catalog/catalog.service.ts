@@ -10,7 +10,7 @@ import {
   type ProduktBeziehung,
 } from '@sanime/domain';
 import type { TenantContext } from '../../common/repository/tenant-context';
-import { toProdukt, toProduktDetail, toQaEintrag } from './catalog.mapper';
+import { istVerfuegbar, toProdukt, toProduktDetail, toQaEintrag } from './catalog.mapper';
 import { CategoriesRepository } from './categories.repository';
 import { ProductsRepository, type ProductListFilters } from './products.repository';
 import { QaRepository, type QaZiele } from './qa.repository';
@@ -54,6 +54,14 @@ export class CatalogService {
 
   listActiveCategories(tenant: TenantContext) {
     return this.categories.listActive(tenant);
+  }
+
+  /** Bieten wir eine Versorgung mit Rezept an? Nur wenn mindestens ein
+   * Kassenartikel (mit Hilfsmittelnummer) bestellbar ist — sonst endet der
+   * Rezept-Weg in einer leeren Versorgungsauswahl (Katalog v1: nur Selbstzahler). */
+  async rezeptVersorgungVerfuegbar(tenant: TenantContext): Promise<boolean> {
+    const kassenartikel = await this.listProducts(tenant, { nurHilfsmittel: true });
+    return kassenartikel.some(istVerfuegbar);
   }
 
   /** Katalogliste: jede Einschränkung (Kategorie, Bedarf, Krankheitsbild) engt die
@@ -121,6 +129,11 @@ export class CatalogService {
       throw new NotFoundException('Produkt nicht gefunden');
     }
     return product;
+  }
+
+  /** Aktive Varianten (Größen/Ausführungen) eines Produkts, in Katalogreihenfolge. */
+  listVariants(tenant: TenantContext, productId: string) {
+    return this.products.listVariants(tenant, productId);
   }
 
   async getProductDetail(tenant: TenantContext, id: string) {

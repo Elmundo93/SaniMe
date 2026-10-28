@@ -33,6 +33,7 @@ import { useWarenkorbStore } from '../../store/warenkorbStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { useOtpVerification } from '../../hooks/useOtpVerification';
+import { useRezeptVersorgung } from '../../hooks/useRezeptVersorgung';
 import { useAuthStore } from '../../store/authStore';
 import { createPaymentIntent, devZahlungSimulieren } from '../../lib/api/onboarding';
 import { resolveStripePublishableKey, stillePruefungAktiv } from '../../lib/api/config';
@@ -41,7 +42,7 @@ import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { pushNachBestellungAnbieten } from '../../lib/push';
 import { bestelltFuerSichSelbst } from '../../lib/besteller';
 import { formatEuro, anzahlText } from '../../lib/katalogAnzeige';
-import { gleicheProdukte, warenkorbAbgleich } from '../../lib/warenkorb';
+import { alsArtikel, gleicheProdukte, warenkorbAbgleich } from '../../lib/warenkorb';
 import { D } from '@sanime/design-system';
 
 // How long (and how often) to poll after Stripe confirms the PaymentSheet
@@ -61,7 +62,7 @@ const BESTAETIGUNG_POLL_INTERVALL_MS = 1200;
 type CheckoutSubstep = 'uebersicht' | 'kontakt' | 'otp' | 'abschluss';
 
 function zuArtikel(positionen: WarenkorbPosition[]): WarenkorbArtikel[] {
-  return positionen.map((p) => ({ produktId: p.produkt.id, ...(p.krankheitsbildId ? { krankheitsbildId: p.krankheitsbildId } : {}) }));
+  return positionen.map(alsArtikel);
 }
 
 function rezeptStatus(position: WarenkorbPosition): RezeptStatus {
@@ -78,6 +79,7 @@ function terminText(beginn: string): string {
 export default function CheckoutScreen() {
   const router = useRouter();
   const { session, ready } = useOnboardingGuard(['CHECKOUT', 'CHECKOUT_FEHLGESCHLAGEN']);
+  const mitRezept = useRezeptVersorgung() !== false;
   const dispatch = useOnboardingStore((s) => s.dispatch);
   const einreichen = useOnboardingStore((s) => s.einreichen);
   const abschliessen = useOnboardingStore((s) => s.abschliessen);
@@ -138,7 +140,7 @@ export default function CheckoutScreen() {
     const result = await dispatch(event);
     setAktionLaeuft(false);
     if (result.ok) router.push(STATUS_META[result.session.status].route as any);
-    else zeigeDispatchFehler();
+    else zeigeDispatchFehler(result.reason);
   };
 
   const notfallZuruecknehmen = async () => {
@@ -356,7 +358,7 @@ export default function CheckoutScreen() {
   const kostenBox = (
     <View style={styles.kostenBox}>
       <View style={styles.kostenZeile}>
-        <Text style={styles.kostenLabel}>Jetzt zu zahlen</Text>
+        <Text style={styles.kostenLabel}>Jetzt zu zahlen (inkl. MwSt.)</Text>
         <Text style={styles.kostenWert}>{formatEuro(betragJetzt)}</Text>
       </View>
       {kassenartikel.length > 0 && (
@@ -408,7 +410,14 @@ export default function CheckoutScreen() {
                   key={position.produkt.id}
                   produkt={position.produkt}
                   rezeptStatus={status}
-                  detail={position.rezept ? `Rezept: ${position.rezept.hilfsmittel} · ${position.rezept.arzt.name}` : undefined}
+                  detail={
+                    [
+                      position.variante ? `Größe/Ausführung: ${position.variante.bezeichnung}` : null,
+                      position.rezept ? `Rezept: ${position.rezept.hilfsmittel} · ${position.rezept.arzt.name}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join('\n') || undefined
+                  }
                   onEntfernen={session.positionen.length > 1 && !aktionLaeuft ? () => entfernen(position) : undefined}
                   aktion={
                     status === 'fehlt'
@@ -448,15 +457,17 @@ export default function CheckoutScreen() {
             })}
 
             <View style={styles.linkReihe}>
-              <TouchableOpacity
-                style={styles.link}
-                onPress={() => speiche({ type: 'REZEPT_HINZUFUEGEN' })}
-                accessibilityRole="button"
-                accessibilityLabel="Weiteres Rezept scannen"
-              >
-                <Feather name="file-plus" size={16} color={D.color.accent} />
-                <Text style={styles.linkText}>Weiteres Rezept scannen</Text>
-              </TouchableOpacity>
+              {mitRezept && (
+                <TouchableOpacity
+                  style={styles.link}
+                  onPress={() => speiche({ type: 'REZEPT_HINZUFUEGEN' })}
+                  accessibilityRole="button"
+                  accessibilityLabel="Weiteres Rezept scannen"
+                >
+                  <Feather name="file-plus" size={16} color={D.color.accent} />
+                  <Text style={styles.linkText}>Weiteres Rezept scannen</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={styles.link}
                 onPress={() => {

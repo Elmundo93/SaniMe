@@ -47,3 +47,12 @@ export function listRelated(id: string, variantId?: string): Promise<PassendePro
   const query = variantId ? `?variantId=${encodeURIComponent(variantId)}` : '';
   return request('GET', `/products/${id}/related${query}`, { auth: false });
 }
+
+export interface KatalogAngebot {
+  /** false = keine bestellbaren Kassenartikel — Rezept-Einstiege ausblenden. */
+  rezeptVersorgung: boolean;
+}
+
+export function getAngebot(): Promise<KatalogAngebot> {
+  return request('GET', '/catalog/angebot', { auth: false });
+}

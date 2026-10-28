@@ -89,10 +89,18 @@ export const onboardingEventSchema = z.discriminatedUnion('type', [
   // Nur IDs zählen — `produkte` füllt der Server aus dem Katalog, was der
   // Client dort schickt, wird verworfen. krankheitsbildId: optionaler Kontext
   // aus der sessionlosen Discovery, muss eine bekannte Taxonomie-ID sein.
+  // varianteId: gewählte Größe/Ausführung, gegen den Katalog geprüft; die
+  // aufgelösten `varianten` setzt nur der Server (Client-Wert wird verworfen).
   z.object({
     type: z.literal('WARENKORB_UEBERNOMMEN'),
     artikel: z
-      .array(z.object({ produktId: z.string().uuid(), krankheitsbildId: z.string().min(1).optional() }))
+      .array(
+        z.object({
+          produktId: z.string().uuid(),
+          krankheitsbildId: z.string().min(1).optional(),
+          varianteId: z.string().uuid().optional(),
+        }),
+      )
       .min(1)
       .max(WARENKORB_MAX),
     produkte: z.array(produktSchema).optional(),

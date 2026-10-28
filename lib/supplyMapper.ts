@@ -60,7 +60,7 @@ export function mapSupplyRowToVersorgung(row: SupplyRow): Versorgung {
   return {
     id: row.id,
     status,
-    produkt: row.productNameSnapshot,
+    produkt: row.variantLabelSnapshot ? `${row.productNameSnapshot} · ${row.variantLabelSnapshot}` : row.productNameSnapshot,
     produktId: row.productId,
     hilfsmittelNr: row.hilfsmittelNrSnapshot ?? '',
     selbstzahler: !row.hilfsmittelNrSnapshot,

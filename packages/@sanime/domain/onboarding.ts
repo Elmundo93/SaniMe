@@ -5,6 +5,7 @@ import type {
   OcrConfidence,
   OnboardingSession,
   OnboardingStatus,
+  PositionsVariante,
   Produkt,
   TerminSlot,
   WarenkorbPosition,
@@ -42,7 +43,9 @@ export type OnboardingEvent =
   // weg, neue kommen hinzu. `produkte` füllt ausschließlich der Server (aus dem
   // Katalog, in der Reihenfolge von `artikel`); ein Client schickt []. 
   // krankheitsbildId: optionaler Kontext aus der sessionlosen Discovery.
-  | { type: 'WARENKORB_UEBERNOMMEN'; artikel: WarenkorbArtikel[]; produkte: Produkt[] }
+  // produkte und varianten füllt ausschließlich der Server aus dem Katalog;
+  // Clients schicken [] bzw. lassen varianten weg.
+  | { type: 'WARENKORB_UEBERNOMMEN'; artikel: WarenkorbArtikel[]; produkte: Produkt[]; varianten?: ArtikelVariante[] }
   // Speichen des Checkouts — jede führt zurück auf CHECKOUT.
   | { type: 'REZEPT_FUER_POSITION'; produktId: string }
   | { type: 'REZEPT_HINZUFUEGEN' }
@@ -82,6 +85,13 @@ export type ClientOnboardingEvent = Exclude<OnboardingEvent, { type: (typeof SER
 export interface WarenkorbArtikel {
   produktId: string;
   krankheitsbildId?: string;
+  /** Gewählte Größe/Ausführung — Pflicht, wenn das Produkt Varianten hat. */
+  varianteId?: string;
+}
+
+/** Vom Server aufgelöste Variante je Produkt (WARENKORB_UEBERNOMMEN.varianten). */
+export interface ArtikelVariante extends PositionsVariante {
+  produktId: string;
 }
 
 // SecureStore-Werte sind auf Android auf ~2 KB begrenzt — der lokale Warenkorb
@@ -443,6 +453,7 @@ function applyEventData(session: OnboardingSession, event: OnboardingEvent): Onb
         rezeptConfidence: session.ocrConfidence,
         ohneRezept: false,
         krankheitsbildId: findePosition(session, event.produkt.id)?.krankheitsbildId ?? null,
+        variante: findePosition(session, event.produkt.id)?.variante ?? null,
       };
       const vorhanden = findePosition(session, event.produkt.id) !== undefined;
       return {
@@ -460,9 +471,12 @@ function applyEventData(session: OnboardingSession, event: OnboardingEvent): Onb
         positionen: event.produkte.map((produkt) => {
           const bestehend = findePosition(session, produkt.id);
           const kontext = event.artikel.find((a) => a.produktId === produkt.id)?.krankheitsbildId;
+          // Der Warenkorb gewinnt: die dort gewählte Größe ersetzt eine frühere.
+          const gefunden = event.varianten?.find((v) => v.produktId === produkt.id);
+          const variante = gefunden ? { id: gefunden.id, bezeichnung: gefunden.bezeichnung } : null;
           return bestehend
-            ? { ...bestehend, produkt, krankheitsbildId: kontext ?? bestehend.krankheitsbildId }
-            : { produkt, rezept: null, rezeptConfidence: null, ohneRezept: false, krankheitsbildId: kontext ?? null };
+            ? { ...bestehend, produkt, krankheitsbildId: kontext ?? bestehend.krankheitsbildId, variante }
+            : { produkt, rezept: null, rezeptConfidence: null, ohneRezept: false, krankheitsbildId: kontext ?? null, variante };
         }),
       };
     case 'REZEPT_FUER_POSITION':

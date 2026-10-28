@@ -89,6 +89,7 @@ export interface VersorgungsDetail {
     id: string;
     status: SupplyStatus;
     productNameSnapshot: string;
+    variantLabelSnapshot: string | null;
     manufacturerNameSnapshot: string;
     hilfsmittelNrSnapshot: string | null;
     doctorNameSnapshot: string;

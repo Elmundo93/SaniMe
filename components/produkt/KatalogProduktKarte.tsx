@@ -42,7 +42,10 @@ export function KatalogProduktKarte({ produkt, onPress, index = 0 }: KatalogProd
             <View style={styles.inhalt}>
               <Text style={styles.name}>{produkt.name}</Text>
               <Text style={styles.nutzen}>{produkt.kurzbeschreibung ?? produkt.beschreibung}</Text>
-              <Text style={styles.kosten}>{kosten.titel}</Text>
+              <Text style={styles.kosten}>
+                {kosten.titel}
+                {kosten.detail === 'inkl. MwSt.' && <Text style={styles.kostenZusatz}> inkl. MwSt.</Text>}
+              </Text>
               <View style={styles.verfuegbarkeit}>
                 <Feather
                   name={bestellbar ? 'truck' : 'slash'}
@@ -72,6 +75,7 @@ const styles = StyleSheet.create({
   name: { ...typography.body, fontWeight: D.font.bold, color: D.color.ink },
   nutzen: { ...typography.body, color: D.color.inkSecondary },
   kosten: { ...typography.caption, fontWeight: D.font.semibold, color: D.color.accent },
+  kostenZusatz: { fontWeight: D.font.regular, color: D.color.inkSecondary },
   verfuegbarkeit: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   verfuegbarkeitText: { ...typography.caption, color: D.color.inkSecondary },
   nichtBestellbar: { color: D.color.error, fontWeight: D.font.semibold },

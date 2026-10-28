@@ -37,6 +37,11 @@ describe('Catalog (e2e)', () => {
     }
   });
 
+  it('reports whether a Rezept supply is on offer (test DB has Kassenartikel placeholders)', async () => {
+    const res = await request(app.getHttpServer()).get('/api/v1/catalog/angebot').expect(200);
+    expect(res.body).toEqual({ rezeptVersorgung: true });
+  });
+
   it('lists categories for an authenticated admin', async () => {
     const res = await request(app.getHttpServer())
       .get('/api/v1/catalog/categories')
@@ -116,6 +121,8 @@ describe('Catalog (e2e)', () => {
       rollatorWohnung: '40000000-0000-0000-0000-000000000006',
       bremsset: '40000000-0000-0000-0000-000000000032',
       tasche: '40000000-0000-0000-0000-000000000030',
+      // Katalog v1 (echter Selbstzahler-Artikel), an dem der Ratgeber hängt.
+      rollatorLeichtV1: '40000000-0000-0000-0000-000000000101',
     };
     const get = (url: string) => request(app.getHttpServer()).get(`/api/v1${url}`);
     let kategorien: { id: string; slug: string; parentId: string | null; name: string }[];
@@ -153,14 +160,20 @@ describe('Catalog (e2e)', () => {
 
     it('filters by attributes validated against the domain definition', async () => {
       const rollatoren = kat('rollatoren').id;
+      const ids = (res: { body: { id: string }[] }) => res.body.map((p) => p.id);
+      // Der Katalog wächst — geprüft wird, was rein- und was rausfallen muss, keine exakte Liste.
       const draussen = await get(`/products?categoryId=${rollatoren}&filter[einsatzort]=aussen`).expect(200);
-      expect(draussen.body.map((p: { id: string }) => p.id).sort()).toEqual([PRODUKT.rollatorLeicht, PRODUKT.rollatorOutdoor].sort());
+      expect(ids(draussen)).toEqual(expect.arrayContaining([PRODUKT.rollatorLeicht, PRODUKT.rollatorOutdoor]));
+      expect(ids(draussen)).not.toContain(PRODUKT.rollatorWohnung);
 
       const leicht = await get(`/products?categoryId=${rollatoren}&filter[gewichtKg]=7`).expect(200);
-      expect(leicht.body.map((p: { id: string }) => p.id)).toEqual([PRODUKT.rollatorLeicht]);
+      expect(ids(leicht)).toContain(PRODUKT.rollatorLeicht);
+      expect(ids(leicht)).not.toContain(PRODUKT.rollatorOutdoor);
 
       const schwer = await get(`/products?categoryId=${rollatoren}&filter[belastbarkeitKg]=150&filter[faltbar]=true`).expect(200);
-      expect(schwer.body.map((p: { id: string }) => p.id)).toEqual([PRODUKT.rollatorOutdoor]);
+      expect(ids(schwer)).toContain(PRODUKT.rollatorOutdoor);
+      expect(ids(schwer)).not.toContain(PRODUKT.rollatorLeicht);
+      expect(ids(schwer)).not.toContain(PRODUKT.rollatorWohnung);
 
       const guenstig = await get(`/products?categoryId=${rollatoren}&filter[preisEuro]=25`).expect(200);
       expect(guenstig.body.map((p: { id: string }) => p.id)).not.toContain(PRODUKT.rollatorWohnung);
@@ -227,7 +240,7 @@ describe('Catalog (e2e)', () => {
       // Produktspezifisch für einen anderen Rollator — erscheint hier nicht.
       expect(slugs).not.toContain('rollator-bremsen-pruefen');
 
-      const direkt = await get(`/qa?productId=${PRODUKT.rollatorLeicht}`).expect(200);
+      const direkt = await get(`/qa?productId=${PRODUKT.rollatorLeichtV1}`).expect(200);
       expect(direkt.body[0].slug).toBe('rollator-bremsen-pruefen');
     });
 

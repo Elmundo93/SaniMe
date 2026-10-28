@@ -33,6 +33,7 @@ export function detail(teil: Partial<VersorgungsDetail> = {}, supply: Partial<Ve
       id: 'sup-1',
       status: 'submitted',
       productNameSnapshot: 'Rollator (Platzhalter)',
+      variantLabelSnapshot: null,
       manufacturerNameSnapshot: 'Beispiel GmbH',
       hilfsmittelNrSnapshot: '00.00.00.0001',
       doctorNameSnapshot: 'Dr. Beispiel',
