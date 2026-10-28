@@ -10,3 +10,15 @@
 export const PERMISSIONS = ['orders:read', 'orders:write', 'health-data:write', 'compliance:read', 'compliance:manage'] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
+
+// Benannte Rollen = feste Bündel von Permissions (Adminplan §1). Geprüft wird
+// weiter je Permission (RolesGuard); die Rolle bestimmt nur, welche Zeilen in
+// role_permissions angelegt werden.
+export const ROLLEN = {
+  sachbearbeitung: ['orders:read', 'orders:write', 'health-data:write'],
+  teamleitung: [...PERMISSIONS],
+  datenschutz: ['orders:read', 'compliance:read', 'compliance:manage'],
+  lesend: ['orders:read'],
+} as const satisfies Record<string, readonly Permission[]>;
+
+export type Rolle = keyof typeof ROLLEN;

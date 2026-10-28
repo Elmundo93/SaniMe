@@ -1,9 +1,9 @@
 import 'dotenv/config';
 import { INestApplication } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { seedAdminWithPermissions } from './helpers/seed-admin';
 import { configureApp } from '../src/bootstrap';
 import { DEFAULT_TENANT_CONTEXT } from '../src/common/repository/tenant-context';
 import { OnboardingSessionsRepository } from '../src/modules/onboarding/onboarding-sessions.repository';
@@ -23,11 +23,8 @@ describe('Appointments (e2e)', () => {
     configureApp(app);
     await app.init();
 
-    const jwt = app.get(JwtService);
-    adminToken = await jwt.signAsync(
-      { sub: 'test-admin', email: 'test-admin@example.com' },
-      { secret: process.env.ADMIN_JWT_SECRET, expiresIn: '5m' },
-    );
+    // Die Admin-Strategie prüft, dass es die Person wirklich gibt und sie aktiv ist.
+    adminToken = (await seedAdminWithPermissions(app, [])).token;
 
     const supplyOrder = app.get(SupplyOrderService);
     const onboardingSessions = app.get(OnboardingSessionsRepository);

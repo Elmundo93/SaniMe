@@ -1,5 +1,5 @@
-// Dev-Werkzeug: setzt den Status einer Versorgung so, wie es unser Team im
-// Admin-Bereich täte (es gibt noch keine Admin-Oberfläche). Bootet das Backend
+// Dev-Werkzeug: setzt den Status einer Versorgung so, wie es unser Team in der
+// Admin-App (apps/admin) täte — für schnelle Tests ohne Login. Bootet das Backend
 // ohne HTTP und ruft SupplyOrderService.transitionOrder — Push, Aufgaben und
 // Verlauf entstehen also genau wie im Betrieb.
 //

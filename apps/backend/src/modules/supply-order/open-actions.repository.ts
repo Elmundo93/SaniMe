@@ -46,6 +46,15 @@ export class OpenActionsRepository {
       .where(and(eq(openActions.supplyId, supplyId), eq(openActions.actionType, actionType), isNull(openActions.resolvedAt)));
   }
 
+  async findById(id: string) {
+    const [row] = await this.db.select().from(openActions).where(eq(openActions.id, id)).limit(1);
+    return row ?? null;
+  }
+
+  async setAssigned(id: string, assignedAdminId: string | null) {
+    await this.db.update(openActions).set({ assignedAdminId }).where(eq(openActions.id, id));
+  }
+
   async resolve(id: string) {
     await this.db.update(openActions).set({ resolvedAt: new Date() }).where(eq(openActions.id, id));
   }

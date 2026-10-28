@@ -2,7 +2,9 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import {
   ERREICHBARKEITEN,
   erstelleLeereSupply,
+  NOTFALL_ERGEBNISSE,
   NOTFALL_GRUENDE,
+  type NotfallErgebnis,
   SupplyWorkflow,
   type NotfallAnfrage,
   type SupplyContext,
@@ -128,6 +130,9 @@ export class SupplyOrderService {
     event: SupplyEvent,
     actor: SupplyActor,
     metadata: Record<string, unknown> = {},
+    // Admin-App: der Status, den die Person beim Klick vor sich hatte. Weicht
+    // er ab, hat jemand anderes inzwischen gehandelt → 409 statt stillem Weiterschalten.
+    erwarteterStatus?: SupplyStatus,
   ) {
     const order = await this.orders.findById(tenant, orderId);
     if (!order) {
@@ -136,6 +141,11 @@ export class SupplyOrderService {
     const supply = await this.supplies.findById(tenant, order.supplyId);
     if (!supply) {
       throw new NotFoundException('Versorgung nicht gefunden');
+    }
+    if (erwarteterStatus && supply.status !== erwarteterStatus) {
+      throw new ConflictException(
+        'Diese Versorgung wurde inzwischen von jemand anderem bearbeitet. Bitte prüfe den aktuellen Stand und entscheide dann erneut.',
+      );
     }
     const context: SupplyContext = { id: supply.id, status: supply.status as SupplyStatus };
     const nextContext = await this.applyTransition(tenant, context, order.id, event, actor, metadata);
@@ -239,6 +249,75 @@ export class SupplyOrderService {
       resourceId: supplyId,
     });
     return row;
+  }
+
+  // Rückruf zu einer Notfallanfrage erledigt (Admin-App). NICHT_ERREICHT
+  // lässt Anfrage und Aufgabe offen — es wird erneut angerufen.
+  async notfallRueckruf(tenant: TenantContext, requestId: string, ergebnis: NotfallErgebnis, actor: SupplyActor) {
+    const anfrage = await this.urgentRequests.findById(requestId);
+    const supply = anfrage ? await this.supplies.findById(tenant, anfrage.supplyId) : null;
+    if (!anfrage || !supply) throw new NotFoundException('Notfallanfrage nicht gefunden');
+    if (anfrage.resolvedAt) throw new ConflictException('Diese Notfallanfrage wurde bereits abgeschlossen.');
+
+    if (ergebnis !== 'NICHT_ERREICHT') {
+      await this.urgentRequests.resolve(anfrage.id, ergebnis);
+      if (anfrage.openActionId) await this.openActions.resolve(anfrage.openActionId);
+      await this.timelineEvents.create({
+        supplyId: supply.id,
+        label: ergebnis === 'ZUGESAGT' ? 'Notfalllieferung zugesagt' : 'Rückruf erfolgt',
+        description:
+          ergebnis === 'ZUGESAGT'
+            ? 'Wir haben mit dir besprochen, wie wir dich schneller versorgen.'
+            : 'Wir haben deine Anfrage telefonisch mit dir geklärt.',
+        completed: true,
+        occurredAt: new Date(),
+      });
+    }
+    await this.auditService.record({
+      tenant,
+      actorType: actor.type,
+      actorId: actor.id,
+      eventType: 'UrgentDeliveryCallback',
+      resourceType: 'supply',
+      resourceId: supply.id,
+      metadata: { ergebnis },
+    });
+    return { id: anfrage.id, ergebnis, label: NOTFALL_ERGEBNISSE[ergebnis], abgeschlossen: ergebnis !== 'NICHT_ERREICHT' };
+  }
+
+  // Interne Aufgabe übernehmen (adminId) oder wieder freigeben (null).
+  async aufgabeZuweisen(tenant: TenantContext, actionId: string, adminId: string | null) {
+    const aktion = await this.interneOffeneAufgabe(tenant, actionId);
+    await this.openActions.setAssigned(aktion.id, adminId);
+  }
+
+  // Manuell erledigen geht nur für Aufgaben ohne eigenen Abschluss: Schritt-
+  // Aufgaben erledigt der Statuswechsel, Rückrufe das Rückruf-Ergebnis.
+  async aufgabeErledigen(tenant: TenantContext, actionId: string, actor: SupplyActor) {
+    const aktion = await this.interneOffeneAufgabe(tenant, actionId);
+    if (aktion.actionType === SCHRITT_AKTION) {
+      throw new BadRequestException('Diese Aufgabe erledigt sich mit dem nächsten Schritt der Versorgung. Bitte setze dazu den Status.');
+    }
+    if (aktion.actionType === 'rueckruf') {
+      throw new BadRequestException('Bitte trage das Ergebnis des Rückrufs bei der Notfallanfrage ein.');
+    }
+    await this.openActions.resolve(aktion.id);
+    await this.auditService.record({
+      tenant,
+      actorType: actor.type,
+      actorId: actor.id,
+      eventType: 'OpenActionResolved',
+      resourceType: 'supply',
+      resourceId: aktion.supplyId,
+    });
+  }
+
+  private async interneOffeneAufgabe(tenant: TenantContext, actionId: string) {
+    const aktion = await this.openActions.findById(actionId);
+    const supply = aktion ? await this.supplies.findById(tenant, aktion.supplyId) : null;
+    if (!aktion || !supply || aktion.audience !== 'intern') throw new NotFoundException('Aufgabe nicht gefunden');
+    if (aktion.resolvedAt) throw new ConflictException('Diese Aufgabe ist bereits erledigt.');
+    return aktion;
   }
 
   // Der Kunde hat seinen Liefertermin gebucht (AppointmentsService).

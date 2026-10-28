@@ -176,6 +176,13 @@
       "when": 1793200908131,
       "tag": "0024_versorgungsprozess",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793205840385,
+      "tag": "0025_admin_app",
+      "breakpoints": true
     }
   ]
 }

@@ -18,4 +18,12 @@ export class RolePermissionsRepository {
       .limit(1);
     return Boolean(row);
   }
+
+  async listForAdmin(adminUserId: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ permission: rolePermissions.permission })
+      .from(rolePermissions)
+      .where(eq(rolePermissions.adminUserId, adminUserId));
+    return rows.map((r) => r.permission);
+  }
 }

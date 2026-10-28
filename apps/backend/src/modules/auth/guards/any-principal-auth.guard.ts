@@ -1,5 +1,6 @@
-import { ExecutionContext, Injectable } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { ADMIN_CSRF_HEADER } from '../services/admin-session.service';
 
 // Passport's multi-strategy support: tries 'admin-jwt' then falls back to
 // 'customer-session'. Used by read endpoints any authenticated principal may
@@ -14,6 +15,10 @@ export class AnyPrincipalAuthGuard extends AuthGuard(['admin-jwt', 'customer-ses
     if (principal && typeof principal === 'object' && 'sessionId' in principal) {
       request.customer = principal;
     } else if (principal) {
+      // Gleiche CSRF-Regel wie AdminJwtAuthGuard für die Cookie-Sitzung der Web-App.
+      if (principal.quelle === 'cookie' && !['GET', 'HEAD', 'OPTIONS'].includes(request.method) && request.headers[ADMIN_CSRF_HEADER] !== '1') {
+        throw new ForbiddenException('Anfrage abgelehnt. Bitte lade die Seite neu und versuche es erneut.');
+      }
       request.admin = principal;
     }
     return principal;

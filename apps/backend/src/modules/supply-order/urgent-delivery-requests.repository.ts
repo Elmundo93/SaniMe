@@ -16,6 +16,15 @@ export class UrgentDeliveryRequestsRepository {
     return row;
   }
 
+  async findById(id: string) {
+    const [row] = await this.db.select().from(urgentDeliveryRequests).where(eq(urgentDeliveryRequests.id, id)).limit(1);
+    return row ?? null;
+  }
+
+  async resolve(id: string, outcome: string) {
+    await this.db.update(urgentDeliveryRequests).set({ resolvedAt: new Date(), outcome }).where(eq(urgentDeliveryRequests.id, id));
+  }
+
   listOpenForSupplies(supplyIds: string[]) {
     if (supplyIds.length === 0) return Promise.resolve([]);
     return this.db

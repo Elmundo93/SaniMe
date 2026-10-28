@@ -13,6 +13,10 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "jest",
+    "admin:dev": "npm run dev --workspace apps/admin",
+    "admin:build": "npm run build --workspace apps/admin",
+    "admin:typecheck": "npm run typecheck --workspace apps/admin",
+    "admin:test": "npm run test --workspace apps/admin",
     "backend:dev": "npm run start:dev --workspace apps/backend",
     "backend:build": "npm run build --workspace apps/backend",
     "backend:lint": "npm run lint --workspace apps/backend",
@@ -22,7 +26,9 @@
     "backend:db:generate": "npm run db:generate --workspace apps/backend",
     "backend:db:migrate": "npm run db:migrate --workspace apps/backend",
     "backend:db:seed": "npm run db:seed --workspace apps/backend",
-    "backend:versorgung-status": "npm run versorgung:status --workspace apps/backend --"
+    "backend:versorgung-status": "npm run versorgung:status --workspace apps/backend --",
+    "backend:admin-anlegen": "npm run admin:anlegen --workspace apps/backend --",
+    "backend:admin-2fa-zuruecksetzen": "npm run admin:2fa-zuruecksetzen --workspace apps/backend --"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -75,6 +81,9 @@
   },
   "overrides": {
     "react-dom": "19.1.0",
+    "@sanime/admin": {
+      "react-dom": "19.2.3"
+    },
     "rxjs": "^7.8.2"
   }
 }

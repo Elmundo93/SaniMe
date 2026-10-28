@@ -1,7 +1,9 @@
 import 'dotenv/config';
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import * as Sentry from '@sentry/nestjs';
+import { adminAppAusliefern, adminAppVerzeichnis } from './admin-app';
 import { AppModule } from './app.module';
 import { configureApp } from './bootstrap';
 import { initMetrics } from './common/metrics/metrics-init';
@@ -55,10 +57,18 @@ async function bootstrap() {
   // needs the exact original bytes to verify Stripe's HMAC signature; parsing
   // and re-serializing the JSON body would produce different bytes and fail
   // verification even for a genuine, unmodified Stripe request.
-  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true, rawBody: true });
   app.useLogger(app.get(StructuredLoggerService));
   app.enableShutdownHooks();
   configureApp(app);
+  // Gebaute Admin-App unter /admin/ (siehe admin-app.ts) — nur hier, nicht in
+  // configureApp: die e2e-Tests brauchen keinen Build.
+  const adminVerzeichnis = adminAppVerzeichnis();
+  if (adminVerzeichnis) {
+    adminAppAusliefern(app, adminVerzeichnis);
+  } else {
+    app.get(StructuredLoggerService).log('Admin-App nicht gebaut — /admin/ bleibt leer (npm run admin:build)', 'Bootstrap');
+  }
   const port = process.env.PORT ? Number(process.env.PORT) : 3000;
   await app.listen(port);
 }

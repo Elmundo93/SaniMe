@@ -1,6 +1,6 @@
 # Adminplan — SaniMe Admin-App („Innendienst“)
 
-Stand: 2026-10-28 · Status: **Konzept, zur Abstimmung** (Entscheidungen in §9 offen)
+Stand: 2026-10-28 · Status: **Phase 0 + 1 umgesetzt** (siehe §10), Phasen 2–4 offen
 
 Ziel: Unser Team kann jede Versorgung vom Eingang bis zur Übergabe bearbeiten, ohne Terminal-Skript (`backend:versorgung-status`) und ohne Datenbankzugriff. Die App muss **praktisch** sein (schnellster Weg zur nächsten Aufgabe) und **zugänglich** (WCAG 2.1 AA, vollständig per Tastatur bedienbar).
 
@@ -216,3 +216,29 @@ Abnahme je Phase: typecheck/lint/tests grün, axe ohne Verstöße, ein vollstän
 3. **Kassenkommunikation:** Bleibt der Antrag vorerst manuell (Fax/Portal/eKV extern) und die Admin-App dokumentiert nur „versendet“? (Annahme: ja.)
 4. **Katalogpflege:** In der Admin-App (Phase 4) oder aus einem Warenwirtschaftssystem/Lieferanten-Import?
 5. **Vier-Augen-Prinzip:** Für welche Aktionen nötig — nur Löschung, oder auch Ablehnung durch die Kasse?
+
+---
+
+## 10. Umsetzungsstand (2026-10-28)
+
+Umgesetzt mit den Vorschlägen aus §9 als Annahmen (Web-App, 2FA ab Tag 1, Kassenantrag weiter manuell, kein CSV-Export).
+
+**Phase 0 — Grundgerüst:** `apps/admin/` (Vite, React, TanStack Query, react-router), Tokens aus `@sanime/design-system`, Layout mit Sprunglink, Navigation, Tastenkürzeln (abschaltbar); Login mit Pflicht-TOTP inkl. Einrichtung (QR + Schlüssel als Text), httpOnly-Cookie-Sitzung (30 min gleitend, max. 8 h), CSRF-Header, Sperre nach 5 Fehlversuchen, Inaktivitäts-Warnung; `GET /admin/auth/me`, Logout; deaktivierte Admins verlieren den Zugang sofort.
+
+**Phase 1 — MVP:** Arbeitskorb (sortiert nach Notfall/Frist/neu, Filter Alle/Mir/Nicht zugewiesen/Notfälle, Übernehmen/Freigeben, 30-s-Aktualisierung); Versorgungsliste (Suche, Statusgruppen, Paginierung, URL-Parameter); Versorgungsdetail (Nächster Schritt aus der gemeinsamen Übergangstabelle, Bestätigungsdialog mit Kundenfolgen, Ablehnung mit Pflicht-Begründung, Konflikterkennung per `erwarteterStatus`/409, Notfall-Rückruf mit Ergebnis, Aufgaben, Kunde/Lieferung/Rezept/Versorgung, Verlauf + interne Notizen + Kunden-Nachricht). Migration `0025_admin_app`.
+
+**Abnahme §8:** 1 ✓ (30-s-Polling), 2 ✓ (alle Übergänge bis „Archiviert“ in der UI), 3 ✓ (Knöpfe aus `erlaubteSupplyEvents`, Test prüft alle Status), 4 ✓ (409 + verständliche Meldung), 5 ✓ (Listen ohne Rezeptdaten, Detail mit `@AuditRead`), 6 ✓ für alle Abläufe per Testing Library/Tastatur; axe ohne Verstöße auf allen Seiten in den Komponententests.
+
+**Noch offen / bewusst nicht gemacht:**
+- Manueller Screenreader-Durchgang (NVDA, VoiceOver) und Prüfung bei 200 % Zoom im echten Browser — automatisiert nur axe in jsdom (ohne Farbkontrast).
+- Playwright-E2E im echten Browser (stattdessen: Komponententests + manueller curl-Durchlauf über den Vite-Proxy gegen echtes Backend).
+- Fehlversuchs-Sperre nur im Speicher (reicht für eine Instanz), kein Schutz gegen Wiederverwendung desselben TOTP-Codes innerhalb von 90 s.
+- Admin-Konten per Skript statt in der App (siehe „Betrieb“ unten); kein „Passwort ändern“ in der App.
+- Phasen 2–4 (§7).
+
+### Betrieb (Setup finalisiert 2026-10-28)
+
+- **Auslieferung:** `npm run admin:build`, danach liefert das Backend die App selbst unter `https://<api-domain>/admin/` aus (gleiche Domain wie `/api`, strenge CSP, `X-Frame-Options: DENY`, kein Caching von `index.html`). `ADMIN_APP_DIR` für einen anderen Pfad, `ADMIN_APP_DIR=aus` zum Abschalten.
+- **Konten:** `npm run backend:admin-anlegen -- <email> "<Name>" <rolle>` mit den Rollen sachbearbeitung, teamleitung, datenschutz und lesend. Das Startpasswort wird einmal ausgegeben und muss sicher übergeben werden. Die 2FA richtet die Person beim ersten Login selbst ein. `--deaktivieren <email>` beendet den Zugang sofort. `backend:admin-2fa-zuruecksetzen -- <email>` setzt den zweiten Faktor zurück, wenn das Handy verloren ist.
+- **Geheimnisse:** `ADMIN_JWT_SECRET` signiert die Sitzungen und verschlüsselt die 2FA-Geheimnisse. Wird es rotiert, müssen alle Admins ihre 2FA neu einrichten.
+- **Geprüft:** Produktionsbuild über das Backend im echten Chrome (Arbeitskorb, Versorgungsdetail), keine Konsolenfehler und keine CSP-Verstöße. Rollenrechte geprüft: Sachbearbeitung darf keine Löschanträge sehen (403), nach der Deaktivierung gibt es sofort 401.

@@ -52,3 +52,12 @@ export function istNotfallAnfrage(wert: unknown): wert is NotfallAnfrage {
     (w.telefon === undefined || typeof w.telefon === 'string')
   );
 }
+
+// Ergebnis des Rückrufs zu einer Notfallanfrage (Admin-App). NICHT_ERREICHT
+// lässt die Anfrage offen — es wird erneut angerufen.
+export const NOTFALL_ERGEBNISSE = {
+  ZUGESAGT: 'Notfalllieferung zugesagt',
+  NICHT_NOETIG: 'Geklärt, keine Notfalllieferung nötig',
+  NICHT_ERREICHT: 'Nicht erreicht, erneut anrufen',
+} as const;
+export type NotfallErgebnis = keyof typeof NOTFALL_ERGEBNISSE;

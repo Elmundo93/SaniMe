@@ -2,10 +2,10 @@ import 'dotenv/config';
 import { createHash } from 'crypto';
 import { desc, eq } from 'drizzle-orm';
 import { INestApplication } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { seedAdminWithPermissions } from './helpers/seed-admin';
 import { configureApp } from '../src/bootstrap';
 import { DRIZZLE, type Database } from '../src/db/client';
 import { AGB_VERSION, DATENSCHUTZ_VERSION } from '@sanime/domain';
@@ -72,11 +72,8 @@ describe('Onboarding full slice (e2e)', () => {
     configureApp(app);
     await app.init();
 
-    const jwt = app.get(JwtService);
-    adminToken = await jwt.signAsync(
-      { sub: 'test-admin', email: 'test-admin@example.com' },
-      { secret: process.env.ADMIN_JWT_SECRET, expiresIn: '5m' },
-    );
+    // Die Admin-Strategie prüft, dass es die Person wirklich gibt und sie aktiv ist.
+    adminToken = (await seedAdminWithPermissions(app, [])).token;
   });
 
   afterAll(async () => {
@@ -348,11 +345,8 @@ describe('Onboarding Warenkorb (e2e)', () => {
     configureApp(app);
     await app.init();
 
-    const jwt = app.get(JwtService);
-    adminToken = await jwt.signAsync(
-      { sub: 'test-admin', email: 'test-admin@example.com' },
-      { secret: process.env.ADMIN_JWT_SECRET, expiresIn: '5m' },
-    );
+    // Die Admin-Strategie prüft, dass es die Person wirklich gibt und sie aktiv ist.
+    adminToken = (await seedAdminWithPermissions(app, [])).token;
     const products = await request(app.getHttpServer()).get('/api/v1/products?limit=100').expect(200);
     type P = { id: string; hilfsmittelNr?: string; verfuegbar: boolean };
     kassenartikel = products.body.filter((p: P) => p.hilfsmittelNr && p.verfuegbar).slice(0, 2);

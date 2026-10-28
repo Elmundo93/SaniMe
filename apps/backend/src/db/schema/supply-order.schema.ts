@@ -2,6 +2,7 @@ import { boolean, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle
 import { customerAddresses } from './customers.schema';
 import { products, supplierProducts } from './catalog.schema';
 import { ocrResults } from './health-data.schema';
+import { adminUsers } from './admin-users.schema';
 import { organizations } from './organizations.schema';
 import { customers } from './customers.schema';
 
@@ -109,6 +110,9 @@ export const openActions = pgTable('open_actions', {
   // Kunde selbst erledigen kann. Nur 'kunde' erscheint in der App — vorher
   // sahen Kunden „Krankenkasse kontaktieren“ als *ihre* offene Aufgabe.
   audience: text('audience').notNull().default('intern'),
+  // Wer im Team die Aufgabe übernommen hat (Arbeitskorb „Mir zugewiesen“) —
+  // verhindert Doppelarbeit.
+  assignedAdminId: uuid('assigned_admin_id').references(() => adminUsers.id),
   resolvedAt: timestamp('resolved_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -134,6 +138,8 @@ export const urgentDeliveryRequests = pgTable('urgent_delivery_requests', {
   availability: text('availability').notNull(),
   phone: text('phone'),
   openActionId: uuid('open_action_id').references(() => openActions.id),
+  // Ergebnis des Rückrufs (NOTFALL_ERGEBNISSE in @sanime/domain), gesetzt mit resolvedAt.
+  outcome: text('outcome'),
   resolvedAt: timestamp('resolved_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

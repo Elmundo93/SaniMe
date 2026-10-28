@@ -12,6 +12,7 @@ import { RolesGuard } from './guards/roles.guard';
 import { CUSTOMER_SESSION_SECRET_PORT } from './ports/customer-session-secret.port';
 import { RolePermissionsRepository } from './role-permissions.repository';
 import { AdminAuthService } from './services/admin-auth.service';
+import { AdminSessionService } from './services/admin-session.service';
 import { AdminJwtStrategy } from './strategies/admin-jwt.strategy';
 import { CustomerSessionStrategy } from './strategies/customer-session.strategy';
 
@@ -32,6 +33,7 @@ import { CustomerSessionStrategy } from './strategies/customer-session.strategy'
     AdminUsersRepository,
     RolePermissionsRepository,
     AdminAuthService,
+    AdminSessionService,
     OnboardingSessionsRepository,
     { provide: CUSTOMER_SESSION_SECRET_PORT, useClass: CustomerSessionSecretAdapter },
   ],
@@ -39,6 +41,18 @@ import { CustomerSessionStrategy } from './strategies/customer-session.strategy'
   // itself — RolesGuard had zero cross-module consumers before Layer 4, so
   // this gap was latent until admin/orders/documents controllers started
   // applying it via @UseGuards(AdminJwtAuthGuard, RolesGuard).
-  exports: [AdminJwtAuthGuard, CustomerSessionAuthGuard, AnyPrincipalAuthGuard, RolesGuard, RolePermissionsRepository],
+  // AdminSessionService + JwtModule ebenso: AdminJwtAuthGuard verlängert die
+  // Cookie-Sitzung und wird in den Modulen der Controller instanziiert.
+  // AdminUsersRepository für Anzeigenamen/Zuweisungen im Admin-Modul.
+  exports: [
+    AdminJwtAuthGuard,
+    CustomerSessionAuthGuard,
+    AnyPrincipalAuthGuard,
+    RolesGuard,
+    RolePermissionsRepository,
+    AdminSessionService,
+    AdminUsersRepository,
+    JwtModule,
+  ],
 })
 export class AuthModule {}

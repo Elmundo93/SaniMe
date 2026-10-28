@@ -16,5 +16,5 @@
     "expo-env.d.ts",
     "nativewind-env.d.ts"
   ],
-  "exclude": ["apps/backend"]
+  "exclude": ["apps/backend", "apps/admin"]
 }

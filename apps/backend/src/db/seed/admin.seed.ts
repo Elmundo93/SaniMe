@@ -26,7 +26,8 @@ async function main() {
 
   await db
     .insert(adminUsers)
-    .values({ organizationId: DEFAULT_ORGANIZATION_ID, email, passwordHash })
+    // Anzeigename in der Admin-App; ohne SEED_ADMIN_NAME zeigt sie die E-Mail.
+    .values({ organizationId: DEFAULT_ORGANIZATION_ID, email, passwordHash, name: process.env.SEED_ADMIN_NAME ?? '' })
     .onConflictDoNothing();
 
   // Layer 4: backfill every permission to every existing admin, not just a

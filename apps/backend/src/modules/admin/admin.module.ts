@@ -3,12 +3,13 @@ import { AppointmentModule } from '../appointment/appointment.module';
 import { AuthModule } from '../auth/auth.module';
 import { SupplyOrderModule } from '../supply-order/supply-order.module';
 import { AdminController } from './controllers/admin.controller';
+import { AdminReadRepository } from './admin-read.repository';
 import { AdminService } from './admin.service';
 import { OrderNotesRepository } from './order-notes.repository';
 
 @Module({
   imports: [AuthModule, SupplyOrderModule, AppointmentModule],
   controllers: [AdminController],
-  providers: [OrderNotesRepository, AdminService],
+  providers: [OrderNotesRepository, AdminReadRepository, AdminService],
 })
 export class AdminModule {}

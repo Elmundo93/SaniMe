@@ -21,6 +21,24 @@ export type SupplyStatus =
   | 'completed'
   | 'archived';
 
+// Laufzeit-Liste derselben Werte (Validierung von Filtern in der Admin-API).
+export const SUPPLY_STATUSES = [
+  'draft',
+  'documents_uploaded',
+  'ocr_verified',
+  'customer_confirmation_required',
+  'submitted',
+  'insurance_review',
+  'approved',
+  'rejected',
+  'supplier_assigned',
+  'ordered',
+  'appointment_scheduled',
+  'delivered',
+  'completed',
+  'archived',
+] as const satisfies readonly SupplyStatus[];
+
 export type SupplyEvent =
   | { type: 'SupplyCreated' }
   | { type: 'DocumentsUploaded' }
@@ -92,4 +110,10 @@ export const SupplyWorkflow = createWorkflow<SupplyStatus, SupplyEvent, SupplyCo
 
 export function erstelleLeereSupply(id: string): SupplyContext {
   return { id, status: 'draft' };
+}
+
+// Welche Ereignisse vom aktuellen Status aus erlaubt sind — die Admin-App
+// bietet genau diese als Aktionen an, nie mehr (der Server prüft dieselbe Tabelle).
+export function erlaubteSupplyEvents(status: SupplyStatus): SupplyEvent['type'][] {
+  return SUPPLY_TRANSITIONS.filter((regel) => regel.from === status).map((regel) => regel.event);
 }
