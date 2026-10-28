@@ -39,6 +39,12 @@ export const ocrResults = pgTable('ocr_results', {
   documentId: uuid('document_id').references(() => documents.id),
   patientName: text('patient_name').notNull(),
   patientDob: text('patient_dob').notNull(),
+  // Adresse aus dem Personalienfeld des Rezepts — Teil des Rezeptinhalts und
+  // deshalb wie Name/Geburtsdatum mit dem Rezept aufbewahrt (die Kundenadresse
+  // in customer_addresses wird dagegen bei einer Löschanfrage gelöscht).
+  patientStrasse: text('patient_strasse'),
+  patientPlz: text('patient_plz'),
+  patientOrt: text('patient_ort'),
   doctorName: text('doctor_name').notNull(),
   doctorLanr: text('doctor_lanr'),
   diagnose: text('diagnose').notNull(),

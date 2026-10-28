@@ -11,7 +11,13 @@ export { toProdukt } from '../catalog/catalog.mapper';
 // the domain OcrResult's `krankenkasse` sub-object is assembled from both.
 export function toOcrResult(row: OcrResultRow, policy: InsurancePolicy | null): OcrResult {
   return {
-    patient: { name: row.patientName, dateOfBirth: row.patientDob },
+    patient: {
+      name: row.patientName,
+      dateOfBirth: row.patientDob,
+      ...(row.patientStrasse || row.patientPlz || row.patientOrt
+        ? { adresse: { strasse: row.patientStrasse ?? '', plz: row.patientPlz ?? '', ort: row.patientOrt ?? '' } }
+        : {}),
+    },
     arzt: { name: row.doctorName, lanr: row.doctorLanr ?? undefined },
     krankenkasse: {
       name: policy?.insurerName ?? '',

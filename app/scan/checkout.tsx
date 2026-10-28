@@ -120,6 +120,8 @@ export default function CheckoutScreen() {
   const abschlussfaehig = istAbschlussfaehig(session);
   const kassenartikel = session.positionen.filter((p) => istKassenartikel(p.produkt) && !p.ohneRezept);
   const ersteRezept = session.positionen.find((p) => p.rezept)?.rezept ?? null;
+  const adresse = session.positionen.find((p) => p.rezept?.patient.adresse)?.rezept?.patient.adresse;
+  const lieferadresse = adresse ? [adresse.strasse, [adresse.plz, adresse.ort].filter(Boolean).join(' ')].filter(Boolean).join(', ') : '';
 
   // Speichen der Kasse (Rezept, Termin): dispatchen und auf den Schritt schieben.
   const speiche = async (event: ClientOnboardingEvent) => {
@@ -448,6 +450,7 @@ export default function CheckoutScreen() {
                 {!!ersteRezept?.patient.name && <SectionRow label="Name" wert={ersteRezept.patient.name} />}
                 {session.krankenkasse && <SectionRow label="Krankenkasse" wert={session.krankenkasse.name} />}
                 {session.krankenkasse && <SectionRow label="Versichertennummer" wert={session.krankenkasse.versichertenNr} />}
+                {!!lieferadresse && <SectionRow label="Lieferadresse" wert={lieferadresse} />}
               </Section>
             )}
 

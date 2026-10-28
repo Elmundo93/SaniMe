@@ -16,11 +16,22 @@ import { useFeldKorrektur } from '../../hooks/useFeldKorrektur';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '@sanime/design-system';
-import { findePosition, hatPflichtfelderKomplett, type ConfidenceLevel } from '@sanime/domain';
+import {
+  findePosition,
+  hatPflichtfelderKomplett,
+  type ConfidenceLevel,
+  type OcrAdresse,
+  type OcrResult,
+} from '@sanime/domain';
 import { pruefAmpel, pruefeIk, pruefeVersichertenNr } from '../../lib/ocr/validatoren';
 
 // Die Datenprüfung zeigt keine Ampel je Feld — nur Werte mit falscher
 // Prüfziffer werden als „bitte prüfen“ markiert.
+function mitAdresse(ocr: OcrResult, aenderung: Partial<OcrAdresse>): Partial<OcrResult> {
+  const adresse: OcrAdresse = { strasse: '', plz: '', ort: '', ...ocr.patient.adresse, ...aenderung };
+  return { patient: { ...ocr.patient, adresse } };
+}
+
 function nurBeiFehler(ampel: ConfidenceLevel | undefined): ConfidenceLevel | undefined {
   return ampel === 'medium' ? ampel : undefined;
 }
@@ -102,6 +113,23 @@ export default function DatenpruefungScreen() {
                 label="Geburtsdatum"
                 wert={ocr.patient.dateOfBirth}
                 onEdit={(w) => feldKorrigiert((o) => ({ patient: { ...o.patient, dateOfBirth: w } }))}
+              />
+              {/* Vom Rezept übernommen — wird Lieferadresse der Bestellung. */}
+              <DatenFeld
+                label="Straße und Hausnummer"
+                wert={ocr.patient.adresse?.strasse ?? ''}
+                onEdit={(w) => feldKorrigiert((o) => mitAdresse(o, { strasse: w }))}
+              />
+              <DatenFeld
+                label="PLZ"
+                wert={ocr.patient.adresse?.plz ?? ''}
+                confidence={nurBeiFehler(pruefAmpel(ocr.patient.adresse?.plz, (plz) => /^\d{5}$/.test(plz)))}
+                onEdit={(w) => feldKorrigiert((o) => mitAdresse(o, { plz: w }))}
+              />
+              <DatenFeld
+                label="Ort"
+                wert={ocr.patient.adresse?.ort ?? ''}
+                onEdit={(w) => feldKorrigiert((o) => mitAdresse(o, { ort: w }))}
               />
             </GlassCard>
           </Animated.View>

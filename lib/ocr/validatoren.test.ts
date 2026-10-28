@@ -108,6 +108,9 @@ describe('wendeValidatorenAn', () => {
       krankenkasseName: feld('AOK Niedersachsen'),
       ik: feld('101234569'),
       versichertenNr: feld('Q123456784'),
+      strasse: feld('Beispielweg 7'),
+      plz: feld('12345'),
+      ort: feld('Musterstadt'),
     };
   }
 
@@ -146,6 +149,9 @@ describe('wendeValidatorenAn', () => {
       krankenkasseName: feld('', 'low'),
       ik: feld('', 'low'),
       versichertenNr: feld('', 'low'),
+      strasse: feld('', 'low'),
+      plz: feld('', 'low'),
+      ort: feld('', 'low'),
     };
     expect(() => wendeValidatorenAn(felder)).not.toThrow();
   });

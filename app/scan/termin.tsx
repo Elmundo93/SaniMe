@@ -14,7 +14,8 @@ import { MiniKalender } from '../../components/onboarding/MiniKalender';
 import { useOnboardingStore, STATUS_META } from '../../store/onboardingStore';
 import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
-import { terminAusKalenderdatum, terminAusVorschlag } from '../../lib/terminplanung';
+import { lieferort, terminAusKalenderdatum, terminAusVorschlag } from '../../lib/terminplanung';
+import { selectProfil, useAuthStore } from '../../store/authStore';
 import { getAppointmentSlots } from '../../lib/api/onboarding';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '@sanime/design-system';
@@ -32,6 +33,7 @@ export default function TerminplanungScreen() {
   const router = useRouter();
   const { session, ready } = useOnboardingGuard('TERMINPLANUNG');
   const dispatch = useOnboardingStore((s) => s.dispatch);
+  const profilAdresse = useAuthStore((s) => selectProfil(s)?.lieferadresse ?? null);
   const [ausgewähltId, setAusgewähltId] = useState<string | null>(null);
   const [zeigeKalender, setZeigeKalender] = useState(false);
 
@@ -42,7 +44,8 @@ export default function TerminplanungScreen() {
       try {
         const slots = await getAppointmentSlots(session.id);
         if (cancelled) return;
-        const vorschläge = slots.map(terminAusVorschlag);
+        const ort = lieferort(session, profilAdresse);
+        const vorschläge = slots.map((slot, i) => terminAusVorschlag(slot, i, ort));
         const result = await dispatch({ type: 'TERMIN_VORSCHLAEGE_BERECHNET', vorschläge });
         if (!cancelled && !result.ok) zeigeDispatchFehler();
       } catch {
@@ -85,7 +88,7 @@ export default function TerminplanungScreen() {
 
   const handleKalenderAuswahl = async (datum: Date) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await bestätigen(terminAusKalenderdatum(session, datum));
+    await bestätigen(terminAusKalenderdatum(session, datum, lieferort(session, profilAdresse)));
   };
 
   return (

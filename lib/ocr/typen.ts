@@ -27,6 +27,10 @@ export interface RezeptFelder {
   krankenkasseName: FeldResultat;
   ik: FeldResultat;
   versichertenNr: FeldResultat;
+  // Straße inkl. Hausnummer, PLZ, Ort — die drei Adresszeilen unter dem Namen.
+  strasse: FeldResultat;
+  plz: FeldResultat;
+  ort: FeldResultat;
 }
 
 export interface EgkFelder {

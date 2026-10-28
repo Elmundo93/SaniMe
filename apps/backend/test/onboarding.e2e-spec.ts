@@ -9,7 +9,7 @@ import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
 import { DRIZZLE, type Database } from '../src/db/client';
 import { AGB_VERSION, DATENSCHUTZ_VERSION } from '@sanime/domain';
-import { auditEntries, consentGrants, consents } from '../src/db/schema';
+import { auditEntries, consentGrants, consents, customerAddresses, orders } from '../src/db/schema';
 import { DEFAULT_ORGANIZATION_ID } from '../src/common/repository/tenant-context';
 
 // The real full-slice proof of Layer 2: create session -> accept consents ->
@@ -404,6 +404,49 @@ describe('Onboarding Warenkorb (e2e)', () => {
 
     res = await patchEvent({ type: 'WEITER' }).expect(200);
     expect(res.body.session.status).toBe('VERSORGUNGSAUSWAHL');
+  });
+
+  it('macht den Besteller beim Abschluss zum Kunden: Versorgung sichtbar, Rezeptadresse als Lieferadresse', async () => {
+    const { auth, patchEvent, complete } = await neueSessionMitConsent();
+    // Pro Lauf eindeutig — der Neukunden-Fall, nicht der Archivabgleich.
+    const versichertenNr = `N${String(Date.now()).slice(-9)}`;
+    const adresse = { strasse: 'Beispielweg 7', plz: '12345', ort: 'Musterstadt' };
+    await patchEvent({ type: 'WEITER' }).expect(200);
+    const scan = rezeptScan('Rollator');
+    await patchEvent({
+      ...scan,
+      result: {
+        ...scan.result,
+        patient: { ...scan.result.patient, adresse },
+        krankenkasse: { name: 'AOK Niedersachsen', versichertenNr },
+      },
+    }).expect(200);
+    await patchEvent({ type: 'WEITER_KRANKENKASSE_BEKANNT' }).expect(200);
+    let res = await patchEvent({ type: 'WEITER' }).expect(200);
+    expect(res.body.session.ocrResult.patient.adresse).toEqual(adresse);
+    await patchEvent({ type: 'SUPPLY_AUSGEWAEHLT', produkt: res.body.session.verfügbareProdukte[0] }).expect(200);
+    await terminUndKontakt(patchEvent, '+491511234570');
+
+    // Vorher: ohne Kunden lehnt GET /supplies die Session ab.
+    await request(app.getHttpServer()).get('/api/v1/supplies').set('Authorization', auth).expect(403);
+    const done = await complete().expect(201);
+
+    const liste = await request(app.getHttpServer()).get('/api/v1/supplies').set('Authorization', auth).expect(200);
+    expect(liste.body.map((s: { id: string }) => s.id)).toContain(done.body.supplyId);
+    // Der Auftrag trägt die Lieferadresse vom Rezept.
+    const db = app.get<Database>(DRIZZLE);
+    const [auftrag] = await db.select().from(orders).where(eq(orders.supplyId, done.body.supplyId));
+    expect(auftrag.deliveryAddressId).toBeTruthy();
+    const [lieferadresse] = await db.select().from(customerAddresses).where(eq(customerAddresses.id, auftrag.deliveryAddressId!));
+    expect(lieferadresse).toMatchObject(adresse);
+
+    // Ein zweiter Abschluss mit derselben Nummer legt keinen zweiten Kunden an.
+    res = await request(app.getHttpServer())
+      .post('/api/v1/customers/match')
+      .set('Authorization', auth)
+      .send({ insuredNumber: versichertenNr })
+      .expect(201);
+    expect(res.body.customer.lastName).toBe('Mustermann');
   });
 
   it('pflegt je Kassenartikel ein eigenes Rezept nach — die Krankenkassenkarte nur einmal', async () => {

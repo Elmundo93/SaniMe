@@ -13,6 +13,7 @@ import type {
 } from '@sanime/domain';
 import { useAuthStore } from './authStore';
 import { useWarenkorbStore } from './warenkorbStore';
+import { useVersorgungStore } from './versorgungStore';
 import * as onboardingApi from '../lib/api/onboarding';
 import { trackOnboarding } from '../lib/analytics';
 import { getSecureJSON, setSecureJSON, deleteSecureItem } from '../lib/secureStorage';
@@ -320,6 +321,9 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     const session = get().session;
     if (!session) return;
     emitAnalyticsForAbschluss(session);
+    // Lieferadresse vom Rezept (Personalienfeld) — der Server hat sie beim
+    // Abschluss schon als Kundenadresse an den Auftrag gehängt.
+    const rezeptAdresse = session.positionen.find((p) => p.rezept?.patient.adresse)?.rezept?.patient.adresse ?? null;
 
     if (!useAuthStore.getState().benutzer) {
       // Darf nie fehlschlagen, solange der Checkout eine bestätigte Telefonnummer
@@ -342,12 +346,14 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
       await useAuthStore.getState().setBenutzer(
         {
           id: session.versorgungId ?? `benutzer-${session.id}`,
-          vorname: vollerName.split(' ')[0] ?? '',
-          nachname: vollerName.split(' ').slice(1).join(' '),
+          // Wie das Backend beim Anlegen des Kunden: der letzte Teil ist der Nachname.
+          vorname: vollerName.split(' ').slice(0, -1).join(' '),
+          nachname: vollerName.split(' ').slice(-1).join(''),
           email: session.customerContact.email ?? undefined,
           telefon: session.customerContact.telefon,
           krankenkasse: session.krankenkasse?.name ?? '',
           versichertenNr: session.krankenkasse?.versichertenNr ?? '',
+          lieferadresse: rezeptAdresse ?? undefined,
         },
         useAuthStore.getState().token!,
       );
@@ -365,6 +371,9 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
       if (!bestehender.versichertenNr && session.krankenkasse?.versichertenNr) {
         patch.versichertenNr = session.krankenkasse.versichertenNr;
       }
+      if (!bestehender.lieferadresse?.strasse && rezeptAdresse) {
+        patch.lieferadresse = rezeptAdresse;
+      }
       if (Object.keys(patch).length > 0) {
         await useAuthStore.getState().aktualisiereBenutzer(patch);
       }
@@ -376,5 +385,8 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     await AsyncStorage.removeItem(SESSION_KEY);
     await deleteSecureItem(SENSITIVE_KEY);
     set({ session: null });
+    // Die neue Versorgung sofort zeigen — die Start-Tabs laden sonst nur neu,
+    // wenn sich der benutzer ändert (bei Bestandskunden nicht der Fall).
+    useVersorgungStore.getState().laden().catch(() => {});
   },
 }));

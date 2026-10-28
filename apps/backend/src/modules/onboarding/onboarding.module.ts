@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CustomerModule } from '../customer/customer.module';
 import { AppointmentModule } from '../appointment/appointment.module';
 import { AuthModule } from '../auth/auth.module';
 import { CatalogModule } from '../catalog/catalog.module';
@@ -22,7 +23,7 @@ import { OnboardingService } from './onboarding.service';
   // Stripe webhook (StripeWebhookController) — the webhook itself lives here,
   // not in PaymentModule, specifically so PaymentModule never needs to import
   // OnboardingService back (it would otherwise, to call abschliessenNachZahlung()).
-  imports: [AppointmentModule, AuthModule, CatalogModule, HealthDataModule, PaymentModule, SupplyOrderModule, VerificationModule],
+  imports: [AppointmentModule, AuthModule, CatalogModule, CustomerModule, HealthDataModule, PaymentModule, SupplyOrderModule, VerificationModule],
   controllers: [OnboardingController, ConsentGrantsController, StripeWebhookController],
   providers: [OnboardingSessionsRepository, OnboardingSessionPositionsRepository, ConsentsRepository, ConsentGrantsRepository, OnboardingService],
   exports: [OnboardingService],

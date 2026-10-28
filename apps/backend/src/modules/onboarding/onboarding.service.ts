@@ -21,6 +21,7 @@ import { AppointmentsService } from '../appointment/appointments.service';
 import { AuditService } from '../audit/audit.service';
 import { recordOnboardingTransition } from '../../common/metrics/metrics';
 import { withSpan } from '../../common/tracing/tracer';
+import { CustomersService } from '../customer/customers.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { PaymentService } from '../payment/payment.service';
 import { SupplyOrderService } from '../supply-order/supply-order.service';
@@ -51,6 +52,7 @@ export class OnboardingService {
     private readonly appointments: AppointmentsService,
     private readonly payment: PaymentService,
     private readonly auditService: AuditService,
+    private readonly customers: CustomersService,
     @Inject(VERIFICATION_PROVIDER) private readonly verification: VerificationProvider,
   ) {}
 
@@ -311,6 +313,21 @@ export class OnboardingService {
       throw new BadRequestException(result.reason);
     }
 
+    // Ohne Kunden sähe der Besteller seine Versorgung nie (GET /supplies
+    // verlangt eine zugeordnete Session) und es gäbe keine Lieferadresse.
+    const rezeptMitPerson = domainSession.positionen.find((p) => p.rezept?.patient.name)?.rezept ?? null;
+    const { vorname, nachname } = teileName(rezeptMitPerson?.patient.name ?? '');
+    const { customerId, addressId } = await this.customers.uebernehmeAusBestellung(tenant, {
+      sessionId: row.id,
+      customerId: row.customerId,
+      vorname,
+      nachname,
+      telefon: domainSession.customerContact.telefon || null,
+      email: domainSession.customerContact.email || null,
+      versichertenNr: domainSession.krankenkasse?.versichertenNr ?? '',
+      adresse: domainSession.positionen.find((p) => p.rezept?.patient.adresse)?.rezept?.patient.adresse ?? null,
+    });
+
     const rows = await this.positions.listForSession(tenant, row.id);
     const supplyIds: string[] = [];
     for (const position of rows) {
@@ -324,7 +341,7 @@ export class OnboardingService {
         tenant,
         {
           onboardingSessionId: row.id,
-          customerId: row.customerId,
+          customerId,
           productId: position.productId,
           supplierProductId: position.supplierProductId,
           ocrResultId: eingereicht ? position.ocrResultId : null,
@@ -335,9 +352,9 @@ export class OnboardingService {
           insurerNameSnapshot: eingereicht ? (rezept?.krankenkasse.name ?? '') : '',
           customerCopaySnapshotCents: eingereicht ? (primaryOffer?.customerCopayCents ?? 0) : selbstGezahltCents(product, position.withoutPrescription),
           deliveryTimeLabelSnapshot: primaryOffer ? `${primaryOffer.deliveryTimeDays} Werktage` : 'unbekannt',
-          deliveryAddressId: null,
+          deliveryAddressId: addressId,
         },
-        { type: 'customer', id: row.customerId },
+        { type: 'customer', id: customerId },
       );
       supplyIds.push(supplyId);
     }
@@ -392,6 +409,9 @@ export class OnboardingService {
           documentId: null,
           patientName: event.result.patient.name,
           patientDob: event.result.patient.dateOfBirth,
+          patientStrasse: event.result.patient.adresse?.strasse ?? null,
+          patientPlz: event.result.patient.adresse?.plz ?? null,
+          patientOrt: event.result.patient.adresse?.ort ?? null,
           doctorName: event.result.arzt.name,
           doctorLanr: event.result.arzt.lanr ?? null,
           diagnose: event.result.diagnose,
@@ -640,6 +660,11 @@ function ocrPatchToDbPatch(patch: Partial<OcrResult>): Partial<NewOcrResultRow> 
   const dbPatch: Partial<NewOcrResultRow> = {};
   if (patch.patient?.name !== undefined) dbPatch.patientName = patch.patient.name;
   if (patch.patient?.dateOfBirth !== undefined) dbPatch.patientDob = patch.patient.dateOfBirth;
+  if (patch.patient?.adresse !== undefined) {
+    dbPatch.patientStrasse = patch.patient.adresse.strasse;
+    dbPatch.patientPlz = patch.patient.adresse.plz;
+    dbPatch.patientOrt = patch.patient.adresse.ort;
+  }
   if (patch.arzt?.name !== undefined) dbPatch.doctorName = patch.arzt.name;
   if (patch.arzt?.lanr !== undefined) dbPatch.doctorLanr = patch.arzt.lanr;
   if (patch.diagnose !== undefined) dbPatch.diagnose = patch.diagnose;
@@ -647,4 +672,12 @@ function ocrPatchToDbPatch(patch: Partial<OcrResult>): Partial<NewOcrResultRow> 
   if (patch.hilfsmittelNr !== undefined) dbPatch.hilfsmittelNr = patch.hilfsmittelNr;
   if (patch.datum !== undefined) dbPatch.datum = patch.datum;
   return dbPatch;
+}
+
+// Die App führt den Namen als „Vorname Nachname“ (Rezept-Parser dreht
+// Muster-16-Reihenfolge so um); der letzte Teil ist der Nachname.
+function teileName(name: string): { vorname: string; nachname: string } {
+  const teile = name.trim().split(/\s+/).filter(Boolean);
+  if (teile.length <= 1) return { vorname: '', nachname: teile[0] ?? '' };
+  return { vorname: teile.slice(0, -1).join(' '), nachname: teile[teile.length - 1] };
 }

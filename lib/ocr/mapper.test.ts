@@ -19,6 +19,9 @@ describe('baueRezeptErgebnis', () => {
       krankenkasseName: feld('', 'low'),
       ik: feld('', 'low'),
       versichertenNr: feld('', 'low'),
+      strasse: feld('', 'low'),
+      plz: feld('', 'low'),
+      ort: feld('', 'low'),
     };
 
     const { result, confidence } = baueRezeptErgebnis(felder);
@@ -54,6 +57,9 @@ describe('baueRezeptErgebnis', () => {
       krankenkasseName: leeresFeld,
       ik: leeresFeld,
       versichertenNr: leeresFeld,
+      strasse: leeresFeld,
+      plz: leeresFeld,
+      ort: leeresFeld,
     };
 
     const { result } = baueRezeptErgebnis(felder);
@@ -76,6 +82,9 @@ describe('baueRezeptErgebnis', () => {
       krankenkasseName: feld('AOK Niedersachsen', 'high'),
       ik: feld('101234569', 'high'),
       versichertenNr: feld('Q123456784', 'high'),
+      strasse: leeresFeld,
+      plz: leeresFeld,
+      ort: leeresFeld,
     };
 
     const { result, confidence } = baueRezeptErgebnis(felder);

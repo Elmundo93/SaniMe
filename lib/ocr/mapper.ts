@@ -12,7 +12,13 @@ function schlechtere(a: ConfidenceLevel, b: ConfidenceLevel): ConfidenceLevel {
 // zusammen), daher wird pro Gruppe die schlechtere Einzel-Confidence genommen.
 export function baueRezeptErgebnis(felder: RezeptFelder): { result: OcrResult; confidence: OcrConfidence } {
   const result: OcrResult = {
-    patient: { name: felder.patientName.wert, dateOfBirth: felder.patientGeburtsdatum.wert },
+    patient: {
+      name: felder.patientName.wert,
+      dateOfBirth: felder.patientGeburtsdatum.wert,
+      ...(felder.strasse.wert || felder.plz.wert || felder.ort.wert
+        ? { adresse: { strasse: felder.strasse.wert, plz: felder.plz.wert, ort: felder.ort.wert } }
+        : {}),
+    },
     arzt: { name: felder.arztName.wert, lanr: felder.arztLanr.wert || undefined },
     krankenkasse: {
       name: felder.krankenkasseName.wert,

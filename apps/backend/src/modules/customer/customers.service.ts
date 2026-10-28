@@ -1,13 +1,28 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { TenantContext } from '../../common/repository/tenant-context';
 import { CustomerAddressesRepository } from './customer-addresses.repository';
 import { CustomersRepository } from './customers.repository';
+import { ONBOARDING_SESSION_CLAIM_PORT, type OnboardingSessionClaimPort } from './ports/onboarding-session-claim.port';
+
+export interface KundeAusBestellung {
+  sessionId: string;
+  // null = Session ist noch keinem Kunden zugeordnet (Neukunde oder nie per
+  // Archivabgleich erkannt).
+  customerId: string | null;
+  vorname: string;
+  nachname: string;
+  telefon: string | null;
+  email: string | null;
+  versichertenNr: string;
+  adresse: { strasse: string; plz: string; ort: string } | null;
+}
 
 @Injectable()
 export class CustomersService {
   constructor(
     private readonly customers: CustomersRepository,
     private readonly addresses: CustomerAddressesRepository,
+    @Inject(ONBOARDING_SESSION_CLAIM_PORT) private readonly claimPort: OnboardingSessionClaimPort,
   ) {}
 
   // Krankenkassenkarte archive-match — the only re-login path in the app
@@ -24,4 +39,41 @@ export class CustomersService {
   findById(tenant: TenantContext, id: string) {
     return this.customers.findById(tenant, id);
   }
+
+  // Beim Abschluss einer Bestellung: ohne Kunden blieb die Versorgung bisher
+  // herrenlos (customerId null) — der Besteller sah sie nie unter
+  // „Versorgungen“, weil GET /supplies eine unzugeordnete Session ablehnt.
+  // Gleiche Vertrauensstufe wie der Archivabgleich: eine bekannte
+  // Versichertennummer ordnet dem bestehenden Kunden zu, sonst entsteht ein
+  // neuer. Die Rezeptadresse wird zur (Liefer-)Adresse des Kunden.
+  async uebernehmeAusBestellung(tenant: TenantContext, daten: KundeAusBestellung): Promise<{ customerId: string; addressId: string | null }> {
+    let customerId = daten.customerId;
+    if (!customerId) {
+      const bekannt = await this.customers.findByInsuredNumber(tenant, daten.versichertenNr);
+      const kunde =
+        bekannt ??
+        (await this.customers.create(tenant, {
+          firstName: daten.vorname,
+          lastName: daten.nachname,
+          phone: daten.telefon,
+          email: daten.email,
+          insuredNumber: daten.versichertenNr,
+        }));
+      customerId = kunde.id;
+      await this.claimPort.claimSession(daten.sessionId, customerId);
+    }
+
+    if (!daten.adresse?.strasse || !daten.adresse.plz) return { customerId, addressId: null };
+    const vorhanden = await this.addresses.listForCustomer(customerId);
+    const gleich = vorhanden.find(
+      (a) => normAdresse(a.strasse) === normAdresse(daten.adresse!.strasse) && a.plz === daten.adresse!.plz,
+    );
+    if (gleich) return { customerId, addressId: gleich.id };
+    const neu = await this.addresses.create({ customerId, ...daten.adresse, isDefault: vorhanden.length === 0 });
+    return { customerId, addressId: neu.id };
+  }
+}
+
+function normAdresse(strasse: string): string {
+  return strasse.toLowerCase().replace(/str(asse|aße)?\.?/g, 'str').replace(/\s+/g, '');
 }

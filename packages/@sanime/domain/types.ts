@@ -2,9 +2,17 @@
 
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
 
+export interface OcrAdresse {
+  strasse: string; // inkl. Hausnummer
+  plz: string;
+  ort: string;
+}
+
 export interface OcrPatient {
   name: string;
   dateOfBirth: string;
+  // Aus dem Personalienfeld des Rezepts — wird Lieferadresse der Bestellung.
+  adresse?: OcrAdresse;
 }
 
 export interface OcrArzt {

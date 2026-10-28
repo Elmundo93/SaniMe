@@ -19,6 +19,9 @@ export class CustomersRepository extends TenantScopedRepository {
   }
 
   async findByInsuredNumber(tenant: TenantContext, insuredNumber: string) {
+    // Reine Selbstzahler-Kunden haben keine Versichertennummer — eine leere
+    // Nummer darf nie einen von ihnen „wiedererkennen“.
+    if (!normalizeInsuredNumber(insuredNumber)) return null;
     const [row] = await this.db
       .select()
       .from(customers)

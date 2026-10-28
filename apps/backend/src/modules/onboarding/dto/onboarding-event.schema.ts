@@ -9,7 +9,11 @@ import { WARENKORB_MAX } from '@sanime/domain';
 const confidenceLevelSchema = z.enum(['high', 'medium', 'low']);
 
 const ocrResultSchema = z.object({
-  patient: z.object({ name: z.string(), dateOfBirth: z.string() }),
+  patient: z.object({
+    name: z.string(),
+    dateOfBirth: z.string(),
+    adresse: z.object({ strasse: z.string(), plz: z.string(), ort: z.string() }).optional(),
+  }),
   arzt: z.object({ name: z.string(), lanr: z.string().optional() }),
   krankenkasse: z.object({ name: z.string(), ik: z.string().optional(), versichertenNr: z.string() }),
   diagnose: z.string(),

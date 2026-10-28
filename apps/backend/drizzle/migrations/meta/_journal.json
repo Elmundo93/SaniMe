@@ -162,6 +162,13 @@
       "when": 1792437896506,
       "tag": "0022_selbstzahlerpreis_ohne_rezept",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1793195179917,
+      "tag": "0023_rezept_patientenadresse",
+      "breakpoints": true
     }
   ]
 }

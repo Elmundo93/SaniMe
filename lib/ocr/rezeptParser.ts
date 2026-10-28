@@ -237,6 +237,36 @@ function waehlePatientName(zeilen: string[], geburtsdatumTreffer: DatumTreffer |
   return leer();
 }
 
+// Straße mit Hausnummer („Beispielweg 7“, „Hauptstr. 12a“).
+const STRASSENZEILE = /^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß.' -]*\s\d+\s?[a-zA-Z]?$/;
+// PLZ und Ort, optional mit Länderkennung „D“; Vision liest sie mal in einer,
+// mal in drei Zeilen („D“, „12345“, „Musterstadt“).
+const PLZ_ORT = /(?:^|\s)(\d{5})\s+([A-ZÄÖÜ][A-Za-zÄÖÜäöüß. -]*[a-zäöüß.])/;
+
+// Die Adresszeilen stehen zwischen „Name, Vorname des Versicherten“ und
+// „Kostenträgerkennung“ — nur dort wird gesucht, nie im übrigen Formular.
+function waehleAdresse(zeilen: string[]): { strasse: FeldResultat; plz: FeldResultat; ort: FeldResultat } {
+  const leerAdresse = { strasse: leer(), plz: leer(), ort: leer() };
+  const start = findeAnker(zeilen, ANKER.name);
+  if (start === -1) return leerAdresse;
+  const ende = findeAnker(zeilen, ANKER.kostentraeger, start);
+  const block = zeilen
+    .slice(start + 1, ende === -1 ? start + 1 + ANKER_FENSTER + 6 : ende)
+    .filter((z) => !istBeschriftung(z) && !DATUMSZEILE.test(z));
+
+  const strassenIndex = block.findIndex((z) => STRASSENZEILE.test(z));
+  if (strassenIndex === -1) return leerAdresse;
+  const strasse: FeldResultat = { wert: block[strassenIndex], confidence: 'medium' };
+  const rest = block.slice(strassenIndex + 1).join(' ');
+  const plzOrt = PLZ_ORT.exec(rest);
+  if (!plzOrt) return { ...leerAdresse, strasse };
+  return {
+    strasse,
+    plz: { wert: plzOrt[1], confidence: 'high' },
+    ort: { wert: plzOrt[2].trim(), confidence: 'medium' },
+  };
+}
+
 function neunstelligeAb(zeilen: string[], von: number, bis: number): { wert: string; zeilenIndex: number }[] {
   const kandidaten: { wert: string; zeilenIndex: number }[] = [];
   for (let i = von; i <= Math.min(bis, zeilen.length - 1); i++) {
@@ -486,6 +516,7 @@ export function parseRezept(zeilen: string[], heute: Date = new Date()): RezeptF
     hilfsmittelNr,
     datum,
     ...waehleKasse(bereinigteZeilen),
+    ...waehleAdresse(bereinigteZeilen),
   };
 }
 

@@ -133,6 +133,7 @@ describe('parseRezept — Muster 16 über Feldbeschriftungen', () => {
     expect(felder.patientGeburtsdatum).toEqual({ wert: '24.05.1961', confidence: 'high' });
     expect(felder.datum.wert).toBe('06.07.2026');
     expect(felder.krankenkasseName).toEqual({ wert: 'AOK Niedersachsen', confidence: 'high' });
+    expect([felder.strasse.wert, felder.plz.wert, felder.ort.wert]).toEqual(['Beispielweg 7', '12345', 'Musterstadt']);
     expect(felder.ik).toEqual({ wert: '101234569', confidence: 'high' });
     expect(felder.versichertenNr).toEqual({ wert: 'Q123456784', confidence: 'high' });
     expect(felder.arztName.wert).toBe('Dr. med. Hans Beispiel');
@@ -205,6 +206,8 @@ describe('parseRezept — Muster 16 über Feldbeschriftungen', () => {
     expect(felder.diagnose.wert).toBe('M17.1 Gonarthrose, beidseitig, R26.8 Gangunsicherheit');
     expect(felder.arztLanr.wert).toBe('123456699');
     expect(felder.versichertenNr.wert).toBe('Q123456784');
+    // Rauschzeile („sonsto“) zwischen Straße und PLZ/Ort stört nicht.
+    expect([felder.strasse.wert, felder.plz.wert, felder.ort.wert]).toEqual(['Beispielweg 7', '12345', 'Musterstadt']);
   });
 
   it('erkennt ein bereits eingelöstes Rezept', () => {
@@ -233,6 +236,7 @@ describe('parseRezept — Muster 16 über Feldbeschriftungen', () => {
     'Beispielweg 7',
     'D',
     '12345',
+    'Musterstadt',
     'Kostenträgerkennung',
     'Versicherten-Nr.',
     '101234569Q123456784',
@@ -254,6 +258,7 @@ describe('parseRezept — Muster 16 über Feldbeschriftungen', () => {
     expect(felder.patientGeburtsdatum.wert).toBe('24.05.1961');
     expect(felder.arztLanr).toEqual({ wert: '123456699', confidence: 'high' });
     expect(felder.datum.wert).toBe('06.07.2026');
+    expect([felder.strasse.wert, felder.plz.wert, felder.ort.wert]).toEqual(['Beispielweg 7', '12345', 'Musterstadt']);
   });
 
   it('stuft eine Versichertennummer mit falscher Prüfziffer auf low herab', () => {
