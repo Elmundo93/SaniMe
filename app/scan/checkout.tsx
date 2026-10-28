@@ -35,7 +35,8 @@ import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoa
 import { useOtpVerification } from '../../hooks/useOtpVerification';
 import { useAuthStore } from '../../store/authStore';
 import { createPaymentIntent, devZahlungSimulieren } from '../../lib/api/onboarding';
-import { resolveStripePublishableKey } from '../../lib/api/config';
+import { resolveStripePublishableKey, stillePruefungAktiv } from '../../lib/api/config';
+import { einwilligungStillePruefung } from '../../lib/stillePruefung';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { pushNachBestellungAnbieten } from '../../lib/push';
 import { bestelltFuerSichSelbst } from '../../lib/besteller';
@@ -586,7 +587,23 @@ export default function CheckoutScreen() {
                 error={otpFlow.fehler}
               />
             </GlassCard>
-            <PrimaerKnopf label="Code senden" onPress={handleKontaktWeiter} disabled={otpFlow.loading} laedt={otpFlow.loading} />
+            <PrimaerKnopf
+              label={stillePruefungAktiv() ? 'Nummer bestätigen' : 'Code senden'}
+              onPress={handleKontaktWeiter}
+              disabled={otpFlow.loading}
+              laedt={otpFlow.loading}
+            />
+            {stillePruefungAktiv() && (
+              // Von den deutschen Netzbetreibern vorgeschriebene Einwilligung —
+              // vor der Übermittlung der Nummer, im genauen Wortlaut.
+              <Text style={styles.einwilligung}>
+                {einwilligungStillePruefung('Nummer bestätigen')} Entsprechende Datenschutzhinweise finden Sie{' '}
+                <Text style={styles.einwilligungLink} onPress={() => router.push('/onboarding/datenschutz-text')} accessibilityRole="link">
+                  hier
+                </Text>
+                .
+              </Text>
+            )}
           </Animated.View>
         )}
 
@@ -727,6 +744,8 @@ const styles = StyleSheet.create({
   link: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 4 },
   linkText: { fontSize: D.font.sm, fontWeight: D.font.semibold, color: D.color.accent },
   terminButton: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
+  einwilligung: { fontSize: D.font.sm, color: D.color.inkSecondary, lineHeight: 20 },
+  einwilligungLink: { color: D.color.accent, fontWeight: D.font.semibold, textDecorationLine: 'underline' },
   terminHinweis: { fontSize: D.font.sm, color: D.color.inkSecondary, lineHeight: 20, marginBottom: 8 },
   notfallZeile: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   notfallText: { flex: 1, minWidth: 180, fontSize: D.font.sm, color: D.color.ink, lineHeight: 20 },

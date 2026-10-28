@@ -1,16 +1,13 @@
-import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac, randomInt, timingSafeEqual } from 'crypto';
-import { CODE_ERNEUT_SENDEN_SEKUNDEN } from '@sanime/domain';
 import { SMS_SENDER, type SmsSender } from '../ports/sms-sender.port';
 import type { SendCodeResult, VerificationProvider } from '../ports/verification-provider.port';
+import { pruefeSendegrenzen } from '../sendegrenzen';
 import { VerificationCodesRepository } from '../verification-codes.repository';
 
 const CODE_EXPIRY_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
-// SMS kosten Geld und laden zum Missbrauch ein (SMS-Pumping): höchstens drei
-// Codes je Nummer und Stunde, frühestens alle 30 Sekunden.
-const MAX_CODES_PRO_STUNDE = 3;
 
 // A 6-digit code is only ~1M possibilities — bcrypt's slow-hashing defense
 // is irrelevant when the search space itself is small. An HMAC keyed with a
@@ -31,7 +28,7 @@ export class SmsCodeVerificationProvider implements VerificationProvider {
   ) {}
 
   async sendCode(target: string, purpose: string): Promise<SendCodeResult> {
-    await this.pruefeSendegrenzen(target, purpose);
+    await pruefeSendegrenzen(this.codes, target, purpose);
 
     const code = randomInt(100000, 1000000).toString();
     const codeHmac = this.hmac(code);
@@ -44,18 +41,6 @@ export class SmsCodeVerificationProvider implements VerificationProvider {
     await this.sms.send(target, `${code} ist dein SaniMe-Bestätigungscode. Er gilt 10 Minuten.`);
 
     return this.sms.echterVersand ? {} : { devCode: code };
-  }
-
-  private async pruefeSendegrenzen(target: string, purpose: string) {
-    const letzte = await this.codes.listCreatedSince(target, purpose, new Date(Date.now() - 60 * 60 * 1000));
-    if (letzte.length >= MAX_CODES_PRO_STUNDE) {
-      throw new HttpException('Du hast schon mehrere Codes angefordert. Bitte versuche es in einer Stunde erneut.', HttpStatus.TOO_MANY_REQUESTS);
-    }
-    const juengster = letzte[0]?.createdAt;
-    const warten = juengster ? Math.ceil(CODE_ERNEUT_SENDEN_SEKUNDEN - (Date.now() - juengster.getTime()) / 1000) : 0;
-    if (warten > 0) {
-      throw new HttpException(`Bitte warte noch ${warten} Sekunden, bevor du einen neuen Code anforderst.`, HttpStatus.TOO_MANY_REQUESTS);
-    }
   }
 
   async verifyCode(target: string, purpose: string, code: string): Promise<boolean> {

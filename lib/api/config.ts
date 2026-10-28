@@ -45,3 +45,10 @@ export function resolveStripePublishableKey(): string | null {
   const fromEnv = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY;
   return fromExtra ?? fromEnv ?? null;
 }
+
+// Stille Telefonbestätigung über das Mobilfunknetz (Telekom Verify). Muss zum
+// Backend passen (TELEKOM_VERIFY_STILLE_PRUEFUNG): nur dann zeigt die Kasse
+// die in Deutschland vorgeschriebene Einwilligung.
+export function stillePruefungAktiv(): boolean {
+  return Constants.expoConfig?.extra?.stillePruefung === true;
+}

@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Patch, Post, Req, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, NotFoundException, Param, Patch, Post, Req, UseGuards, UseInterceptors } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import type { OnboardingEvent } from '@sanime/domain';
@@ -67,6 +67,18 @@ export class OnboardingController {
       throw new BadRequestException('Session-ID stimmt nicht mit dem authentifizierten Bearer-Token überein');
     }
     return this.onboarding.einreichen(DEFAULT_TENANT_CONTEXT, id);
+  }
+
+  // Stille Prüfung über das Mobilfunknetz gescheitert (z. B. WLAN) → die
+  // App fordert sofort die SMS an, statt den Kanal-Timeout abzuwarten.
+  @Post(':id/sms-statt-netzpruefung')
+  @UseGuards(CustomerSessionAuthGuard)
+  @HttpCode(204)
+  async smsStattNetzpruefung(@Param('id') id: string, @CurrentCustomerSession() session: { sessionId: string }) {
+    if (session.sessionId !== id) {
+      throw new BadRequestException('Session-ID stimmt nicht mit dem authentifizierten Bearer-Token überein');
+    }
+    await this.onboarding.smsStattNetzpruefung(DEFAULT_TENANT_CONTEXT, id);
   }
 
   @Get(':id/appointment-slots')

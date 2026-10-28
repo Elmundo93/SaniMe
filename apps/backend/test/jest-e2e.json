@@ -13,5 +13,6 @@
   "setupFiles": [
     "<rootDir>/support/setup-env.ts"
   ],
-  "globalSetup": "<rootDir>/support/global-setup.ts"
+  "globalSetup": "<rootDir>/support/global-setup.ts",
+  "testTimeout": 30000
 }

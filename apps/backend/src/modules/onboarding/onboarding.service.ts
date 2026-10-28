@@ -281,7 +281,11 @@ export class OnboardingService {
 
     if (event.type === 'KONTAKT_ERFASST') {
       const sendResult = await this.verification.sendCode(event.telefon, VERIFICATION_PURPOSE);
-      return { session: await this.hydrate(tenant, await this.getRowOrThrow(tenant, sessionId)), devCode: sendResult.devCode };
+      return {
+        session: await this.hydrate(tenant, await this.getRowOrThrow(tenant, sessionId)),
+        devCode: sendResult.devCode,
+        checkUrl: sendResult.checkUrl,
+      };
     }
 
     return { session: await this.hydrate(tenant, await this.getRowOrThrow(tenant, sessionId)), einwilligungsToken };
@@ -411,6 +415,12 @@ export class OnboardingService {
     });
 
     return { supplyId: supplyIds[0], supplyIds };
+  }
+
+  async smsStattNetzpruefung(tenant: TenantContext, sessionId: string) {
+    const row = await this.getRowOrThrow(tenant, sessionId);
+    if (!row.contactPhone || !this.verification.smsStattStillerPruefung) return;
+    await this.verification.smsStattStillerPruefung(row.contactPhone, VERIFICATION_PURPOSE);
   }
 
   // Neue Person (Neukunde oder Bestellung für eine andere Versichertennummer)

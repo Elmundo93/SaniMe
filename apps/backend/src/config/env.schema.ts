@@ -40,6 +40,14 @@ export const envSchema = z.object({
   // Schlüssel: Dev-Versand (Code in der Antwort/im Log), in Produktion ein Fehler.
   SEVEN_API_KEY: optionalWithEmptyAsUndefined(z.string()),
   SMS_ABSENDER: z.string().max(11).default('SaniMe'),
+  // Telefonbestätigung über Telekom Verify (Vorrang vor seven.io): Application
+  // aus dem Telekom-Developer-Dashboard. Stille Prüfung erst nach Freigabe
+  // durch die Netzbetreiber einschalten.
+  TELEKOM_VERIFY_APPLICATION_ID: optionalWithEmptyAsUndefined(z.string()),
+  TELEKOM_VERIFY_PRIVATE_KEY: optionalWithEmptyAsUndefined(z.string()),
+  TELEKOM_VERIFY_BASE_URL: optionalWithEmptyAsUndefined(z.string().url()),
+  TELEKOM_VERIFY_STILLE_PRUEFUNG: optionalWithEmptyAsUndefined(z.string()),
+  TELEKOM_VERIFY_SANDBOX: optionalWithEmptyAsUndefined(z.string()),
   // Push direkt über APNs (siehe ApnsNotificationProvider).
   APNS_KEY_ID: optionalWithEmptyAsUndefined(z.string()),
   APNS_TEAM_ID: optionalWithEmptyAsUndefined(z.string()),

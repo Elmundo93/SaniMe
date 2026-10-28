@@ -7,8 +7,11 @@ import {
   type ClientOnboardingEvent,
   type TransitionResult,
 } from '@sanime/domain';
+import { smsStattNetzpruefung } from '../lib/api/onboarding';
+import { stillePruefen } from '../lib/stillePruefung';
+import { useOnboardingStore } from '../store/onboardingStore';
 
-type Dispatch = (event: ClientOnboardingEvent, code?: string) => Promise<TransitionResult & { devCode?: string }>;
+type Dispatch = (event: ClientOnboardingEvent, code?: string) => Promise<TransitionResult & { devCode?: string; checkUrl?: string }>;
 
 // OTP-Sende-/Verifizierungs-Mechanik. codeSenden/codeVerifizieren SIND die
 // dispatch()-Aufrufe (KONTAKT_ERFASST löst den Code-Versand serverseitig aus,
@@ -50,6 +53,19 @@ export function useOtpVerification(dispatch: Dispatch, initialKontakt = '') {
     }
     setKontakt(empfänger);
     setErneutIn(CODE_ERNEUT_SENDEN_SEKUNDEN);
+    // Telekom Verify mit stiller Prüfung: Code direkt über das Mobilfunknetz
+    // holen. Klappt das nicht (WLAN, Netz ohne Freigabe), sofort per SMS.
+    if (result.checkUrl) {
+      setLoading(true);
+      const stillerCode = await stillePruefen(result.checkUrl);
+      setLoading(false);
+      if (stillerCode) {
+        setCode(stillerCode);
+        if (await verifiziere(stillerCode)) return 'verifiziert';
+      }
+      const sessionId = useOnboardingStore.getState().session?.id;
+      if (sessionId) await smsStattNetzpruefung(sessionId).catch(() => {});
+    }
     // Dev-Build: Es gibt noch keinen echten SMS-/Mail-Versand (der Backend-
     // DevCodeVerificationProvider liefert den Code nur in der Antwort zurück),
     // also das OTP-Gate direkt mit diesem Code durchlaufen. Geht trotzdem über

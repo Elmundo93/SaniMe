@@ -183,6 +183,13 @@
       "when": 1793205840385,
       "tag": "0025_admin_app",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1793207211494,
+      "tag": "0026_telekom_verify",
+      "breakpoints": true
     }
   ]
 }

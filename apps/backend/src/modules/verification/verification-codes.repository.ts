@@ -7,8 +7,8 @@ import { verificationCodes } from '../../db/schema';
 export class VerificationCodesRepository {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
-  async create(target: string, purpose: string, codeHmac: string, expiresAt: Date) {
-    const [row] = await this.db.insert(verificationCodes).values({ target, purpose, codeHmac, expiresAt }).returning();
+  async create(target: string, purpose: string, codeHmac: string, expiresAt: Date, providerRequestId: string | null = null) {
+    const [row] = await this.db.insert(verificationCodes).values({ target, purpose, codeHmac, expiresAt, providerRequestId }).returning();
     return row;
   }
 

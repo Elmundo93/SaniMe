@@ -92,7 +92,7 @@ interface OnboardingState {
    * Route, auf die der Screen navigieren soll — oder einen Fehlergrund. */
   prozessStarten: (einstieg: ClientOnboardingEvent | 'REZEPT') => Promise<{ ok: true; route: string } | { ok: false; reason: string }>;
   laden: () => Promise<void>;
-  dispatch: (event: ClientOnboardingEvent, code?: string) => Promise<TransitionResult & { devCode?: string }>;
+  dispatch: (event: ClientOnboardingEvent, code?: string) => Promise<TransitionResult & { devCode?: string; checkUrl?: string }>;
   setPendingEinstiegEvent: (event: ClientOnboardingEvent | null) => void;
   einreichen: () => Promise<TransitionResult>;
   abschliessen: () => Promise<void>;
@@ -280,13 +280,13 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     if (!localCheck.ok) return localCheck;
 
     try {
-      const { session: fresh, devCode, einwilligungsToken } = await onboardingApi.patch(session.id, event, code);
+      const { session: fresh, devCode, checkUrl, einwilligungsToken } = await onboardingApi.patch(session.id, event, code);
       // Erste vollständige Zustimmung → Token für die Übernahme in künftige Sessions.
       if (einwilligungsToken) await speichereEinwilligungsToken(einwilligungsToken);
       await persistSession(fresh);
       set({ session: fresh });
       emitAnalyticsForTransition(session, fresh, event);
-      return { ok: true, session: fresh, devCode };
+      return { ok: true, session: fresh, devCode, checkUrl };
     } catch (e) {
       return { ok: false, reason: e instanceof Error ? e.message : 'Netzwerkfehler' };
     }

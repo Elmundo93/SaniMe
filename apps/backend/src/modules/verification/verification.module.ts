@@ -6,6 +6,8 @@ import { VERIFICATION_PROVIDER } from './ports/verification-provider.port';
 import { DevSmsSender } from './providers/dev-sms.sender';
 import { SevenSmsSender } from './providers/seven-sms.sender';
 import { SmsCodeVerificationProvider } from './providers/sms-code-verification.provider';
+import { TelekomVerifyClient, telekomVerifyKonfigurationAusEnv } from './providers/telekom-verify.client';
+import { TelekomVerificationProvider } from './providers/telekom-verification.provider';
 import { VerificationCodesRepository } from './verification-codes.repository';
 
 @Module({
@@ -22,7 +24,17 @@ import { VerificationCodesRepository } from './verification-codes.repository';
         return apiKey ? new SevenSmsSender(apiKey, config.get<string>('SMS_ABSENDER') ?? 'SaniMe') : dev;
       },
     },
-    { provide: VERIFICATION_PROVIDER, useClass: SmsCodeVerificationProvider },
+    SmsCodeVerificationProvider,
+    {
+      // Telekom Verify (stille Prüfung + SMS) hat Vorrang, sobald die
+      // Application konfiguriert ist; sonst eigener Code mit SMS_SENDER.
+      provide: VERIFICATION_PROVIDER,
+      inject: [ConfigService, VerificationCodesRepository, SmsCodeVerificationProvider],
+      useFactory: (config: ConfigService, codes: VerificationCodesRepository, eigene: SmsCodeVerificationProvider) => {
+        const telekom = telekomVerifyKonfigurationAusEnv((name) => config.get<string>(name));
+        return telekom ? new TelekomVerificationProvider(codes, new TelekomVerifyClient(telekom)) : eigene;
+      },
+    },
   ],
   exports: [VERIFICATION_PROVIDER],
 })

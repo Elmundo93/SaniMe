@@ -20,7 +20,7 @@ export function patch(
   sessionId: string,
   event: ClientOnboardingEvent,
   code?: string,
-): Promise<{ session: OnboardingSession; devCode?: string; einwilligungsToken?: string }> {
+): Promise<{ session: OnboardingSession; devCode?: string; checkUrl?: string; einwilligungsToken?: string }> {
   return request('PATCH', `/onboarding-sessions/${sessionId}`, { body: { event, code }, idempotent: true });
 }
 
@@ -61,4 +61,9 @@ export function createPaymentIntent(sessionId: string): Promise<PaymentIntentRes
 // Abschluss passiert trotzdem serverseitig — checkout.tsx pollt danach genauso.
 export function devZahlungSimulieren(sessionId: string): Promise<{ supplyId: string }> {
   return request('POST', `/onboarding-sessions/${sessionId}/dev-zahlung`);
+}
+
+// Stille Prüfung gescheitert (z. B. im WLAN) — sofort per SMS weiter.
+export function smsStattNetzpruefung(sessionId: string): Promise<void> {
+  return request('POST', `/onboarding-sessions/${sessionId}/sms-statt-netzpruefung`);
 }

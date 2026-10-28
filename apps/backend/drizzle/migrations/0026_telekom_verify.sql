@@ -1,0 +1,1 @@
+ALTER TABLE "verification_codes" ADD COLUMN "provider_request_id" text;
