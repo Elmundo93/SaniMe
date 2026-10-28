@@ -22,6 +22,7 @@ import { useOnboardingGuard } from '../../hooks/useOnboardingGuard';
 import { useFeldKorrektur } from '../../hooks/useFeldKorrektur';
 import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoadingView';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
+import { pruefeArchivTreffer } from '../../lib/archivAbgleich';
 import { D } from '@sanime/design-system';
 import { hatPflichtfelderRezept } from '@sanime/domain';
 
@@ -43,6 +44,11 @@ export default function ReviewScreen() {
     // bekannt, muss die Karte nicht noch einmal fotografiert werden.
     const result = await dispatch(session.krankenkasse ? { type: 'WEITER_KRANKENKASSE_BEKANNT' } : { type: 'WEITER' });
     if (result.ok) {
+      // Kam die Krankenkasse vom Rezept, entfällt der Kartenscan — und mit ihm
+      // die Wiedererkennung; deshalb hier mit der Nummer vom Rezept.
+      if (result.session.krankenkasse) {
+        await pruefeArchivTreffer(result.session.krankenkasse.versichertenNr).catch(() => false);
+      }
       router.push(STATUS_META[result.session.status].route as any);
     } else {
       Alert.alert('Bitte vervollständigen', 'Name, Arzt, Diagnose und Hilfsmittel müssen ausgefüllt sein.');

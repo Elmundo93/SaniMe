@@ -193,7 +193,11 @@ export class OnboardingService {
       }
       uebernommenerGrantId = grant.id;
       augmentedEvent = { ...event, agbVersion: grant.agbVersion, datenschutzVersion: grant.datenschutzVersion };
-    } else if (event.type === 'KRANKENKASSE_OCR_ABGESCHLOSSEN' || event.type === 'KRANKENKASSE_UEBERSPRUNGEN') {
+    } else if (
+      event.type === 'KRANKENKASSE_OCR_ABGESCHLOSSEN' ||
+      event.type === 'KRANKENKASSE_UEBERSPRUNGEN' ||
+      event.type === 'WEITER_KRANKENKASSE_BEKANNT'
+    ) {
       // Available products are computed server-side (CatalogService), never
       // trusted from the client's event payload — the client's own value is
       // discarded here regardless of what it sent. Nur Kassenprodukte: auf dem
@@ -398,6 +402,19 @@ export class OnboardingService {
           rawEdited: false,
         });
         await this.sessions.update(tenant, row.id, { prescriptionDocumentId: null, ocrResultId: created.id });
+        // Mirrors the domain transition: the Rezept's Kassendaten become the
+        // session's Krankenkasse only if none is known yet (no policy row).
+        const { krankenkasse } = event.result;
+        if (krankenkasse.versichertenNr && !(await this.insurancePolicies.findBySubject(tenant, 'onboarding_session', row.id))) {
+          await this.insurancePolicies.upsertForSubject(tenant, {
+            subjectType: 'onboarding_session',
+            subjectId: row.id,
+            customerId: row.customerId,
+            insurerName: krankenkasse.name,
+            insurerIk: krankenkasse.ik ?? null,
+            insuredNumber: krankenkasse.versichertenNr,
+          });
+        }
         return;
       }
       case 'FELD_KORRIGIERT': {
@@ -445,6 +462,12 @@ export class OnboardingService {
           insuranceCardSkipped: true,
           availableProductIds: event.produkte.map((p) => p.id),
         });
+        return;
+      case 'WEITER_KRANKENKASSE_BEKANNT':
+        // Krankenkasse schon bekannt (früheres Rezept oder Personalienfeld
+        // dieses Rezepts) — die Produktliste kommt dann von hier statt vom
+        // Kartenschritt.
+        await this.sessions.update(tenant, row.id, { availableProductIds: (event.produkte ?? []).map((p) => p.id) });
         return;
       case 'SUPPLY_AUSGEWAEHLT': {
         // Rezept-zuerst: das eben erfasste Rezept (Scan-Zwischenstand der

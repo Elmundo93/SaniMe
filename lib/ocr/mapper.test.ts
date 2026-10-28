@@ -16,6 +16,9 @@ describe('baueRezeptErgebnis', () => {
       hilfsmittel: feld('Rollstuhl, faltbar', 'medium'),
       hilfsmittelNr: feld('00.00.00', 'high'),
       datum: feld('15.06.2026', 'high'),
+      krankenkasseName: feld('', 'low'),
+      ik: feld('', 'low'),
+      versichertenNr: feld('', 'low'),
     };
 
     const { result, confidence } = baueRezeptErgebnis(felder);
@@ -48,12 +51,36 @@ describe('baueRezeptErgebnis', () => {
       hilfsmittel: leeresFeld,
       hilfsmittelNr: leeresFeld,
       datum: leeresFeld,
+      krankenkasseName: leeresFeld,
+      ik: leeresFeld,
+      versichertenNr: leeresFeld,
     };
 
     const { result } = baueRezeptErgebnis(felder);
     expect(result.patient.name).toBe('');
     expect(result.arzt.lanr).toBeUndefined();
     expect(result.hilfsmittelNr).toBeUndefined();
+  });
+
+  it('übernimmt die Kassendaten aus dem Personalienfeld des Rezepts', () => {
+    const leeresFeld = feld('', 'low' as const);
+    const felder: RezeptFelder = {
+      patientName: leeresFeld,
+      patientGeburtsdatum: leeresFeld,
+      arztName: leeresFeld,
+      arztLanr: leeresFeld,
+      diagnose: leeresFeld,
+      hilfsmittel: leeresFeld,
+      hilfsmittelNr: leeresFeld,
+      datum: leeresFeld,
+      krankenkasseName: feld('AOK Niedersachsen', 'high'),
+      ik: feld('101234569', 'high'),
+      versichertenNr: feld('Q123456784', 'high'),
+    };
+
+    const { result, confidence } = baueRezeptErgebnis(felder);
+    expect(result.krankenkasse).toEqual({ name: 'AOK Niedersachsen', ik: '101234569', versichertenNr: 'Q123456784' });
+    expect(confidence.krankenkasse).toBe('high');
   });
 });
 

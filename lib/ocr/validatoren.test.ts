@@ -1,4 +1,11 @@
-import { pruefeDatumPlausibel, pruefeGeburtsdatumPlausibel, pruefeIk, pruefeLanr, wendeValidatorenAn } from './validatoren';
+import {
+  pruefeDatumPlausibel,
+  pruefeGeburtsdatumPlausibel,
+  pruefeIk,
+  pruefeLanr,
+  pruefeVersichertenNr,
+  wendeValidatorenAn,
+} from './validatoren';
 import type { RezeptFelder } from './typen';
 
 function feld(wert: string, confidence: 'high' | 'medium' | 'low' = 'high') {
@@ -73,6 +80,20 @@ describe('pruefeGeburtsdatumPlausibel', () => {
   });
 });
 
+describe('pruefeVersichertenNr', () => {
+  it('akzeptiert eine Versichertennummer mit korrekter Prüfziffer', () => {
+    // Q=17 -> 1,7,1,2,3,4,5,6,7,8 x [1,2,...] -> Quersummen 1+5+1+4+3+8+5+3+7+7 = 44 -> 4
+    expect(pruefeVersichertenNr('Q123456784')).toBe(true);
+    expect(pruefeVersichertenNr('b987654320')).toBe(true);
+  });
+
+  it('lehnt eine falsche Prüfziffer oder ein falsches Format ab', () => {
+    expect(pruefeVersichertenNr('Q123456785')).toBe(false);
+    expect(pruefeVersichertenNr('1123456784')).toBe(false);
+    expect(pruefeVersichertenNr('Q12345678')).toBe(false);
+  });
+});
+
 describe('wendeValidatorenAn', () => {
   function basisFelder(): RezeptFelder {
     return {
@@ -84,11 +105,16 @@ describe('wendeValidatorenAn', () => {
       hilfsmittel: feld('Rollstuhl'),
       hilfsmittelNr: feld('00.00.00'),
       datum: feld('01.07.2026'),
+      krankenkasseName: feld('AOK Niedersachsen'),
+      ik: feld('101234569'),
+      versichertenNr: feld('Q123456784'),
     };
   }
 
   it('lässt gültige Felder unverändert', () => {
     const ergebnis = wendeValidatorenAn(basisFelder());
+    expect(ergebnis.versichertenNr.confidence).toBe('high');
+    expect(ergebnis.ik.confidence).toBe('high');
     expect(ergebnis.arztLanr.confidence).toBe('high');
     expect(ergebnis.datum.confidence).toBe('high');
     expect(ergebnis.patientGeburtsdatum.confidence).toBe('high');
@@ -117,6 +143,9 @@ describe('wendeValidatorenAn', () => {
       hilfsmittel: feld('', 'low'),
       hilfsmittelNr: feld('', 'low'),
       datum: feld('', 'low'),
+      krankenkasseName: feld('', 'low'),
+      ik: feld('', 'low'),
+      versichertenNr: feld('', 'low'),
     };
     expect(() => wendeValidatorenAn(felder)).not.toThrow();
   });

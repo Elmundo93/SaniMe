@@ -39,6 +39,23 @@ export function pruefeIk(ik: string): boolean {
   return pruefziffer === z[8];
 }
 
+// Krankenversichertennummer (unveränderlicher Teil, 10 Stellen): Buchstabe
+// als zweistellige Zahl (A=01 … Z=26), dann die 8 Ziffern; diese 10 Ziffern
+// abwechselnd x1/x2 gewichtet, Produkte >= 10 als Quersumme, Summe mod 10
+// muss der Prüfziffer (Stelle 10) entsprechen.
+export function pruefeVersichertenNr(nummer: string): boolean {
+  const treffer = /^([A-Z])(\d{8})(\d)$/.exec(nummer.replace(/\s/g, '').toUpperCase());
+  if (!treffer) return false;
+  const buchstabe = String(treffer[1].charCodeAt(0) - 64).padStart(2, '0');
+  const ziffernfolge = (buchstabe + treffer[2]).split('').map(Number);
+  let summe = 0;
+  ziffernfolge.forEach((ziffer, i) => {
+    const produkt = ziffer * (i % 2 === 0 ? 1 : 2);
+    summe += produkt >= 10 ? Math.floor(produkt / 10) + (produkt % 10) : produkt;
+  });
+  return summe % 10 === Number(treffer[3]);
+}
+
 function parseDatum(datum: string): Date | null {
   const treffer = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(datum.trim());
   if (!treffer) return null;
@@ -83,6 +100,12 @@ export function wendeValidatorenAn(felder: RezeptFelder): RezeptFelder {
 
   if (ergebnis.arztLanr.wert && !pruefeLanr(ergebnis.arztLanr.wert)) {
     ergebnis.arztLanr = { ...ergebnis.arztLanr, confidence: eineStufeHerabstufen(ergebnis.arztLanr.confidence) };
+  }
+  if (ergebnis.versichertenNr.wert && !pruefeVersichertenNr(ergebnis.versichertenNr.wert)) {
+    ergebnis.versichertenNr = { ...ergebnis.versichertenNr, confidence: 'low' };
+  }
+  if (ergebnis.ik.wert && !pruefeIk(ergebnis.ik.wert)) {
+    ergebnis.ik = { ...ergebnis.ik, confidence: eineStufeHerabstufen(ergebnis.ik.confidence) };
   }
   if (ergebnis.datum.wert && !pruefeDatumPlausibel(ergebnis.datum.wert)) {
     ergebnis.datum = { ...ergebnis.datum, confidence: eineStufeHerabstufen(ergebnis.datum.confidence) };

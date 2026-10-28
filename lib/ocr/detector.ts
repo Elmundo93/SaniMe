@@ -3,7 +3,21 @@ import type { DokumentTyp } from './typen';
 // Keyword-/Regex-Scoring auf reinem OCR-Fließtext (keine Bounding-Boxes
 // verfügbar). Wird von lib/ocr/index.ts zum Gaten verwendet, um "falsches
 // Dokument fotografiert" zu erkennen (siehe FalschesDokumentError).
-const REZEPT_MARKER = ['muster 16', 'gesetzliche krankenvers', 'kassenrezept', 'lanr', 'bsnr', 'verordnung', 'gebühr'];
+const REZEPT_MARKER = [
+  'muster 16',
+  'gesetzliche krankenvers',
+  'kassenrezept',
+  'lanr',
+  'bsnr',
+  'verordnung',
+  'gebühr',
+  // Gedruckte Feldbeschriftungen des Muster 16
+  'kostenträgerkennung',
+  'betriebsstätten',
+  'arzt-nr',
+  'vertragsarztstempel',
+  'leerräume',
+];
 const EGK_MARKER = ['krankenversichertenkarte', 'gesundheitskarte', 'gültig bis', 'egk'];
 
 const HILFSMITTELNUMMER = /\b\d{2}\.\d{2}\.\d{2}\b/;

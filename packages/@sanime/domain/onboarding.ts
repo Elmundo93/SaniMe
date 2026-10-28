@@ -46,7 +46,9 @@ export type OnboardingEvent =
   | { type: 'REZEPT_FUER_POSITION'; produktId: string }
   | { type: 'REZEPT_HINZUFUEGEN' }
   | { type: 'REZEPT_BEARBEITEN'; produktId: string }
-  | { type: 'WEITER_KRANKENKASSE_BEKANNT' }
+  // produkte füllt nur der Server (Kassenprodukte aus dem Katalog), wie bei
+  // KRANKENKASSE_UEBERSPRUNGEN — der Kartenschritt, der sie sonst liefert, entfällt.
+  | { type: 'WEITER_KRANKENKASSE_BEKANNT'; produkte?: Produkt[] }
   | { type: 'REZEPT_ZUGEORDNET' }
   // Kassenartikel ohne Rezept zum Selbstzahlerpreis kaufen (bzw. zurück).
   | { type: 'POSITION_OHNE_REZEPT'; produktId: string; ohneRezept: boolean }
@@ -366,14 +368,22 @@ function applyEventData(session: OnboardingSession, event: OnboardingEvent): Onb
         },
       };
     }
-    case 'REZEPT_OCR_ABGESCHLOSSEN':
-      return {
+    case 'REZEPT_OCR_ABGESCHLOSSEN': {
+      const gescannt: OnboardingSession = {
         ...session,
         rezeptFotoUri: event.uri,
         ocrResult: mitKrankenkasse(event.result, session.krankenkasse),
         ocrConfidence: event.confidence,
         ocrBearbeitet: false,
       };
+      // Das Personalienfeld des Muster 16 trägt Kasse, IK und Versicherten-Nr.
+      // — ist für die Bestellung noch keine Krankenkasse bekannt, gilt die vom
+      // Rezept, und das Foto der Karte entfällt (WEITER_KRANKENKASSE_BEKANNT).
+      // In der Datenprüfung bleibt sie wie jedes OCR-Feld editierbar.
+      return !session.krankenkasse && event.result.krankenkasse.versichertenNr
+        ? setzeKrankenkasse(gescannt, event.result.krankenkasse)
+        : gescannt;
+    }
     case 'FELD_KORRIGIERT': {
       const korrigiert: OnboardingSession = {
         ...session,
@@ -438,7 +448,7 @@ function applyEventData(session: OnboardingSession, event: OnboardingEvent): Onb
       };
     }
     case 'WEITER_KRANKENKASSE_BEKANNT':
-      return session;
+      return event.produkte ? { ...session, verfügbareProdukte: event.produkte } : session;
     case 'REZEPT_ZUGEORDNET':
       return {
         ...session,

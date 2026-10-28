@@ -103,6 +103,29 @@ describe('onboarding FSM — Rezept zuerst', () => {
   it('lehnt ein Event ohne passende Zeile ab', () => {
     expect(transition(erstelleLeereSession('s2'), { type: 'SUPPLY_AUSGEWAEHLT', produkt: HIMI_PRODUKT }).ok).toBe(false);
   });
+
+  it('übernimmt die Kassendaten aus dem Rezept und überspringt dann den Kartenscan', () => {
+    const rezeptMitKasse: OcrResult = { ...REZEPT, krankenkasse: KRANKENKASSE };
+    let session = schritte(leistungsuebersicht(), { type: 'WEITER' }, {
+      type: 'REZEPT_OCR_ABGESCHLOSSEN',
+      uri: 'file://rezept.jpg',
+      result: rezeptMitKasse,
+      confidence: CONFIDENCE,
+    });
+    expect(session.krankenkasse).toEqual(KRANKENKASSE);
+
+    session = schritte(session, { type: 'WEITER_KRANKENKASSE_BEKANNT' });
+    expect(session.status).toBe('DATENPRUEFUNG');
+  });
+
+  it('überschreibt eine bekannte Krankenkasse nicht mit den Daten eines weiteren Rezepts', () => {
+    const anderesRezept: OcrResult = { ...REZEPT, krankenkasse: { name: 'Andere Kasse', versichertenNr: 'B987654320' } };
+    let session = schritte(leistungsuebersicht(), { type: 'WEITER' }, ...REZEPT_SCAN, { type: 'ZURUECK' }, { type: 'ZURUECK' }, { type: 'ZURUECK' });
+    expect(session.status).toBe('REZEPT_AUFNAHME');
+    session = schritte(session, { type: 'REZEPT_OCR_ABGESCHLOSSEN', uri: 'file://r2.jpg', result: anderesRezept, confidence: CONFIDENCE });
+    expect(session.krankenkasse).toEqual(KRANKENKASSE);
+    expect(session.ocrResult?.krankenkasse).toEqual(KRANKENKASSE);
+  });
 });
 
 describe('onboarding FSM — Warenkorb', () => {

@@ -26,9 +26,7 @@ import { IconButton } from '../../components/ui/IconButton';
 import { CameraOverlayHeader } from '../../components/ui/CameraOverlayHeader';
 import { erkenneKrankenkasse, FalschesDokumentError } from '../../lib/ocr';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
-import { useAuthStore } from '../../store/authStore';
-import * as authApi from '../../lib/api/auth';
-import { ApiError } from '../../lib/api/client';
+import { pruefeArchivTreffer } from '../../lib/archivAbgleich';
 import { D } from '@sanime/design-system';
 
 function zeigeOcrFehler() {
@@ -61,7 +59,6 @@ export default function KrankenkasseScreen() {
   const router = useRouter();
   const { session, ready } = useOnboardingGuard('KRANKENKASSE_AUFNAHME');
   const dispatch = useOnboardingStore((s) => s.dispatch);
-  const setBenutzer = useAuthStore((s) => s.setBenutzer);
   const [permission, requestPermission] = useCameraPermissions();
   const [aufgenommen, setAufgenommen] = useState(false);
   const [verarbeitung, setVerarbeitung] = useState(false);
@@ -69,35 +66,6 @@ export default function KrankenkasseScreen() {
   const glowStyle = useGlowPulse();
 
   if (!ready) return <OnboardingLoadingView />;
-
-  // Versichertennummer gegen den echten Kundenstamm prüfen (POST /customers/match) —
-  // bei Treffer claimt der Server die AKTUELLE Session serverseitig auf diesen Kunden
-  // (dasselbe Bearer-Session-Secret bleibt gültig, kein neues Token nötig) und wir
-  // übernehmen die Identität nur für die Anzeige. Die laufende Bestellung bleibt dabei
-  // in Bearbeitung — ein Treffer bedeutet "das ist ein bekannter Kunde", nicht "das
-  // Onboarding ist bereits abgeschlossen". Ist bereits ein benutzer eingeloggt
-  // (Folgeauftrag), bleibt dessen echte Identität unangetastet statt sie zu überschreiben.
-  const pruefeArchivTreffer = async (versichertenNr: string): Promise<boolean> => {
-    if (useAuthStore.getState().benutzer) return false;
-    try {
-      const { customer } = await authApi.matchByInsuredNumber(versichertenNr);
-      await setBenutzer(
-        {
-          id: customer.id,
-          vorname: customer.firstName,
-          nachname: customer.lastName,
-          email: customer.email ?? undefined,
-          telefon: customer.phone ?? '',
-          versichertenNr: customer.insuredNumber,
-        },
-        useAuthStore.getState().token!,
-      );
-      return true;
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 404) return false; // kein Archiv-Treffer
-      throw error;
-    }
-  };
 
   const handleZurück = async () => {
     const result = await dispatch({ type: 'ZURUECK' });

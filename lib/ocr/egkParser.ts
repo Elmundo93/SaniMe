@@ -8,7 +8,7 @@ import type { EgkFelder, FeldResultat } from './typen';
 const VERSICHERTENNUMMER_REGEX = /\b[A-Z]\d{9}\b/;
 const NEUNSTELLIG_GLOBAL = /\b\d{9}\b/g;
 
-const KRANKENKASSEN_NAMEN = [
+export const KRANKENKASSEN_NAMEN = [
   'techniker krankenkasse',
   'barmer',
   'dak-gesundheit',

@@ -14,7 +14,11 @@ export function baueRezeptErgebnis(felder: RezeptFelder): { result: OcrResult; c
   const result: OcrResult = {
     patient: { name: felder.patientName.wert, dateOfBirth: felder.patientGeburtsdatum.wert },
     arzt: { name: felder.arztName.wert, lanr: felder.arztLanr.wert || undefined },
-    krankenkasse: { name: '', versichertenNr: '' },
+    krankenkasse: {
+      name: felder.krankenkasseName.wert,
+      ik: felder.ik.wert || undefined,
+      versichertenNr: felder.versichertenNr.wert,
+    },
     diagnose: felder.diagnose.wert,
     hilfsmittel: felder.hilfsmittel.wert,
     hilfsmittelNr: felder.hilfsmittelNr.wert || undefined,
@@ -24,7 +28,8 @@ export function baueRezeptErgebnis(felder: RezeptFelder): { result: OcrResult; c
   const confidence: OcrConfidence = {
     patient: schlechtere(felder.patientName.confidence, felder.patientGeburtsdatum.confidence),
     arzt: schlechtere(felder.arztName.confidence, felder.arztLanr.confidence),
-    krankenkasse: 'low',
+    // Wie bei der eGK zählt vor allem eine korrekte Versichertennummer.
+    krankenkasse: schlechtere(felder.krankenkasseName.confidence, felder.versichertenNr.confidence),
     diagnose: felder.diagnose.confidence,
     hilfsmittel: felder.hilfsmittel.confidence,
   };

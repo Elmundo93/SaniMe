@@ -26,13 +26,32 @@ import { OnboardingLoadingView } from '../../components/onboarding/OnboardingLoa
 import { LoadingState } from '../../components/ui/LoadingState';
 import { IconButton } from '../../components/ui/IconButton';
 import { CameraOverlayHeader } from '../../components/ui/CameraOverlayHeader';
-import { erkenneRezept, FalschesDokumentError } from '../../lib/ocr';
+import { erkenneRezept, FalschesDokumentError, type RezeptHinweis } from '../../lib/ocr';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { D } from '@sanime/design-system';
 
 const { width, height } = Dimensions.get('window');
 const FRAME_W = width * 0.82;
 const FRAME_H = FRAME_W * 1.41; // DIN A5 proportional
+
+const HINWEIS_TEXTE: Record<RezeptHinweis, string> = {
+  BEREITS_EINGELOEST:
+    'Auf dem Rezept ist ein Abrechnungsaufdruck zu sehen — es wurde wohl schon in einer Apotheke oder einem Sanitätshaus eingelöst. Ein Rezept lässt sich nur einmal einlösen.',
+  AELTER_ALS_28_TAGE:
+    'Dein Rezept ist älter als 28 Tage. Für Hilfsmittel ist es dann meist nicht mehr gültig — deine Arztpraxis kann dir ein neues ausstellen.',
+};
+
+// Fachliche Auffälligkeiten nur zeigen, nie sperren: das erkannte Datum kann
+// falsch gelesen sein, und der Nutzer korrigiert es im nächsten Schritt.
+function hinweiseBestaetigt(hinweise: RezeptHinweis[]): Promise<boolean> {
+  if (hinweise.length === 0) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    Alert.alert('Bitte prüfe dein Rezept', hinweise.map((h) => HINWEIS_TEXTE[h]).join('\n\n'), [
+      { text: 'Anderes Rezept fotografieren', style: 'cancel', onPress: () => resolve(false) },
+      { text: 'Trotzdem verwenden', onPress: () => resolve(true) },
+    ], { onDismiss: () => resolve(false) });
+  });
+}
 
 export default function RezeptScanScreen() {
   const router = useRouter();
@@ -70,7 +89,8 @@ export default function RezeptScanScreen() {
       // die OCR läuft on-device (lib/ocr/), nur die extrahierten Felder
       // gehen an das Backend. `uri` bleibt ein rein lokaler Sandbox-Pfad,
       // den der Server ohnehin nie auswertet oder speichert.
-      const { result, confidence } = await erkenneRezept(uri);
+      const { result, confidence, hinweise } = await erkenneRezept(uri);
+      if (!(await hinweiseBestaetigt(hinweise))) return;
       const transitionResult = await dispatch({ type: 'REZEPT_OCR_ABGESCHLOSSEN', uri, result, confidence });
       if (transitionResult.ok) {
         router.push(STATUS_META[transitionResult.session.status].route as any);

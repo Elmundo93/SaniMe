@@ -95,7 +95,7 @@ export const onboardingEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('REZEPT_FUER_POSITION'), produktId: z.string().uuid() }),
   z.object({ type: z.literal('REZEPT_HINZUFUEGEN') }),
   z.object({ type: z.literal('REZEPT_BEARBEITEN'), produktId: z.string().uuid() }),
-  z.object({ type: z.literal('WEITER_KRANKENKASSE_BEKANNT') }),
+  z.object({ type: z.literal('WEITER_KRANKENKASSE_BEKANNT'), produkte: z.array(produktSchema).optional() }),
   z.object({ type: z.literal('REZEPT_ZUGEORDNET') }),
   z.object({ type: z.literal('POSITION_OHNE_REZEPT'), produktId: z.string().uuid(), ohneRezept: z.boolean() }),
   z.object({ type: z.literal('ZURUECK_CHECKOUT') }),

@@ -385,6 +385,27 @@ describe('Onboarding Warenkorb (e2e)', () => {
     expect((await patchEvent({ type: 'KATALOG_PRODUKT_VORGEMERKT', produktId: selbstzahlerId })).status).toBe(400);
   });
 
+  it('übernimmt die Kassendaten aus dem Rezept, überspringt die Karte und liefert trotzdem die Versorgungen', async () => {
+    const { patchEvent } = await neueSessionMitConsent();
+    await patchEvent({ type: 'WEITER' }).expect(200);
+    const scan = rezeptScan('Rollator');
+    let res = await patchEvent({
+      ...scan,
+      result: { ...scan.result, krankenkasse: { name: 'AOK Niedersachsen', ik: '101234569', versichertenNr: 'Q123456784' } },
+    }).expect(200);
+    expect(res.body.session.krankenkasse).toEqual({ name: 'AOK Niedersachsen', ik: '101234569', versichertenNr: 'Q123456784' });
+
+    res = await patchEvent({ type: 'WEITER_KRANKENKASSE_BEKANNT' }).expect(200);
+    expect(res.body.session.status).toBe('DATENPRUEFUNG');
+    // Die Produktliste kommt sonst vom Kartenschritt — hier muss sie der
+    // Server beim Überspringen selbst liefern, nur Kassenprodukte.
+    expect(res.body.session.verfügbareProdukte.length).toBeGreaterThan(0);
+    expect(res.body.session.verfügbareProdukte.every((p: { hilfsmittelNr?: string }) => !!p.hilfsmittelNr)).toBe(true);
+
+    res = await patchEvent({ type: 'WEITER' }).expect(200);
+    expect(res.body.session.status).toBe('VERSORGUNGSAUSWAHL');
+  });
+
   it('pflegt je Kassenartikel ein eigenes Rezept nach — die Krankenkassenkarte nur einmal', async () => {
     const { patchEvent, complete } = await neueSessionMitConsent();
     await patchEvent({ type: 'WARENKORB_UEBERNOMMEN', artikel: [{ produktId: kassenartikel[0].id, krankheitsbildId: 'mobilitaet' }, { produktId: kassenartikel[1].id }] }).expect(200);

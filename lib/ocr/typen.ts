@@ -10,6 +10,10 @@ export interface FeldResultat {
 
 export type DokumentTyp = 'UNBEKANNT' | 'REZEPT' | 'EGK';
 
+// Fachliche Auffälligkeiten des Rezepts — blockieren nie, der Nutzer
+// entscheidet nach einem Hinweis selbst, ob er das Rezept verwendet.
+export type RezeptHinweis = 'BEREITS_EINGELOEST' | 'AELTER_ALS_28_TAGE';
+
 export interface RezeptFelder {
   patientName: FeldResultat;
   patientGeburtsdatum: FeldResultat;
@@ -19,6 +23,10 @@ export interface RezeptFelder {
   hilfsmittel: FeldResultat;
   hilfsmittelNr: FeldResultat;
   datum: FeldResultat;
+  // Das Personalienfeld des Muster 16 trägt dieselben Kassendaten wie die eGK.
+  krankenkasseName: FeldResultat;
+  ik: FeldResultat;
+  versichertenNr: FeldResultat;
 }
 
 export interface EgkFelder {

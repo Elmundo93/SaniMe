@@ -2,14 +2,14 @@ import type { ConfidenceLevel, OcrConfidence, OcrKrankenkasse, OcrResult, Produk
 import { extrahiereText } from './engine';
 import { normalisiereBild } from './processor';
 import { erkenneDokumenttyp } from './detector';
-import { parseRezept } from './rezeptParser';
+import { erkenneHinweise, parseRezept } from './rezeptParser';
 import { parseEgk } from './egkParser';
 import { wendeValidatorenAn } from './validatoren';
 import { baueKrankenkasseErgebnis, baueRezeptErgebnis } from './mapper';
-import type { DokumentTyp } from './typen';
+import type { DokumentTyp, RezeptHinweis } from './typen';
 
 export { erkenneDokumenttyp } from './detector';
-export type { DokumentTyp, EgkFelder, FeldResultat, RezeptFelder } from './typen';
+export type { DokumentTyp, EgkFelder, FeldResultat, RezeptFelder, RezeptHinweis } from './typen';
 
 // Wird geworfen, wenn der Detector ein anderes Dokument erkennt als das, das
 // der aufrufende Scan-Screen erwartet (z.B. eGK statt Rezept fotografiert).
@@ -32,7 +32,11 @@ export class FalschesDokumentError extends Error {
 // Alert. Liefert die Engine Text, extrahiert der Parser aber wenig, wird
 // trotzdem mit einem größtenteils leeren/'low' Ergebnis aufgelöst — der
 // Nutzer korrigiert im Review-Screen von Hand.
-export async function erkenneRezept(uri: string): Promise<{ result: OcrResult; confidence: OcrConfidence }> {
+// `hinweise` sind fachliche Auffälligkeiten (eingelöst, zu alt) — reiner
+// Client-Hinweis vor dem Weitermachen, nicht Teil des OcrResult.
+export async function erkenneRezept(
+  uri: string,
+): Promise<{ result: OcrResult; confidence: OcrConfidence; hinweise: RezeptHinweis[] }> {
   const normalisiert = await normalisiereBild(uri);
   const zeilen = await extrahiereText(normalisiert);
   if (zeilen.length === 0) {
@@ -43,7 +47,7 @@ export async function erkenneRezept(uri: string): Promise<{ result: OcrResult; c
   }
 
   const felder = wendeValidatorenAn(parseRezept(zeilen));
-  return baueRezeptErgebnis(felder);
+  return { ...baueRezeptErgebnis(felder), hinweise: erkenneHinweise(zeilen, felder) };
 }
 
 // 1:1-Ersatz für simuliereKrankenkasseOcr(). `produkte` is always [] here —
