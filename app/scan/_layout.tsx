@@ -16,6 +16,7 @@ export default function ScanLayout() {
         <Stack.Screen name="versorgungen" />
         <Stack.Screen name="termin" />
         <Stack.Screen name="checkout" options={{ gestureEnabled: false }} />
+        <Stack.Screen name="notfall" />
       </Stack>
     </SafeAreaProvider>
   );

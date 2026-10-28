@@ -11,6 +11,8 @@ import {
   istKassenartikel,
   positionenOhneRezept,
   rezeptVollstaendig,
+  terminNachGenehmigung,
+  NOTFALL_GRUENDE,
   voraussichtlicheZuzahlungEuro,
   zahlungBeimCheckoutFaellig,
   type ClientOnboardingEvent,
@@ -35,6 +37,7 @@ import { useAuthStore } from '../../store/authStore';
 import { createPaymentIntent, devZahlungSimulieren } from '../../lib/api/onboarding';
 import { resolveStripePublishableKey } from '../../lib/api/config';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
+import { pushNachBestellungAnbieten } from '../../lib/push';
 import { formatEuro, anzahlText } from '../../lib/katalogAnzeige';
 import { gleicheProdukte, warenkorbAbgleich } from '../../lib/warenkorb';
 import { D } from '@sanime/design-system';
@@ -118,6 +121,7 @@ export default function CheckoutScreen() {
   const zuzahlungSpaeter = voraussichtlicheZuzahlungEuro(session);
   const ohneRezept = positionenOhneRezept(session);
   const abschlussfaehig = istAbschlussfaehig(session);
+  const terminSpaeter = terminNachGenehmigung(session);
   const kassenartikel = session.positionen.filter((p) => istKassenartikel(p.produkt) && !p.ohneRezept);
   const ersteRezept = session.positionen.find((p) => p.rezept)?.rezept ?? null;
   const adresse = session.positionen.find((p) => p.rezept?.patient.adresse)?.rezept?.patient.adresse;
@@ -130,6 +134,13 @@ export default function CheckoutScreen() {
     setAktionLaeuft(false);
     if (result.ok) router.push(STATUS_META[result.session.status].route as any);
     else zeigeDispatchFehler();
+  };
+
+  const notfallZuruecknehmen = async () => {
+    setAktionLaeuft(true);
+    const result = await dispatch({ type: 'NOTFALL_ANGEFRAGT', notfall: null });
+    setAktionLaeuft(false);
+    if (!result.ok) zeigeDispatchFehler();
   };
 
   const entfernen = (position: WarenkorbPosition) => {
@@ -209,6 +220,8 @@ export default function CheckoutScreen() {
       // Best effort: siehe Kommentar oben.
     }
     router.replace('/dashboard');
+    // Erst auf dem Dashboard fragen — die Bestellung ist dann sichtbar durch.
+    pushNachBestellungAnbieten();
   };
 
   const handleEinreichen = async () => {
@@ -454,29 +467,66 @@ export default function CheckoutScreen() {
               </Section>
             )}
 
-            <Section
-              titel="Termin"
-              aktionLabel={session.selectedAppointment ? 'Ändern' : undefined}
-              onAktion={session.selectedAppointment ? () => speiche({ type: 'TERMIN_WAEHLEN' }) : undefined}
-              padding={16}
-            >
-              {session.selectedAppointment ? (
-                <>
-                  <SectionRow label="Wann" wert={terminText(session.selectedAppointment.beginn)} />
-                  <SectionRow label="Wo" wert={session.selectedAppointment.ort} />
-                </>
-              ) : (
-                <TouchableOpacity
-                  style={styles.terminButton}
-                  onPress={() => speiche({ type: 'TERMIN_WAEHLEN' })}
-                  accessibilityRole="button"
-                  accessibilityLabel="Termin für die Lieferung wählen"
-                >
-                  <Feather name="calendar" size={18} color={D.color.accent} />
-                  <Text style={styles.linkText}>Termin für die Lieferung wählen</Text>
-                </TouchableOpacity>
-              )}
-            </Section>
+            {terminSpaeter ? (
+              // Kassenartikel: die Kasse entscheidet erst (bis zu drei Wochen) —
+              // der Termin folgt nach der Genehmigung, dringende Fälle per Rückruf.
+              <Section titel="Liefertermin" padding={16}>
+                <Text style={styles.terminHinweis}>
+                  Wir schicken deinen Antrag an die Krankenkasse. Sobald sie zugestimmt hat — meist innerhalb von drei Wochen — benachrichtigen
+                  wir dich und du wählst deinen Liefertermin.
+                </Text>
+                {session.notfall ? (
+                  <View style={styles.notfallZeile}>
+                    <Feather name="phone-call" size={16} color={D.color.accent} />
+                    <Text style={styles.notfallText}>
+                      Notfalllieferung angefragt ({NOTFALL_GRUENDE[session.notfall.grund]}) — wir rufen dich nach der Bestellung an.
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => notfallZuruecknehmen()}
+                      style={styles.notfallAktion}
+                      accessibilityRole="button"
+                      accessibilityLabel="Notfallanfrage zurücknehmen"
+                    >
+                      <Text style={styles.linkText}>Zurücknehmen</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.terminButton}
+                    onPress={() => router.push('/scan/notfall')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Früher benötigt? Notfalllieferung anfragen"
+                  >
+                    <Feather name="alert-circle" size={18} color={D.color.accent} />
+                    <Text style={styles.linkText}>Früher benötigt? Notfalllieferung anfragen</Text>
+                  </TouchableOpacity>
+                )}
+              </Section>
+            ) : (
+              <Section
+                titel="Termin"
+                aktionLabel={session.selectedAppointment ? 'Ändern' : undefined}
+                onAktion={session.selectedAppointment ? () => speiche({ type: 'TERMIN_WAEHLEN' }) : undefined}
+                padding={16}
+              >
+                {session.selectedAppointment ? (
+                  <>
+                    <SectionRow label="Wann" wert={terminText(session.selectedAppointment.beginn)} />
+                    <SectionRow label="Wo" wert={session.selectedAppointment.ort} />
+                  </>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.terminButton}
+                    onPress={() => speiche({ type: 'TERMIN_WAEHLEN' })}
+                    accessibilityRole="button"
+                    accessibilityLabel="Termin für die Lieferung wählen"
+                  >
+                    <Feather name="calendar" size={18} color={D.color.accent} />
+                    <Text style={styles.linkText}>Termin für die Lieferung wählen</Text>
+                  </TouchableOpacity>
+                )}
+              </Section>
+            )}
 
             {kostenBox}
 
@@ -484,7 +534,7 @@ export default function CheckoutScreen() {
               <Text style={styles.offen}>
                 {[
                   ohneRezept.length > 0 ? 'Rezepte erfassen' : null,
-                  !session.selectedAppointment ? 'Termin wählen' : null,
+                  !terminSpaeter && !session.selectedAppointment ? 'Termin wählen' : null,
                 ]
                   .filter(Boolean)
                   .join(' und ')}{' '}
@@ -652,6 +702,10 @@ const styles = StyleSheet.create({
   link: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 4 },
   linkText: { fontSize: D.font.sm, fontWeight: D.font.semibold, color: D.color.accent },
   terminButton: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
+  terminHinweis: { fontSize: D.font.sm, color: D.color.inkSecondary, lineHeight: 20, marginBottom: 8 },
+  notfallZeile: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  notfallText: { flex: 1, minWidth: 180, fontSize: D.font.sm, color: D.color.ink, lineHeight: 20 },
+  notfallAktion: { minHeight: 44, justifyContent: 'center' },
   row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, gap: 12 },
   rowLabel: { fontSize: D.font.sm, color: D.color.inkSecondary, flexShrink: 0 },
   rowWert: { fontSize: D.font.sm, color: D.color.ink, fontWeight: D.font.medium, flex: 1, textAlign: 'right' },

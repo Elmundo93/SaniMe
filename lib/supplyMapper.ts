@@ -1,3 +1,4 @@
+import { ERREICHBARKEITEN, NOTFALL_GRUENDE, type Erreichbarkeit, type NotfallGrund } from '@sanime/domain';
 import type { OrderStatus, OffeneAktion, TimelineEvent, Versorgung } from '../types';
 import type { OpenActionRow, SupplyRow, TimelineEventRow } from './api/supply';
 
@@ -11,7 +12,9 @@ const STATUS_MAP: Record<string, OrderStatus> = {
   documents_uploaded: 'PENDING_REVIEW',
   ocr_verified: 'PENDING_REVIEW',
   customer_confirmation_required: 'PENDING_REVIEW',
-  submitted: 'PENDING_INSURANCE',
+  // Eingegangen, Antrag noch nicht verschickt — erst AntragVersendet heißt
+  // „bei der Krankenkasse“.
+  submitted: 'PENDING_REVIEW',
   insurance_review: 'PENDING_INSURANCE',
   approved: 'APPROVED',
   rejected: 'REJECTED',
@@ -58,7 +61,12 @@ export function mapSupplyRowToVersorgung(row: SupplyRow): Versorgung {
     id: row.id,
     status,
     produkt: row.productNameSnapshot,
-    hilfsmittelNr: row.hilfsmittelNrSnapshot,
+    hilfsmittelNr: row.hilfsmittelNrSnapshot ?? '',
+    selbstzahler: !row.hilfsmittelNrSnapshot,
+    antragVersendetAm: row.insuranceSubmittedAt ?? undefined,
+    entschiedenAm: row.insuranceDecidedAt ?? undefined,
+    termin: row.appointment ? { beginn: row.appointment.start, ende: row.appointment.end } : undefined,
+    notfall: toNotfall(row.urgentRequest),
     arzt: row.doctorNameSnapshot,
     krankenkasse: row.insurerNameSnapshot,
     erstellt: row.createdAt,
@@ -73,4 +81,9 @@ export function mapSupplyRowToVersorgung(row: SupplyRow): Versorgung {
     offeneAktionen: row.openActions.filter((a) => !a.resolvedAt).map(toOffeneAktion),
     timeline: row.timeline.map((t) => toTimelineEvent(t, status)),
   };
+}
+
+function toNotfall(row: SupplyRow['urgentRequest']): Versorgung['notfall'] {
+  if (!row || !(row.reason in NOTFALL_GRUENDE) || !(row.availability in ERREICHBARKEITEN)) return undefined;
+  return { grund: row.reason as NotfallGrund, erreichbarkeit: row.availability as Erreichbarkeit, angefragtAm: row.createdAt };
 }

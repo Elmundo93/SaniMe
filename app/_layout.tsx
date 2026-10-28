@@ -6,6 +6,7 @@ import { StripeProvider } from '@stripe/stripe-react-native';
 import { useAuthStore } from '../store/authStore';
 import { useOnboardingStore } from '../store/onboardingStore';
 import { resolveStripePublishableKey } from '../lib/api/config';
+import { pushTokenAuffrischen, usePushNavigation } from '../lib/push';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 SplashScreen.preventAutoHideAsync();
@@ -32,8 +33,11 @@ export default function RootLayout() {
       await authLaden();
       await onboardingLaden();
       SplashScreen.hideAsync();
+      if (useAuthStore.getState().benutzer) pushTokenAuffrischen();
     })();
   }, [authLaden, onboardingLaden]);
+
+  usePushNavigation(!authIsLoading && !onboardingIsLoading);
 
   if (authIsLoading || onboardingIsLoading) return null;
 

@@ -89,7 +89,7 @@ export default function AufgabenModal() {
               <TouchableOpacity
                 onPress={() => {
                   router.back();
-                  router.push(`/(app)/dashboard/${versorgung.id}`);
+                  router.push(aktion.typ === 'termin' ? `/versorgung/termin/${versorgung.id}` : `/(app)/dashboard/${versorgung.id}`);
                 }}
                 activeOpacity={0.8}
                 accessibilityRole="button"

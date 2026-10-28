@@ -24,6 +24,7 @@ import { requestDataExport, getDataExport, requestDeletion } from '../../../lib/
 import { ApiError } from '../../../lib/api/client';
 import { einwilligungWiderrufen, ladeEinwilligungsToken, vergesseEinwilligungsToken } from '../../../lib/einwilligung';
 import { D, durations } from '@sanime/design-system';
+import { pushAbmelden } from '../../../lib/push';
 
 const NICHT_ZUGEORDNET_HINWEIS =
   'Diese Funktion ist nur für erkannte Kunden verfügbar. Scanne deine Krankenkassenkarte, damit wir dich zuordnen können.';
@@ -159,6 +160,8 @@ export default function EinstellungenScreen() {
         text: 'Abmelden',
         style: 'destructive',
         onPress: async () => {
+          // Solange der Token noch gilt: dieses Gerät abmelden.
+          await pushAbmelden();
           await abmelden();
           // Ein anderer Mensch könnte dieses Gerät weiter nutzen — die
           // gespeicherte Einwilligung nur lokal vergessen (kein Widerruf).

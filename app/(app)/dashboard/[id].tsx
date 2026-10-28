@@ -19,15 +19,23 @@ import { ScrollContainer } from '../../../components/ui/ScrollContainer';
 import { ProcessStep, type StepStatus } from '../../../components/ui/ProcessStep';
 import { StatusTimeline } from '../../../components/dashboard/StatusTimeline';
 import { useVersorgungStore } from '../../../store/versorgungStore';
+import { Button } from '../../../components/ui/Button';
+import { naechsterSchritt, notfallMoeglich, notfallText, terminText } from '../../../lib/versorgungsprozess';
+import { Feather } from '@expo/vector-icons';
 import { D, durations } from '@sanime/design-system';
 
 const STEPS: { label: string; key: string }[] = [
-  { label: 'Rezept geprüft',             key: 'PENDING_REVIEW' },
-  { label: 'Krankenkasse kontaktiert',   key: 'PENDING_INSURANCE' },
-  { label: 'Genehmigung erhalten',       key: 'APPROVED' },
-  { label: 'Bestellung aufgegeben',      key: 'PROCESSING' },
-  { label: 'Versand & Lieferung',        key: 'SHIPPED' },
+  { label: 'Bestellung eingegangen',     key: 'PENDING_REVIEW' },
+  { label: 'Antrag bei der Krankenkasse', key: 'PENDING_INSURANCE' },
+  { label: 'Genehmigt',                  key: 'APPROVED' },
+  { label: 'Wird vorbereitet',           key: 'PROCESSING' },
+  { label: 'Lieferung',                  key: 'SHIPPED' },
 ];
+
+// Selbst bezahlt: es gibt keinen Antrag und keine Genehmigung.
+const STEPS_SELBSTZAHLER = STEPS.filter((s) => s.key !== 'PENDING_INSURANCE').map((s) =>
+  s.key === 'APPROVED' ? { ...s, label: 'Freigegeben' } : s,
+);
 
 function getStepStatus(currentStatus: string, stepKey: string): StepStatus {
   const order = ['PENDING_REVIEW', 'PENDING_INSURANCE', 'APPROVED', 'PROCESSING', 'SHIPPED', 'DELIVERED'];
@@ -65,6 +73,9 @@ export default function VersorgungsdetailScreen() {
   }
 
   const isAbgeschlossen = ['DELIVERED', 'CANCELLED', 'REJECTED'].includes(versorgung.status);
+  const schritte = versorgung.selbstzahler ? STEPS_SELBSTZAHLER : STEPS;
+  const weiter = naechsterSchritt(versorgung);
+  const notfall = notfallText(versorgung);
 
   return (
     <Screen background={<HeroGlow />}>
@@ -82,11 +93,46 @@ export default function VersorgungsdetailScreen() {
                 <StatusBadge status={versorgung.status} />
               </View>
               <Text style={styles.produktTitel} numberOfLines={2}>{versorgung.produkt}</Text>
-              <Text style={styles.himiNr}>
-                HiMi-Nr. {versorgung.hilfsmittelNr}
-              </Text>
+              {!!versorgung.hilfsmittelNr && <Text style={styles.himiNr}>HiMi-Nr. {versorgung.hilfsmittelNr}</Text>}
             </GlassCard>
           </Animated.View>
+
+          {/* Wie geht es weiter? — Stand, nächster Schritt, ggf. die eine Aktion des Kunden */}
+          {weiter && (
+            <Animated.View entering={einblenden(120)}>
+              <GlassCard padding={20} radius={D.radius.lg} style={weiter.aktion ? styles.aktionCard : undefined}>
+                <Text style={styles.sectionTitel}>Wie geht es weiter?</Text>
+                <Text style={styles.weiterTitel} accessibilityRole="header">{weiter.titel}</Text>
+                <Text style={styles.weiterText}>{weiter.text}</Text>
+                {weiter.aktion === 'termin' && (
+                  <Button
+                    label="Liefertermin wählen"
+                    größe="lg"
+                    style={{ marginTop: 16 }}
+                    onPress={() => router.push(`/versorgung/termin/${versorgung.id}`)}
+                  />
+                )}
+                {notfall && (
+                  <View style={styles.notfallBox} accessible accessibilityLabel={notfall}>
+                    <Feather name="phone-call" size={16} color={D.color.accent} />
+                    <Text style={styles.notfallText}>{notfall}</Text>
+                  </View>
+                )}
+              </GlassCard>
+            </Animated.View>
+          )}
+
+          {notfallMoeglich(versorgung) && (
+            <TouchableOpacity
+              style={styles.notfallLink}
+              onPress={() => router.push(`/versorgung/notfall/${versorgung.id}`)}
+              accessibilityRole="button"
+              accessibilityLabel="Früher benötigt? Notfalllieferung anfragen"
+            >
+              <Feather name="alert-circle" size={16} color={D.color.accent} />
+              <Text style={styles.notfallLinkText}>Früher benötigt? Notfalllieferung anfragen</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Prozessschritte */}
           {!isAbgeschlossen && (
@@ -94,12 +140,12 @@ export default function VersorgungsdetailScreen() {
               <GlassCard padding={22} radius={D.radius.lg}>
                 <Text style={styles.sectionTitel}>Fortschritt</Text>
                 <View style={styles.steps}>
-                  {STEPS.map((step, i) => (
+                  {schritte.map((step, i) => (
                     <ProcessStep
                       key={step.key}
                       label={step.label}
                       status={getStepStatus(versorgung.status, step.key)}
-                      isLast={i === STEPS.length - 1}
+                      isLast={i === schritte.length - 1}
                       index={i}
                     />
                   ))}
@@ -108,27 +154,13 @@ export default function VersorgungsdetailScreen() {
             </Animated.View>
           )}
 
-          {/* Offene Aktionen */}
-          {versorgung.offeneAktionen.length > 0 && (
-            <Animated.View entering={einblenden(220)}>
-              <GlassCard padding={20} radius={D.radius.lg} style={styles.aktionCard}>
-                <Text style={styles.sectionTitel}>Ihre Aktion erforderlich</Text>
-                {versorgung.offeneAktionen.map((a) => (
-                  <View key={a.id} style={styles.aktionBox}>
-                    <Text style={styles.aktionTitel}>{a.titel}</Text>
-                    <Text style={styles.aktionBeschreibung}>{a.beschreibung}</Text>
-                  </View>
-                ))}
-              </GlassCard>
-            </Animated.View>
-          )}
-
           {/* Details */}
           <Animated.View entering={einblenden(260)}>
             <GlassCard padding={20} radius={D.radius.lg}>
               <Text style={styles.sectionTitel}>Details</Text>
-              <InfoZeile label="Arzt" wert={versorgung.arzt} />
-              <InfoZeile label="Krankenkasse" wert={versorgung.krankenkasse} />
+              {!!versorgung.arzt && <InfoZeile label="Arzt" wert={versorgung.arzt} />}
+              {!versorgung.selbstzahler && <InfoZeile label="Krankenkasse" wert={versorgung.krankenkasse} />}
+              {versorgung.termin && <InfoZeile label="Liefertermin" wert={terminText(versorgung.termin)} />}
               {versorgung.hersteller && (
                 <InfoZeile label="Hersteller" wert={versorgung.hersteller} />
               )}
@@ -161,7 +193,7 @@ export default function VersorgungsdetailScreen() {
           {/* Support */}
           <Animated.View entering={einblenden(380)}>
             <View style={styles.hilfeSection}>
-              <Text style={styles.hilfeText}>Fragen zu Ihrer Versorgung?</Text>
+              <Text style={styles.hilfeText}>Fragen zu deiner Versorgung?</Text>
               <TouchableOpacity style={styles.supportBtn} activeOpacity={0.75}>
                 <Text style={styles.supportBtnText}>Support kontaktieren</Text>
               </TouchableOpacity>
@@ -200,11 +232,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,159,10,0.06)',
     borderWidth: 1, borderColor: 'rgba(255,159,10,0.2)',
   },
-  aktionBox: {
-    backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 10, padding: 14,
-  },
-  aktionTitel: { fontSize: D.font.md, fontWeight: D.font.bold, color: D.color.ink, marginBottom: 4 },
-  aktionBeschreibung: { fontSize: D.font.sm, color: D.color.inkSecondary, lineHeight: 20 },
+  weiterTitel: { fontSize: D.font.lg, fontWeight: D.font.bold, color: D.color.ink, marginBottom: 6 },
+  weiterText: { fontSize: D.font.md, color: D.color.inkSecondary, lineHeight: 22 },
+  notfallBox: { flexDirection: 'row', gap: 10, marginTop: 14, padding: 12, borderRadius: 10, backgroundColor: 'rgba(63,139,255,0.08)' },
+  notfallText: { flex: 1, fontSize: D.font.sm, color: D.color.ink, lineHeight: 20 },
+  notfallLink: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 4 },
+  notfallLinkText: { fontSize: D.font.md, fontWeight: D.font.semibold, color: D.color.accent },
   infoZeile: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
     paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: 'rgba(63,139,255,0.08)', gap: 12,

@@ -1,3 +1,4 @@
+import type { Erreichbarkeit, NotfallGrund } from '@sanime/domain';
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
 export type OrderStatus =
@@ -29,7 +30,8 @@ export interface OffeneAktion {
   id: string;
   titel: string;
   beschreibung: string;
-  typ: 'kamera' | 'formular' | 'info';
+  // 'termin' = Liefertermin wählen (nach der Genehmigung).
+  typ: 'kamera' | 'formular' | 'info' | 'termin';
 }
 
 export interface Versorgung {
@@ -47,6 +49,12 @@ export interface Versorgung {
   hersteller?: string;
   ansprechpartner?: string;
   lieferzeit?: string;
+  // Ohne Hilfsmittelnummer: selbst bezahlt, nichts bei der Krankenkasse.
+  selbstzahler: boolean;
+  antragVersendetAm?: string;
+  entschiedenAm?: string;
+  termin?: { beginn: string; ende: string };
+  notfall?: { grund: NotfallGrund; erreichbarkeit: Erreichbarkeit; angefragtAm: string };
 }
 
 // ─── Benutzer ────────────────────────────────────────────────────────────────

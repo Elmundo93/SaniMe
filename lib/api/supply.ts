@@ -1,3 +1,4 @@
+import type { NotfallAnfrage } from '@sanime/domain';
 import { request } from './client';
 
 // Mirrors apps/backend/src/db/schema/supply-order.schema.ts's `supplies` row shape
@@ -26,15 +27,26 @@ export interface SupplyRow {
   customerId: string | null;
   productNameSnapshot: string;
   manufacturerNameSnapshot: string;
-  hilfsmittelNrSnapshot: string;
+  hilfsmittelNrSnapshot: string | null;
   doctorNameSnapshot: string;
   insurerNameSnapshot: string;
   deliveryTimeLabelSnapshot: string;
   status: string;
   createdAt: string;
   updatedAt: string;
+  insuranceSubmittedAt: string | null;
+  insuranceDecidedAt: string | null;
   timeline: TimelineEventRow[];
   openActions: OpenActionRow[];
+  appointment: { start: string; end: string } | null;
+  urgentRequest: { reason: string; availability: string; createdAt: string } | null;
+}
+
+export interface TerminVorschlag {
+  supplierId: string;
+  productId: string;
+  start: string;
+  end: string;
 }
 
 export function list(): Promise<SupplyRow[]> {
@@ -47,4 +59,17 @@ export function getById(id: string): Promise<SupplyRow> {
 
 export function getOrder(id: string): Promise<unknown> {
   return request('GET', `/orders/${id}`);
+}
+
+// Liefertermin nach der Genehmigung — nur aus den Vorschlägen des Servers.
+export function terminVorschlaege(supplyId: string): Promise<TerminVorschlag[]> {
+  return request('GET', `/supplies/${supplyId}/appointment-slots`);
+}
+
+export function terminWaehlen(supplyId: string, start: string): Promise<{ start: string; end: string }> {
+  return request('POST', `/supplies/${supplyId}/appointment`, { body: { start } });
+}
+
+export function notfallAnfragen(supplyId: string, anfrage: NotfallAnfrage): Promise<{ ok: true }> {
+  return request('POST', `/supplies/${supplyId}/notfall`, { body: anfrage });
 }

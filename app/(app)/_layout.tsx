@@ -12,6 +12,8 @@ export default function AppLayout() {
       <Stack.Screen name="(start)" />
       <Stack.Screen name="einstellungen/index" />
       <Stack.Screen name="dashboard/[id]" />
+      <Stack.Screen name="versorgung/termin/[id]" />
+      <Stack.Screen name="versorgung/notfall/[id]" options={{ presentation: 'modal' }} />
       <Stack.Screen name="aufgaben" options={{ presentation: 'modal' }} />
       <Stack.Screen name="profil" options={{ presentation: 'modal' }} />
     </Stack>

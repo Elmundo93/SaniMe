@@ -21,7 +21,8 @@
     "backend:test:e2e": "npm run test:e2e --workspace apps/backend",
     "backend:db:generate": "npm run db:generate --workspace apps/backend",
     "backend:db:migrate": "npm run db:migrate --workspace apps/backend",
-    "backend:db:seed": "npm run db:seed --workspace apps/backend"
+    "backend:db:seed": "npm run db:seed --workspace apps/backend",
+    "backend:versorgung-status": "npm run versorgung:status --workspace apps/backend --"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -38,6 +39,7 @@
     "expo-image-picker": "~57.0.17",
     "expo-linear-gradient": "~57.0.2",
     "expo-linking": "~57.0.10",
+    "expo-notifications": "~57.0.24",
     "expo-router": "~57.0.21",
     "expo-secure-store": "~57.0.4",
     "expo-speech-recognition": "~57.0.0",
