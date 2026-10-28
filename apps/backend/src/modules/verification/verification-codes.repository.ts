@@ -29,6 +29,15 @@ export class VerificationCodesRepository {
     return row ?? null;
   }
 
+  // Für die Sendegrenzen — auch schon benutzte Codes zählen mit.
+  listCreatedSince(target: string, purpose: string, seit: Date) {
+    return this.db
+      .select({ createdAt: verificationCodes.createdAt })
+      .from(verificationCodes)
+      .where(and(eq(verificationCodes.target, target), eq(verificationCodes.purpose, purpose), gt(verificationCodes.createdAt, seit)))
+      .orderBy(desc(verificationCodes.createdAt));
+  }
+
   async incrementAttempts(id: string) {
     const [row] = await this.db
       .update(verificationCodes)
@@ -49,11 +58,17 @@ export class VerificationCodesRepository {
 
   // Backs the periodic cleanup job (Principle 10) — purges rows that can
   // never be used again, whether because they expired unused or were
-  // already consumed.
+  // already consumed — but only once they're older than the send-limit
+  // window, or the hourly limit would reset with every cleanup.
   async deleteExpired(): Promise<number> {
     const deleted = await this.db
       .delete(verificationCodes)
-      .where(or(lt(verificationCodes.expiresAt, new Date()), isNotNull(verificationCodes.consumedAt)))
+      .where(
+        and(
+          or(lt(verificationCodes.expiresAt, new Date()), isNotNull(verificationCodes.consumedAt)),
+          lt(verificationCodes.createdAt, new Date(Date.now() - 60 * 60 * 1000)),
+        ),
+      )
       .returning({ id: verificationCodes.id });
     return deleted.length;
   }

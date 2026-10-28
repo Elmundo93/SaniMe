@@ -580,7 +580,9 @@ export default function CheckoutScreen() {
                 value={otpFlow.kontakt}
                 onChangeText={otpFlow.setKontakt}
                 keyboardType="phone-pad"
-                placeholder="+49 151 00000000"
+                textContentType="telephoneNumber"
+                autoComplete="tel"
+                placeholder="0151 23456789"
                 error={otpFlow.fehler}
               />
             </GlassCard>
@@ -592,13 +594,20 @@ export default function CheckoutScreen() {
           <Animated.View entering={FadeInDown.duration(300)} style={styles.gap}>
             <BackLink onPress={() => setSubstep('kontakt')} accessibilityLabel="Zurück zur Eingabe" />
             <Text style={styles.headline}>Code{'\n'}bestätigen.</Text>
-            <Text style={styles.sub}>Wir haben einen Code an {otpFlow.kontakt} gesendet.</Text>
+            <Text style={styles.sub}>
+              Wir haben dir einen Code per SMS an {otpFlow.kontakt} geschickt. Dein iPhone schlägt ihn über der Tastatur vor.
+            </Text>
             <GlassCard padding={16} radius={D.radius.md}>
               <FormField
                 label="6-stelliger Code"
                 value={otpFlow.code}
-                onChangeText={(t) => otpFlow.setCode(t.replace(/\D/g, '').slice(0, 6))}
+                onChangeText={async (t) => {
+                  if (await otpFlow.codeEingeben(t)) setSubstep('abschluss');
+                }}
                 keyboardType="number-pad"
+                textContentType="oneTimeCode"
+                autoComplete="sms-otp"
+                maxLength={6}
                 error={otpFlow.fehler}
                 autoFocus
               />
@@ -606,11 +615,15 @@ export default function CheckoutScreen() {
             <PrimaerKnopf label="Bestätigen" onPress={handleOtpVerifizieren} disabled={otpFlow.loading} laedt={otpFlow.loading} />
             <TouchableOpacity
               onPress={handleCodeErneutSenden}
+              disabled={otpFlow.erneutIn > 0 || otpFlow.loading}
               style={styles.nochmalLink}
               accessibilityRole="button"
-              accessibilityLabel="Code erneut senden"
+              accessibilityState={{ disabled: otpFlow.erneutIn > 0 }}
+              accessibilityLabel={otpFlow.erneutIn > 0 ? `Code erneut senden in ${otpFlow.erneutIn} Sekunden` : 'Code erneut senden'}
             >
-              <Text style={styles.nochmalText}>Code erneut senden</Text>
+              <Text style={[styles.nochmalText, otpFlow.erneutIn > 0 && { opacity: 0.5 }]}>
+                {otpFlow.erneutIn > 0 ? `Code erneut senden (${otpFlow.erneutIn} s)` : 'Code erneut senden'}
+              </Text>
             </TouchableOpacity>
           </Animated.View>
         )}

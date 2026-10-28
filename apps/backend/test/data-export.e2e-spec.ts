@@ -6,8 +6,16 @@ import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
 import { seedAdminWithPermissions } from './helpers/seed-admin';
 
-function waitForJob(ms = 300) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+// Der Export läuft als Job im Hintergrund — abfragen, bis er fertig ist,
+// statt fest zu warten (unter Last parallel laufender Suites dauerte er
+// gelegentlich länger als 300 ms und der Test scheiterte zufällig).
+async function bisFertig(abfragen: () => request.Test): Promise<request.Response> {
+  let res = await abfragen().expect(200);
+  for (let versuch = 0; versuch < 50 && ['pending', 'processing'].includes(res.body.status); versuch++) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    res = await abfragen().expect(200);
+  }
+  return res;
 }
 
 describe('Data export (e2e)', () => {
@@ -48,12 +56,9 @@ describe('Data export (e2e)', () => {
     expect(requested.body.status).toBe('pending');
     const requestId = requested.body.id;
 
-    await waitForJob();
-
-    const res = await request(app.getHttpServer())
-      .get(`/api/v1/me/data-export/${requestId}`)
-      .set('Authorization', `Bearer ${customerSessionSecret}`)
-      .expect(200);
+    const res = await bisFertig(() =>
+      request(app.getHttpServer()).get(`/api/v1/me/data-export/${requestId}`).set('Authorization', `Bearer ${customerSessionSecret}`),
+    );
     expect(res.body.status).toBe('ready');
     expect(res.body.downloadUrl).toContain('http');
 
@@ -86,12 +91,9 @@ describe('Data export (e2e)', () => {
       .set('Authorization', `Bearer ${manageToken}`)
       .expect(201);
 
-    await waitForJob();
-
-    const res = await request(app.getHttpServer())
-      .get(`/api/v1/admin/data-export/${requested.body.id}`)
-      .set('Authorization', `Bearer ${readToken}`)
-      .expect(200);
+    const res = await bisFertig(() =>
+      request(app.getHttpServer()).get(`/api/v1/admin/data-export/${requested.body.id}`).set('Authorization', `Bearer ${readToken}`),
+    );
     expect(res.body.status).toBe('ready');
 
     await request(app.getHttpServer())

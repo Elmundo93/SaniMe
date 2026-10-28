@@ -32,10 +32,20 @@ export const envSchema = z.object({
   // Optional like SENTRY_DSN — unset in dev/test means the app still boots,
   // PaymentService just throws a clear error the moment its endpoints are
   // actually called (same "fail loudly, never fake success" discipline as
-  // DevCodeVerificationProvider), rather than requiring real Stripe
+  // SmsCodeVerificationProvider), rather than requiring real Stripe
   // credentials before anyone can even run `npm run backend:dev`.
   STRIPE_SECRET_KEY: optionalWithEmptyAsUndefined(z.string()),
   STRIPE_WEBHOOK_SECRET: optionalWithEmptyAsUndefined(z.string()),
+  // SMS für die Telefonbestätigung (seven.io, Sitz in Deutschland). Ohne
+  // Schlüssel: Dev-Versand (Code in der Antwort/im Log), in Produktion ein Fehler.
+  SEVEN_API_KEY: optionalWithEmptyAsUndefined(z.string()),
+  SMS_ABSENDER: z.string().max(11).default('SaniMe'),
+  // Push direkt über APNs (siehe ApnsNotificationProvider).
+  APNS_KEY_ID: optionalWithEmptyAsUndefined(z.string()),
+  APNS_TEAM_ID: optionalWithEmptyAsUndefined(z.string()),
+  APNS_PRIVATE_KEY: optionalWithEmptyAsUndefined(z.string()),
+  APNS_BUNDLE_ID: optionalWithEmptyAsUndefined(z.string()),
+  APNS_PRODUCTION: optionalWithEmptyAsUndefined(z.string()),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -6,6 +6,7 @@ import Stripe from 'stripe';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
 import { STRIPE_CLIENT } from '../src/modules/payment/stripe-client.token';
+import { testTelefon } from './support/test-telefon';
 
 // No real Stripe account/credentials anywhere in this file: paymentIntents
 // create/retrieve are plain jest mocks (never touch the network), and
@@ -76,7 +77,7 @@ describe('Payment flow (e2e)', () => {
     const slot = { id: 'slot-1', beginn: '2026-08-01T09:00:00.000Z', ende: '2026-08-01T11:00:00.000Z', ort: 'Berlin' };
     await patchEvent({ type: 'TERMIN_WAEHLEN' }).expect(200);
     await patchEvent({ type: 'TERMIN_AUSGEWAEHLT', termin: slot }).expect(200);
-    const kontakt = await patchEvent({ type: 'KONTAKT_ERFASST', email: null, telefon: '+491512223344' }).expect(200);
+    const kontakt = await patchEvent({ type: 'KONTAKT_ERFASST', email: null, telefon: testTelefon() }).expect(200);
     await patchEvent({ type: 'OTP_VERIFIZIERT' }, kontakt.body.devCode).expect(200);
   }
 

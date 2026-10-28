@@ -14,6 +14,9 @@ interface FormFieldProps {
   accessibilityHint?: string;
   autoComplete?: TextInputProps['autoComplete'];
   autoCapitalize?: TextInputProps['autoCapitalize'];
+  // iOS-Autofill, z. B. 'oneTimeCode' (Code aus der SMS) oder 'telephoneNumber'.
+  textContentType?: TextInputProps['textContentType'];
+  maxLength?: number;
 }
 
 // Generalisierte Texteingabe (Checkout E-Mail/Telefon etc.) — für OCR-Felder mit
@@ -30,6 +33,8 @@ export function FormField({
   accessibilityHint,
   autoComplete,
   autoCapitalize,
+  textContentType,
+  maxLength,
 }: FormFieldProps) {
   return (
     <View style={styles.feld}>
@@ -44,6 +49,8 @@ export function FormField({
         placeholder={placeholder}
         autoComplete={autoComplete}
         autoCapitalize={autoCapitalize}
+        textContentType={textContentType}
+        maxLength={maxLength}
         autoCorrect={autoCapitalize === 'none' ? false : undefined}
         placeholderTextColor={D.color.inkTertiary}
         accessibilityLabel={label}

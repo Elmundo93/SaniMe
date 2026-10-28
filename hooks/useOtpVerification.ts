@@ -1,6 +1,12 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { TextInput } from 'react-native';
-import type { ClientOnboardingEvent, TransitionResult } from '@sanime/domain';
+import {
+  CODE_ERNEUT_SENDEN_SEKUNDEN,
+  MOBILNUMMER_FEHLER,
+  normalisiereMobilnummer,
+  type ClientOnboardingEvent,
+  type TransitionResult,
+} from '@sanime/domain';
 
 type Dispatch = (event: ClientOnboardingEvent, code?: string) => Promise<TransitionResult & { devCode?: string }>;
 
@@ -16,21 +22,34 @@ export function useOtpVerification(dispatch: Dispatch, initialKontakt = '') {
   const [loading, setLoading] = useState(false);
   const [fehler, setFehler] = useState('');
   const codeRef = useRef<TextInput>(null);
+  // Countdown bis „Code erneut senden“ — dieselbe Wartezeit erzwingt der Server.
+  const [erneutIn, setErneutIn] = useState(0);
+
+  useEffect(() => {
+    if (erneutIn <= 0) return;
+    const t = setTimeout(() => setErneutIn((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [erneutIn]);
 
   const codeSenden = async (empfänger: string, email: string | null): Promise<CodeSendenErgebnis> => {
-    if (!empfänger.trim()) {
-      setFehler('Bitte Telefonnummer oder E-Mail eingeben.');
+    // Vor dem Senden prüfen — eine Festnetz- oder Auslandsnummer bekäme nie
+    // eine SMS, und jeder Versuch zählt gegen die Sendegrenze.
+    const telefon = normalisiereMobilnummer(empfänger);
+    if (!telefon) {
+      setFehler(MOBILNUMMER_FEHLER);
       return 'fehler';
     }
     setFehler('');
+    setCode('');
     setLoading(true);
-    const result = await dispatch({ type: 'KONTAKT_ERFASST', email, telefon: empfänger.trim() });
+    const result = await dispatch({ type: 'KONTAKT_ERFASST', email, telefon });
     setLoading(false);
     if (!result.ok) {
       setFehler(result.reason);
       return 'fehler';
     }
     setKontakt(empfänger);
+    setErneutIn(CODE_ERNEUT_SENDEN_SEKUNDEN);
     // Dev-Build: Es gibt noch keinen echten SMS-/Mail-Versand (der Backend-
     // DevCodeVerificationProvider liefert den Code nur in der Antwort zurück),
     // also das OTP-Gate direkt mit diesem Code durchlaufen. Geht trotzdem über
@@ -56,13 +75,22 @@ export function useOtpVerification(dispatch: Dispatch, initialKontakt = '') {
     return true;
   };
 
-  const codeVerifizieren = async (): Promise<boolean> => {
-    if (code.length < 6) {
+  const codeVerifizieren = async (wert = code): Promise<boolean> => {
+    if (wert.length < 6) {
       setFehler('Bitte den 6-stelligen Code eingeben.');
       return false;
     }
-    return verifiziere(code);
+    return verifiziere(wert);
   };
 
-  return { kontakt, setKontakt, code, setCode, loading, fehler, codeRef, codeSenden, codeVerifizieren };
+  // Eingabe (getippt oder per Autofill aus der SMS): bei sechs Ziffern sofort
+  // prüfen — kein extra Tipp auf „Bestätigen“ nötig.
+  const codeEingeben = async (eingabe: string): Promise<boolean> => {
+    const wert = eingabe.replace(/\D/g, '').slice(0, 6);
+    setCode(wert);
+    if (wert.length < 6 || loading) return false;
+    return verifiziere(wert);
+  };
+
+  return { kontakt, setKontakt, code, setCode, codeEingeben, loading, fehler, codeRef, codeSenden, codeVerifizieren, erneutIn };
 }

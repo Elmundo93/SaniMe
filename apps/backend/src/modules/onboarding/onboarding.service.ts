@@ -7,6 +7,8 @@ import {
   istAbschlussfaehig,
   istKassenartikel,
   istNotfallAnfrage,
+  MOBILNUMMER_FEHLER,
+  normalisiereMobilnummer,
   terminNachGenehmigung,
   telefonVerifiziert,
   transition,
@@ -159,6 +161,13 @@ export class OnboardingService {
   }
 
   private async patchInner(tenant: TenantContext, sessionId: string, event: OnboardingEvent, extra: { ipAddress: string | null; otpCode?: string }) {
+    // Eine Schreibweise je Nummer (E.164) — sonst griffen Sendegrenzen und
+    // Codeabgleich bei „0151 …“ vs. „+49151…“ ins Leere.
+    if (event.type === 'KONTAKT_ERFASST') {
+      const telefon = normalisiereMobilnummer(event.telefon);
+      if (!telefon) throw new BadRequestException(MOBILNUMMER_FEHLER);
+      event = { ...event, telefon };
+    }
     const row = await this.getRowOrThrow(tenant, sessionId);
     const domainSession = await this.hydrate(tenant, row);
 

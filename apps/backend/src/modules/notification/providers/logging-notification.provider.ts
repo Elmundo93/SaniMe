@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { scrub } from '../../../common/logging/scrub';
 import type { NotificationMessage, NotificationProvider } from '../ports/notification-provider.port';
 
-// Follows DevCodeVerificationProvider's exact pattern (dev-code-verification.provider.ts):
+// Follows DevSmsSender's exact pattern (dev-sms.sender.ts):
 // real logic, never fakes delivery, throws in production instead of silently
 // "succeeding". Difference worth noting: sendCode() is awaited synchronously
 // in a customer HTTP request, so its production throw surfaces immediately;

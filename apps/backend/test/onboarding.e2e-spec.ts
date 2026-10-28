@@ -10,6 +10,7 @@ import { configureApp } from '../src/bootstrap';
 import { DRIZZLE, type Database } from '../src/db/client';
 import { AGB_VERSION, DATENSCHUTZ_VERSION } from '@sanime/domain';
 import { auditEntries, consentGrants, consents, customerAddresses, customers, notifications, onboardingSessions, orders, supplies } from '../src/db/schema';
+import { testTelefon } from './support/test-telefon';
 import { SupplyOrderService } from '../src/modules/supply-order/supply-order.service';
 import { DEFAULT_ORGANIZATION_ID, DEFAULT_TENANT_CONTEXT } from '../src/common/repository/tenant-context';
 
@@ -18,6 +19,7 @@ import { DEFAULT_ORGANIZATION_ID, DEFAULT_TENANT_CONTEXT } from '../src/common/r
 // product (Catalog) -> OTP verify (Verification) -> complete -> Supply +
 // Order + Timeline + OpenAction + AuditEntry all exist (Supply/Order).
 describe('Onboarding full slice (e2e)', () => {
+  const TELEFON = testTelefon();
   let app: INestApplication;
   let adminToken: string;
   let sessionId: string;
@@ -209,7 +211,7 @@ describe('Onboarding full slice (e2e)', () => {
     res = await patchEvent({ type: 'NOTFALL_ANGEFRAGT', notfall: { grund: 'KRANKENHAUSENTLASSUNG', erreichbarkeit: 'VORMITTAG' } }).expect(200);
     expect(res.body.session.notfall).toEqual({ grund: 'KRANKENHAUSENTLASSUNG', erreichbarkeit: 'VORMITTAG' });
 
-    res = await patchEvent({ type: 'KONTAKT_ERFASST', email: null, telefon: '+491511234567' }).expect(200);
+    res = await patchEvent({ type: 'KONTAKT_ERFASST', email: null, telefon: TELEFON }).expect(200);
     expect(res.body.devCode).toMatch(/^\d{6}$/);
     const devCode: string = res.body.devCode;
 
@@ -270,7 +272,7 @@ describe('Onboarding full slice (e2e)', () => {
       'Notfalllieferung: Kunden zurückrufen',
     ]);
     // Die Nummer aus der Kontaktbestätigung gilt als Rückrufnummer.
-    expect(res.body.openActions.find((a: { actionType: string }) => a.actionType === 'rueckruf').description).toContain('+491511234567');
+    expect(res.body.openActions.find((a: { actionType: string }) => a.actionType === 'rueckruf').description).toContain(TELEFON);
     expect(res.body.urgentRequest).toMatchObject({ reason: 'KRANKENHAUSENTLASSUNG' });
     expect(res.body.appointment).toBeNull();
     expect(res.body.productNameSnapshot).toBeTruthy();
@@ -430,7 +432,7 @@ describe('Onboarding Warenkorb (e2e)', () => {
     let res = await patchEvent({ type: 'WEITER' }).expect(200);
     expect(res.body.session.ocrResult.patient.adresse).toEqual(adresse);
     await patchEvent({ type: 'SUPPLY_AUSGEWAEHLT', produkt: res.body.session.verfügbareProdukte[0] }).expect(200);
-    await kontakt(patchEvent, '+491511234570');
+    await kontakt(patchEvent, testTelefon());
 
     // Vorher: ohne Kunden lehnt GET /supplies die Session ab.
     await request(app.getHttpServer()).get('/api/v1/supplies').set('Authorization', auth).expect(403);
@@ -501,7 +503,7 @@ describe('Onboarding Warenkorb (e2e)', () => {
     await request(app.getHttpServer())
       .post(`/api/v1/supplies/${done.body.supplyId}/notfall`)
       .set('Authorization', auth)
-      .send({ grund: 'STURZGEFAHR', erreichbarkeit: 'GANZTAGS', telefon: '+491511234570' })
+      .send({ grund: 'STURZGEFAHR', erreichbarkeit: 'GANZTAGS', telefon: testTelefon() })
       .expect(201);
     await request(app.getHttpServer())
       .post(`/api/v1/supplies/${done.body.supplyId}/notfall`)
@@ -513,7 +515,7 @@ describe('Onboarding Warenkorb (e2e)', () => {
   it('pflegt je Kassenartikel ein eigenes Rezept nach — die Krankenkassenkarte nur einmal', async () => {
     const { patchEvent, complete } = await neueSessionMitConsent();
     await patchEvent({ type: 'WARENKORB_UEBERNOMMEN', artikel: [{ produktId: kassenartikel[0].id, krankheitsbildId: 'mobilitaet' }, { produktId: kassenartikel[1].id }] }).expect(200);
-    await kontakt(patchEvent, '+491511234569');
+    await kontakt(patchEvent, testTelefon());
 
     // Rezepte fehlen noch → nicht abschlussfähig; Selbstzahler-Positionen
     // brauchen keins (kein Artikel ohne Hilfsmittelnummer → kein Rezept-Scan).
@@ -574,7 +576,7 @@ describe('Onboarding Warenkorb (e2e)', () => {
     await patchEvent(warenkorb(selbstzahlerId)).expect(200);
     expect((await patchEvent({ type: 'REZEPT_FUER_POSITION', produktId: selbstzahlerId })).status).toBe(400);
     await termin(patchEvent);
-    await kontakt(patchEvent, '+491511234570');
+    await kontakt(patchEvent, testTelefon());
 
     // Eine Bestellung mit Selbstzahler-Anteil schließt nur der verifizierte
     // Stripe-Webhook ab (siehe payment.e2e-spec.ts) — nie der Client.
@@ -607,7 +609,7 @@ describe('Onboarding Warenkorb (e2e)', () => {
     const ohneTelefon = await complete().expect(400);
     expect(ohneTelefon.body.message).toContain('Telefonnummer');
 
-    await kontakt(patchEvent, '+491511234572');
+    await kontakt(patchEvent, testTelefon());
     const done = await complete().expect(201);
 
     const [supply] = await db.select().from(supplies).where(eq(supplies.id, done.body.supplyId));
@@ -623,7 +625,7 @@ describe('Onboarding Warenkorb (e2e)', () => {
     let res = await patchEvent(warenkorb(kassenartikel[0].id)).expect(200);
     const preis = res.body.session.positionen[0].produkt.selbstzahlerPreis;
     expect(preis).toBeGreaterThan(res.body.session.positionen[0].produkt.eigenanteil);
-    await kontakt(patchEvent, '+491511234571');
+    await kontakt(patchEvent, testTelefon());
     expect((await complete()).status).toBe(400); // Rezept fehlt noch
 
     res = await patchEvent({ type: 'POSITION_OHNE_REZEPT', produktId: kassenartikel[0].id, ohneRezept: true }).expect(200);
