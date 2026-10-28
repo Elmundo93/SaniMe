@@ -9,3 +9,4 @@ export * from './katalogFilter';
 export * from './supply';
 export * from './calendar';
 export * from './deletion-request';
+export * from './versorgung';

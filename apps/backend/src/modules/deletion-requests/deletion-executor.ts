@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { DRIZZLE, type Database } from '../../db/client';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import {
   consentGrants,
   customerAddresses,
@@ -10,6 +10,9 @@ import {
   documents,
   ocrResults,
   onboardingSessions,
+  pushTokens,
+  supplies,
+  urgentDeliveryRequests,
 } from '../../db/schema';
 import { STORAGE_PROVIDER, type StorageProvider } from '../document/ports/storage-provider.port';
 
@@ -28,6 +31,8 @@ import { STORAGE_PROVIDER, type StorageProvider } from '../document/ports/storag
 //                                    eine gelöschte Person übernimmt nie wieder
 //                                    automatisch eine Einwilligung
 //   documents/document_versions   -> storage object deleted, documents.deletedAt set
+//   push_tokens                   -> hard-deleted (keine Nachrichten mehr)
+//   urgent_delivery_requests      -> retained, Rückrufnummer genullt
 @Injectable()
 export class DeletionExecutor {
   constructor(
@@ -45,8 +50,14 @@ export class DeletionExecutor {
 
     await this.db
       .update(onboardingSessions)
-      .set({ contactEmail: null, contactPhone: null, selectedAppointmentJson: null })
+      .set({ contactEmail: null, contactPhone: null, selectedAppointmentJson: null, notfallJson: null })
       .where(eq(onboardingSessions.customerId, customerId));
+
+    await this.db.delete(pushTokens).where(eq(pushTokens.customerId, customerId));
+    await this.db
+      .update(urgentDeliveryRequests)
+      .set({ phone: null })
+      .where(inArray(urgentDeliveryRequests.supplyId, this.db.select({ id: supplies.id }).from(supplies).where(eq(supplies.customerId, customerId))));
 
     await this.db.delete(customerAddresses).where(eq(customerAddresses.customerId, customerId));
     await this.db.delete(customerProfiles).where(eq(customerProfiles.customerId, customerId));

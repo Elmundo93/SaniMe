@@ -12,6 +12,8 @@ import { OpenActionsRepository } from '../supply-order/open-actions.repository';
 import { OrderStatusEventsRepository } from '../supply-order/order-status-events.repository';
 import { OrdersRepository } from '../supply-order/orders.repository';
 import { SuppliesRepository } from '../supply-order/supplies.repository';
+import { UrgentDeliveryRequestsRepository } from '../supply-order/urgent-delivery-requests.repository';
+import type { NotificationsService } from '../notification/notifications.service';
 import { SupplyOrderService } from '../supply-order/supply-order.service';
 import { TimelineEventsRepository } from '../supply-order/timeline-events.repository';
 import { DataExportPayloadBuilder } from './data-export-payload.builder';
@@ -39,6 +41,8 @@ describe('DataExportPayloadBuilder (integration)', () => {
       new TimelineEventsRepository(db),
       new OpenActionsRepository(db),
       new AuditService(new AccessLogsRepository(db), new AuditEntriesRepository(db)),
+      new UrgentDeliveryRequestsRepository(db),
+      { notifyCustomer: jest.fn() } as unknown as NotificationsService,
     );
   });
 

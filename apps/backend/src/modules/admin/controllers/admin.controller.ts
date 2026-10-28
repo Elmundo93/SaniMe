@@ -18,6 +18,8 @@ const SUPPLY_EVENT_TYPES = [
   'OcrVerified',
   'CustomerConfirmationReceived',
   'Submitted',
+  'AntragVersendet',
+  'OhneGenehmigungFreigegeben',
   'InsuranceApproved',
   'InsuranceRejected',
   'SupplierAssigned',

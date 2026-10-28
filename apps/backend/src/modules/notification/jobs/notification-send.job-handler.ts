@@ -1,7 +1,8 @@
 import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
 import { JOB_QUEUE, type JobHandler, type JobQueue } from '../../job-queue/ports/job-queue.port';
 import { NotificationsRepository } from '../notifications.repository';
-import { NOTIFICATION_PROVIDER, type NotificationChannel, type NotificationProvider } from '../ports/notification-provider.port';
+import { NOTIFICATION_PROVIDER, UngueltigesZielError, type NotificationChannel, type NotificationProvider } from '../ports/notification-provider.port';
+import { PushTokensRepository } from '../push-tokens.repository';
 
 interface NotificationSendPayload {
   notificationId: string;
@@ -15,6 +16,7 @@ export class NotificationSendJobHandler implements JobHandler<NotificationSendPa
     @Inject(JOB_QUEUE) private readonly jobQueue: JobQueue,
     @Inject(NOTIFICATION_PROVIDER) private readonly provider: NotificationProvider,
     private readonly repository: NotificationsRepository,
+    private readonly pushTokens: PushTokensRepository,
   ) {}
 
   onModuleInit() {
@@ -32,9 +34,15 @@ export class NotificationSendJobHandler implements JobHandler<NotificationSendPa
         target: notification.target,
         title: notification.title,
         body: notification.body,
+        data: (notification.data ?? {}) as Record<string, string>,
       });
       await this.repository.markSent(notification.id);
     } catch (error) {
+      if (error instanceof UngueltigesZielError) {
+        await this.pushTokens.entfernen(error.target);
+        await this.repository.markFailed(notification.id, error.message);
+        return; // kein Retry — das Ziel wird nie wieder gültig
+      }
       await this.repository.markFailed(notification.id, error instanceof Error ? error.message : 'unbekannter Fehler');
       throw error; // rethrow so JobQueue's own retry/backoff logic applies
     }

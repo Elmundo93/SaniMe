@@ -1,3 +1,4 @@
+import { ERREICHBARKEITEN, NOTFALL_GRUENDE, type Erreichbarkeit, type NotfallGrund } from '@sanime/domain';
 import { z } from 'zod';
 import { WARENKORB_MAX } from '@sanime/domain';
 
@@ -107,6 +108,16 @@ export const onboardingEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('TERMIN_WAEHLEN') }),
   z.object({ type: z.literal('TERMIN_VORSCHLAEGE_BERECHNET'), vorschläge: z.array(terminSlotSchema) }),
   z.object({ type: z.literal('TERMIN_AUSGEWAEHLT'), termin: terminSlotSchema }),
+  z.object({
+    type: z.literal('NOTFALL_ANGEFRAGT'),
+    notfall: z
+      .object({
+        grund: z.enum(Object.keys(NOTFALL_GRUENDE) as [NotfallGrund, ...NotfallGrund[]]),
+        erreichbarkeit: z.enum(Object.keys(ERREICHBARKEITEN) as [Erreichbarkeit, ...Erreichbarkeit[]]),
+        telefon: z.string().max(40).optional(),
+      })
+      .nullable(),
+  }),
   z.object({ type: z.literal('KONTAKT_ERFASST'), email: z.string().nullable(), telefon: z.string().min(1) }),
   z.object({ type: z.literal('OTP_VERIFIZIERT') }),
   z.object({ type: z.literal('ZAHLUNG_FEHLGESCHLAGEN') }),

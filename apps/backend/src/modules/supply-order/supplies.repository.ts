@@ -39,10 +39,10 @@ export class SuppliesRepository extends TenantScopedRepository {
       .where(and(this.tenantFilter(supplies.organizationId, tenant), eq(supplies.customerId, customerId)));
   }
 
-  async setStatus(tenant: TenantContext, id: string, status: string) {
+  async setStatus(tenant: TenantContext, id: string, status: string, zeitpunkte: Pick<NewSupply, 'insuranceSubmittedAt' | 'insuranceDecidedAt'> = {}) {
     await this.db
       .update(supplies)
-      .set({ status, updatedAt: new Date() })
+      .set({ status, ...zeitpunkte, updatedAt: new Date() })
       .where(and(this.tenantFilter(supplies.organizationId, tenant), eq(supplies.id, id)));
   }
 }

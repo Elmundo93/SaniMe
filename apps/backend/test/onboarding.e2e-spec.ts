@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { createHash } from 'crypto';
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -9,8 +9,9 @@ import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
 import { DRIZZLE, type Database } from '../src/db/client';
 import { AGB_VERSION, DATENSCHUTZ_VERSION } from '@sanime/domain';
-import { auditEntries, consentGrants, consents, customerAddresses, orders } from '../src/db/schema';
-import { DEFAULT_ORGANIZATION_ID } from '../src/common/repository/tenant-context';
+import { auditEntries, consentGrants, consents, customerAddresses, notifications, orders } from '../src/db/schema';
+import { SupplyOrderService } from '../src/modules/supply-order/supply-order.service';
+import { DEFAULT_ORGANIZATION_ID, DEFAULT_TENANT_CONTEXT } from '../src/common/repository/tenant-context';
 
 // The real full-slice proof of Layer 2: create session -> accept consents ->
 // upload prescription (Document) -> OCR result (HealthData) -> select
@@ -190,7 +191,7 @@ describe('Onboarding full slice (e2e)', () => {
     expect(res.status).toBe(404);
   });
 
-  it('selects a real product into the Checkout hub, picks a Termin there, then contact -> OTP', async () => {
+  it('selects a real product into the Checkout hub, asks for an urgent delivery instead of a Termin, then contact -> OTP', async () => {
     const current = await request(app.getHttpServer()).get('/api/v1/onboarding-sessions/current').set('Authorization', auth()).expect(200);
     const produkt = current.body.verfügbareProdukte.find((p: { id: string }) => p.id === selectedProductId);
 
@@ -201,19 +202,12 @@ describe('Onboarding full slice (e2e)', () => {
     expect(res.body.session.positionen[0].rezept.krankenkasse.name).toBe('Techniker Krankenkasse');
     expect(res.body.session.ocrResult).toBeNull();
 
-    // Ohne Termin ist die Bestellung noch nicht abschlussfähig.
-    await request(app.getHttpServer())
-      .post(`/api/v1/onboarding-sessions/${sessionId}/complete`)
-      .set('Authorization', auth())
-      .set('Idempotency-Key', nextIdempotencyKey())
-      .expect(400);
-
-    res = await patchEvent({ type: 'TERMIN_WAEHLEN' }).expect(200);
-    expect(res.body.session.status).toBe('TERMINPLANUNG');
-    const slot = { id: 'slot-1', beginn: '2026-08-01T09:00:00.000Z', ende: '2026-08-01T11:00:00.000Z', ort: 'Berlin' };
-    await patchEvent({ type: 'TERMIN_VORSCHLAEGE_BERECHNET', vorschläge: [slot] }).expect(200);
-    res = await patchEvent({ type: 'TERMIN_AUSGEWAEHLT', termin: slot }).expect(200);
-    expect(res.body.session.status).toBe('CHECKOUT');
+    // Kassenartikel: der Liefertermin folgt erst nach der Genehmigung — an
+    // der Kasse gibt es stattdessen die Notfalllieferung.
+    await patchEvent({ type: 'TERMIN_WAEHLEN' }).expect(400);
+    await patchEvent({ type: 'NOTFALL_ANGEFRAGT', notfall: { grund: 'UNBEKANNT', erreichbarkeit: 'VORMITTAG' } }).expect(400);
+    res = await patchEvent({ type: 'NOTFALL_ANGEFRAGT', notfall: { grund: 'KRANKENHAUSENTLASSUNG', erreichbarkeit: 'VORMITTAG' } }).expect(200);
+    expect(res.body.session.notfall).toEqual({ grund: 'KRANKENHAUSENTLASSUNG', erreichbarkeit: 'VORMITTAG' });
 
     res = await patchEvent({ type: 'KONTAKT_ERFASST', email: null, telefon: '+491511234567' }).expect(200);
     expect(res.body.devCode).toMatch(/^\d{6}$/);
@@ -264,14 +258,21 @@ describe('Onboarding full slice (e2e)', () => {
       .expect(400);
   });
 
-  it('the created Supply has the full 5-event timeline, an open action, and is admin-visible', async () => {
+  it('the created Supply has the 5-event timeline, internal tasks incl. the callback, and is admin-visible', async () => {
     const res = await request(app.getHttpServer())
       .get(`/api/v1/supplies/${supplyId}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
     expect(res.body.status).toBe('submitted');
-    expect(res.body.timeline).toHaveLength(5);
-    expect(res.body.openActions).toHaveLength(1);
+    expect(res.body.timeline.map((t: { label: string }) => t.label)).toContain('Notfalllieferung angefragt');
+    expect(res.body.openActions.map((a: { title: string }) => a.title).sort()).toEqual([
+      'Antrag an die Krankenkasse senden',
+      'Notfalllieferung: Kunden zurückrufen',
+    ]);
+    // Die Nummer aus der Kontaktbestätigung gilt als Rückrufnummer.
+    expect(res.body.openActions.find((a: { actionType: string }) => a.actionType === 'rueckruf').description).toContain('+491511234567');
+    expect(res.body.urgentRequest).toMatchObject({ reason: 'KRANKENHAUSENTLASSUNG' });
+    expect(res.body.appointment).toBeNull();
     expect(res.body.productNameSnapshot).toBeTruthy();
   });
 });
@@ -327,10 +328,14 @@ describe('Onboarding Warenkorb (e2e)', () => {
     confidence: { patient: 'high', arzt: 'high', krankenkasse: 'low', diagnose: 'high', hilfsmittel: 'high' },
   });
 
-  async function terminUndKontakt(patchEvent: (event: unknown, code?: string) => request.Test, telefon: string) {
+  // Nur reine Selbstzahler-Bestellungen wählen den Termin an der Kasse.
+  async function termin(patchEvent: (event: unknown, code?: string) => request.Test) {
     const slot = { id: 'slot-1', beginn: '2026-08-01T09:00:00.000Z', ende: '2026-08-01T11:00:00.000Z', ort: 'Berlin' };
     await patchEvent({ type: 'TERMIN_WAEHLEN' }).expect(200);
     await patchEvent({ type: 'TERMIN_AUSGEWAEHLT', termin: slot }).expect(200);
+  }
+
+  async function kontakt(patchEvent: (event: unknown, code?: string) => request.Test, telefon: string) {
     const kontakt = await patchEvent({ type: 'KONTAKT_ERFASST', email: null, telefon }).expect(200);
     await patchEvent({ type: 'OTP_VERIFIZIERT' }, kontakt.body.devCode).expect(200);
   }
@@ -425,7 +430,7 @@ describe('Onboarding Warenkorb (e2e)', () => {
     let res = await patchEvent({ type: 'WEITER' }).expect(200);
     expect(res.body.session.ocrResult.patient.adresse).toEqual(adresse);
     await patchEvent({ type: 'SUPPLY_AUSGEWAEHLT', produkt: res.body.session.verfügbareProdukte[0] }).expect(200);
-    await terminUndKontakt(patchEvent, '+491511234570');
+    await kontakt(patchEvent, '+491511234570');
 
     // Vorher: ohne Kunden lehnt GET /supplies die Session ab.
     await request(app.getHttpServer()).get('/api/v1/supplies').set('Authorization', auth).expect(403);
@@ -447,12 +452,68 @@ describe('Onboarding Warenkorb (e2e)', () => {
       .send({ insuredNumber: versichertenNr })
       .expect(201);
     expect(res.body.customer.lastName).toBe('Mustermann');
+
+    // Nach der Bestellung: der Kunde sieht keine Aufgaben unseres Teams.
+    const kundenSicht = (await request(app.getHttpServer()).get('/api/v1/supplies').set('Authorization', auth).expect(200)).body.find(
+      (s: { id: string }) => s.id === done.body.supplyId,
+    );
+    expect(kundenSicht.openActions).toEqual([]);
+    await request(app.getHttpServer()).get(`/api/v1/supplies/${done.body.supplyId}/appointment-slots`).set('Authorization', auth).expect(400);
+
+    // Push-Token registrieren (nur mit zugeordnetem Kunden).
+    await request(app.getHttpServer()).post('/api/v1/push-tokens').set('Authorization', auth).send({ token: `e2e-${Date.now()}-token-abcdef`, platform: 'ios' }).expect(204);
+
+    // Unser Team versendet den Antrag, die Kasse genehmigt.
+    const supplyOrder = app.get(SupplyOrderService);
+    const order = await supplyOrder.getOrderForSupply(DEFAULT_TENANT_CONTEXT, done.body.supplyId);
+    await supplyOrder.transitionOrder(DEFAULT_TENANT_CONTEXT, order.id, { type: 'AntragVersendet' }, { type: 'system', id: null });
+    await supplyOrder.transitionOrder(DEFAULT_TENANT_CONTEXT, order.id, { type: 'InsuranceApproved' }, { type: 'system', id: null });
+    const [benachrichtigung] = await db.select().from(notifications).where(eq(notifications.title, 'Versorgung genehmigt')).orderBy(desc(notifications.createdAt)).limit(1);
+    expect(benachrichtigung.data).toEqual({ supplyId: done.body.supplyId });
+
+    let supply = await request(app.getHttpServer()).get(`/api/v1/supplies/${done.body.supplyId}`).set('Authorization', auth).expect(200);
+    expect(supply.body.insuranceSubmittedAt).toBeTruthy();
+    expect(supply.body.openActions.map((a: { title: string }) => a.title)).toEqual(['Liefertermin wählen']);
+
+    // Der Kunde wählt selbst einen echten Termin — nur aus den Vorschlägen.
+    const slots = await request(app.getHttpServer()).get(`/api/v1/supplies/${done.body.supplyId}/appointment-slots`).set('Authorization', auth).expect(200);
+    expect(slots.body.length).toBeGreaterThan(0);
+    await request(app.getHttpServer())
+      .post(`/api/v1/supplies/${done.body.supplyId}/appointment`)
+      .set('Authorization', auth)
+      .send({ start: '2020-01-01T08:00:00.000Z' })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post(`/api/v1/supplies/${done.body.supplyId}/appointment`)
+      .set('Authorization', auth)
+      .send({ start: slots.body[0].start })
+      .expect(201);
+    supply = await request(app.getHttpServer()).get(`/api/v1/supplies/${done.body.supplyId}`).set('Authorization', auth).expect(200);
+    expect(new Date(supply.body.appointment.start).toISOString()).toBe(slots.body[0].start);
+    expect(supply.body.openActions.filter((a: { resolvedAt: string | null }) => !a.resolvedAt)).toEqual([]);
+    await request(app.getHttpServer())
+      .post(`/api/v1/supplies/${done.body.supplyId}/appointment`)
+      .set('Authorization', auth)
+      .send({ start: slots.body[0].start })
+      .expect(409);
+
+    // Notfall nachträglich aus der Versorgung, nur einmal.
+    await request(app.getHttpServer())
+      .post(`/api/v1/supplies/${done.body.supplyId}/notfall`)
+      .set('Authorization', auth)
+      .send({ grund: 'STURZGEFAHR', erreichbarkeit: 'GANZTAGS', telefon: '+491511234570' })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post(`/api/v1/supplies/${done.body.supplyId}/notfall`)
+      .set('Authorization', auth)
+      .send({ grund: 'STURZGEFAHR', erreichbarkeit: 'GANZTAGS' })
+      .expect(409);
   });
 
   it('pflegt je Kassenartikel ein eigenes Rezept nach — die Krankenkassenkarte nur einmal', async () => {
     const { patchEvent, complete } = await neueSessionMitConsent();
     await patchEvent({ type: 'WARENKORB_UEBERNOMMEN', artikel: [{ produktId: kassenartikel[0].id, krankheitsbildId: 'mobilitaet' }, { produktId: kassenartikel[1].id }] }).expect(200);
-    await terminUndKontakt(patchEvent, '+491511234569');
+    await kontakt(patchEvent, '+491511234569');
 
     // Rezepte fehlen noch → nicht abschlussfähig; Selbstzahler-Positionen
     // brauchen keins (kein Artikel ohne Hilfsmittelnummer → kein Rezept-Scan).
@@ -512,7 +573,8 @@ describe('Onboarding Warenkorb (e2e)', () => {
     const { patchEvent, complete, auth } = await neueSessionMitConsent();
     await patchEvent(warenkorb(selbstzahlerId)).expect(200);
     expect((await patchEvent({ type: 'REZEPT_FUER_POSITION', produktId: selbstzahlerId })).status).toBe(400);
-    await terminUndKontakt(patchEvent, '+491511234570');
+    await termin(patchEvent);
+    await kontakt(patchEvent, '+491511234570');
 
     // Eine Bestellung mit Selbstzahler-Anteil schließt nur der verifizierte
     // Stripe-Webhook ab (siehe payment.e2e-spec.ts) — nie der Client.
@@ -527,7 +589,7 @@ describe('Onboarding Warenkorb (e2e)', () => {
     let res = await patchEvent(warenkorb(kassenartikel[0].id)).expect(200);
     const preis = res.body.session.positionen[0].produkt.selbstzahlerPreis;
     expect(preis).toBeGreaterThan(res.body.session.positionen[0].produkt.eigenanteil);
-    await terminUndKontakt(patchEvent, '+491511234571');
+    await kontakt(patchEvent, '+491511234571');
     expect((await complete()).status).toBe(400); // Rezept fehlt noch
 
     res = await patchEvent({ type: 'POSITION_OHNE_REZEPT', produktId: kassenartikel[0].id, ohneRezept: true }).expect(200);

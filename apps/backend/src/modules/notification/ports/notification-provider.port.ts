@@ -11,6 +11,16 @@ export interface NotificationMessage {
   // shaped content (diagnoses, insurance numbers, etc.), only generic
   // copy (e.g. "Dein Termin am ... steht bevor."). Layer 4.
   body: string;
+  // Verweise für die App (z. B. supplyId), nie Inhalte.
+  data?: Record<string, string>;
+}
+
+// Das Ziel existiert nicht mehr (App gelöscht, Token abgelaufen) — der
+// Versand-Job entfernt das Token, statt es endlos weiter zu versuchen.
+export class UngueltigesZielError extends Error {
+  constructor(public readonly target: string) {
+    super('Push-Token ist nicht mehr gültig');
+  }
 }
 
 // One concrete implementation now (LoggingNotificationProvider), swappable

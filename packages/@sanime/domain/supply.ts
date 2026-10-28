@@ -27,6 +27,11 @@ export type SupplyEvent =
   | { type: 'OcrVerified' }
   | { type: 'CustomerConfirmationReceived' }
   | { type: 'Submitted' }
+  // Unser Team hat den Antrag (Kostenvoranschlag + Rezept) an die
+  // Krankenkasse geschickt — ab hier läuft deren Entscheidungsfrist.
+  | { type: 'AntragVersendet' }
+  // Selbstzahler-Versorgung: es gibt nichts zu genehmigen.
+  | { type: 'OhneGenehmigungFreigegeben' }
   | { type: 'InsuranceApproved' }
   | { type: 'InsuranceRejected' }
   | { type: 'SupplierAssigned' }
@@ -54,17 +59,19 @@ function emitEvent(context: SupplyContext, event: SupplyEvent): SupplyDomainEven
 // OnboardingSession's own status names); customer_confirmation_required is
 // the doc's own verbatim status name and reads as a checkpoint too — the
 // customer's binding confirmation was received at this checkpoint.
-// 'insurance_review' has no entry transition yet: submitted goes straight to
-// approved/rejected in Layer 2. Layer 3 adds a distinct "review started"
-// transition once an admin action needs to represent that in-between state
-// explicitly — the status is declared now so that addition never needs a
-// union change, only a new table row.
+// 'submitted' = Bestellung bei uns eingegangen, der Antrag wird vorbereitet;
+// 'insurance_review' beginnt erst mit AntragVersendet — der Kunde soll nicht
+// lesen, die Kasse prüfe schon, solange wir noch gar nichts verschickt haben.
+// Die direkten submitted → approved/rejected-Zeilen bleiben für
+// genehmigungsfreie Hilfsmittel und Rückmeldungen ohne eigenen Versand.
 export const SUPPLY_TRANSITIONS: TransitionRule<SupplyStatus, SupplyEvent, SupplyContext, SupplyDomainEvent>[] = [
   { from: 'draft', event: 'SupplyCreated', to: 'draft', emit: emitEvent },
   { from: 'draft', event: 'DocumentsUploaded', to: 'documents_uploaded', emit: emitEvent },
   { from: 'documents_uploaded', event: 'OcrVerified', to: 'ocr_verified', emit: emitEvent },
   { from: 'ocr_verified', event: 'CustomerConfirmationReceived', to: 'customer_confirmation_required', emit: emitEvent },
   { from: 'customer_confirmation_required', event: 'Submitted', to: 'submitted', emit: emitEvent },
+  { from: 'submitted', event: 'AntragVersendet', to: 'insurance_review', emit: emitEvent },
+  { from: 'submitted', event: 'OhneGenehmigungFreigegeben', to: 'approved', emit: emitEvent },
   { from: 'submitted', event: 'InsuranceApproved', to: 'approved', emit: emitEvent },
   { from: 'submitted', event: 'InsuranceRejected', to: 'rejected', emit: emitEvent },
   { from: 'insurance_review', event: 'InsuranceApproved', to: 'approved', emit: emitEvent },

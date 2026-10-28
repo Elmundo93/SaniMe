@@ -46,11 +46,11 @@ import { customerAddresses, customerProfiles, customers } from './customers.sche
 import { documents, documentVersions } from './documents.schema';
 import { insurancePolicies, ocrResults } from './health-data.schema';
 import { idempotencyKeys } from './idempotency-keys.schema';
-import { notifications } from './notification.schema';
+import { notifications, pushTokens } from './notification.schema';
 import { onboardingSessionPositions, onboardingSessions } from './onboarding-sessions.schema';
 import { organizations } from './organizations.schema';
 import { rolePermissions } from './role-permissions.schema';
-import { openActions, orders, orderStatusEvents, supplies, timelineEvents } from './supply-order.schema';
+import { openActions, orders, orderStatusEvents, supplies, timelineEvents, urgentDeliveryRequests } from './supply-order.schema';
 import { verificationCodes } from './verification-codes.schema';
 
 export const schema = {
@@ -84,6 +84,8 @@ export const schema = {
   orderStatusEvents,
   timelineEvents,
   openActions,
+  urgentDeliveryRequests,
+  pushTokens,
   onboardingSessions,
   onboardingSessionPositions,
   verificationCodes,

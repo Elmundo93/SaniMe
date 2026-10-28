@@ -5,15 +5,23 @@ export const TIMELINE_META: Record<SupplyEvent['type'], { label: string; descrip
   DocumentsUploaded: { label: 'Dokumente hochgeladen', description: 'Deine Dokumente wurden erfolgreich hochgeladen.' },
   OcrVerified: {
     label: 'Rezept eingegangen',
-    description: 'Ihr Rezept wurde erfolgreich hochgeladen und wird geprüft.',
+    description: 'Dein Rezept ist bei uns eingegangen.',
   },
   CustomerConfirmationReceived: { label: 'Bestätigung erhalten', description: 'Deine Bestätigung wurde erfasst.' },
   Submitted: {
-    label: 'Krankenkasse kontaktieren',
-    description: 'Wir kontaktieren Ihre Krankenkasse zur Genehmigung.',
+    label: 'Bestellung eingegangen',
+    description: 'Wir prüfen deine Unterlagen und bereiten alles Weitere vor.',
+  },
+  AntragVersendet: {
+    label: 'Antrag an die Krankenkasse gesendet',
+    description: 'Die Krankenkasse entscheidet in der Regel innerhalb von drei Wochen.',
+  },
+  OhneGenehmigungFreigegeben: {
+    label: 'Freigegeben',
+    description: 'Keine Genehmigung nötig — wir bereiten deine Lieferung vor.',
   },
   InsuranceApproved: { label: 'Genehmigung', description: 'Die Krankenkasse hat die Versorgung genehmigt.' },
-  InsuranceRejected: { label: 'Abgelehnt', description: 'Die Krankenkasse hat die Versorgung abgelehnt.' },
+  InsuranceRejected: { label: 'Abgelehnt', description: 'Die Krankenkasse hat abgelehnt. Wir melden uns bei dir.' },
   SupplierAssigned: { label: 'Lieferant zugewiesen', description: 'Ein Lieferant wurde für deine Versorgung ausgewählt.' },
   Ordered: { label: 'Bestellt', description: 'Die Versorgung wurde beim Lieferanten bestellt.' },
   AppointmentScheduled: { label: 'Termin vereinbart', description: 'Ein Liefer-/Anpassungstermin wurde vereinbart.' },

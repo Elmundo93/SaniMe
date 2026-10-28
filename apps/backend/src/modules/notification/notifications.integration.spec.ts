@@ -6,6 +6,7 @@ import { InProcessJobQueue } from '../job-queue/providers/in-process-job-queue.p
 import { NotificationSendJobHandler } from './jobs/notification-send.job-handler';
 import { NotificationsRepository } from './notifications.repository';
 import { NotificationsService } from './notifications.service';
+import { PushTokensRepository } from './push-tokens.repository';
 import { LoggingNotificationProvider } from './providers/logging-notification.provider';
 
 // Runs against the real docker-compose Postgres — wires NotificationsService
@@ -22,10 +23,10 @@ describe('Notification flow (integration)', () => {
     const db = createDatabase(pool);
     repository = new NotificationsRepository(db);
     jobQueue = new InProcessJobQueue();
-    service = new NotificationsService(repository, jobQueue);
+    service = new NotificationsService(repository, new PushTokensRepository(db), jobQueue);
 
     const configService = new ConfigService({ NODE_ENV: 'test' });
-    const handler = new NotificationSendJobHandler(jobQueue, new LoggingNotificationProvider(configService), repository);
+    const handler = new NotificationSendJobHandler(jobQueue, new LoggingNotificationProvider(configService), repository, new PushTokensRepository(db));
     handler.onModuleInit();
   });
 

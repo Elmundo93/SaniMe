@@ -32,6 +32,8 @@ export const onboardingSessions = pgTable('onboarding_sessions', {
   // pattern the doc already uses elsewhere.
   appointmentSlotsJson: jsonb('appointment_slots_json').notNull().default([]),
   selectedAppointmentJson: jsonb('selected_appointment_json'),
+  // An der Kasse angefragte Notfalllieferung (@sanime/domain NotfallAnfrage).
+  notfallJson: jsonb('notfall_json'),
 
   // Wird beim Abschluss gesetzt — das verbindliche Absenden ist der letzte
   // Knopf im Checkout, kein eigenes Event mehr.

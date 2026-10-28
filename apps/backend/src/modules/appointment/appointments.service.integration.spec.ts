@@ -18,6 +18,8 @@ import { OrdersRepository } from '../supply-order/orders.repository';
 import { SuppliesRepository } from '../supply-order/supplies.repository';
 import { SupplyOrderService } from '../supply-order/supply-order.service';
 import { TimelineEventsRepository } from '../supply-order/timeline-events.repository';
+import { UrgentDeliveryRequestsRepository } from '../supply-order/urgent-delivery-requests.repository';
+import type { NotificationsService } from '../notification/notifications.service';
 import { AppointmentsRepository } from './appointments.repository';
 import { AppointmentsService } from './appointments.service';
 import { SupplierCalendarService } from './supplier-calendar.service';
@@ -31,6 +33,8 @@ describe('AppointmentsService (integration)', () => {
   let supplyOrder: SupplyOrderService;
   let onboardingSessions: OnboardingSessionsRepository;
   let fakeJobQueue: JobQueue;
+
+  const notifications = { notifyCustomer: jest.fn() } as unknown as NotificationsService;
 
   beforeAll(() => {
     pool = createPool(process.env.DATABASE_URL!);
@@ -46,9 +50,11 @@ describe('AppointmentsService (integration)', () => {
       new TimelineEventsRepository(db),
       new OpenActionsRepository(db),
       new AuditService(new AccessLogsRepository(db), new AuditEntriesRepository(db)),
+      new UrgentDeliveryRequestsRepository(db),
+      notifications,
     );
     fakeJobQueue = { enqueue: jest.fn().mockResolvedValue({ id: 'fake-job' }), registerHandler: jest.fn() };
-    service = new AppointmentsService(calendar, appointments, supplyOrder, fakeJobQueue);
+    service = new AppointmentsService(calendar, appointments, supplyOrder, catalog, fakeJobQueue);
   });
 
   afterAll(async () => {

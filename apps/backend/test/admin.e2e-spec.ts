@@ -62,7 +62,7 @@ describe('Admin (e2e)', () => {
 
   it('lists the open action created by the onboarding-completion replay in the inbox', async () => {
     const res = await request(app.getHttpServer()).get('/api/v1/admin/inbox').set('Authorization', `Bearer ${adminToken}`).expect(200);
-    expect(res.body.some((item: { supplyId: string; title: string }) => item.supplyId === supplyId && item.title === 'Krankenkasse kontaktieren')).toBe(
+    expect(res.body.some((item: { supplyId: string; title: string }) => item.supplyId === supplyId && item.title === 'Antrag an die Krankenkasse senden')).toBe(
       true,
     );
   });

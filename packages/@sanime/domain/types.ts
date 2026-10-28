@@ -1,3 +1,5 @@
+import type { NotfallAnfrage } from './versorgung';
+
 // ─── OCR Ergebnis ────────────────────────────────────────────────────────────
 
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
@@ -227,6 +229,8 @@ export interface OnboardingSession {
 
   terminVorschläge: TerminSlot[];
   selectedAppointment: TerminSlot | null;
+  // An der Kasse angefragte Notfalllieferung (Rückruf durch unser Team).
+  notfall: NotfallAnfrage | null;
 
   customerContact: CustomerContact;
 

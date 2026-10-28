@@ -10,6 +10,7 @@ import type {
   WarenkorbPosition,
 } from './types';
 import { einwilligungAktuell } from './einwilligung';
+import { istNotfallAnfrage, type NotfallAnfrage } from './versorgung';
 import { createWorkflow } from './workflow';
 import type { TransitionRule } from './workflow';
 
@@ -59,6 +60,8 @@ export type OnboardingEvent =
   | { type: 'TERMIN_WAEHLEN' }
   | { type: 'TERMIN_VORSCHLAEGE_BERECHNET'; vorschläge: TerminSlot[] }
   | { type: 'TERMIN_AUSGEWAEHLT'; termin: TerminSlot }
+  // null zieht die Anfrage zurück.
+  | { type: 'NOTFALL_ANGEFRAGT'; notfall: NotfallAnfrage | null }
   | { type: 'KONTAKT_ERFASST'; email: string | null; telefon: string }
   | { type: 'OTP_VERIFIZIERT' }
   // Die beiden Abschluss-Events sind reine Server-Events (siehe
@@ -146,13 +149,23 @@ export function consentErteilt(session: OnboardingSession): boolean {
   return session.consent.agb.akzeptiert && session.consent.datenschutz.akzeptiert;
 }
 
-// Abschluss-Guard: mindestens eine Position, ein Termin, und jeder Kassenartikel
-// hat ein vollständiges Rezept. Selbstzahler-Artikel brauchen nie eines — am
-// Produkt festgemacht (hilfsmittelNr), nie an einem Eintrittspfad.
+// Wird ein Kassenartikel eingereicht, steht der Liefertermin erst nach der
+// Genehmigung fest — die Kasse braucht bis zu drei Wochen (§ 13 Abs. 3a
+// SGB V). Der Kunde wählt ihn dann in seiner Versorgung; an der Kasse gibt es
+// stattdessen die Notfalllieferung. Reine Selbstzahler-Bestellungen wählen den
+// Termin sofort.
+export function terminNachGenehmigung(session: OnboardingSession): boolean {
+  return session.positionen.some(wirdEingereicht);
+}
+
+// Abschluss-Guard: mindestens eine Position, ein Termin (außer er folgt nach
+// der Genehmigung), und jeder Kassenartikel hat ein vollständiges Rezept.
+// Selbstzahler-Artikel brauchen nie eines — am Produkt festgemacht
+// (hilfsmittelNr), nie an einem Eintrittspfad.
 export function istAbschlussfaehig(session: OnboardingSession): boolean {
   return (
     session.positionen.length > 0 &&
-    session.selectedAppointment !== null &&
+    (terminNachGenehmigung(session) || session.selectedAppointment !== null) &&
     positionenOhneRezept(session).length === 0
   );
 }
@@ -193,6 +206,13 @@ function warenkorbGueltig(_session: OnboardingSession, event: OnboardingEvent): 
   if (event.type !== 'WARENKORB_UEBERNOMMEN') return false;
   const ids = event.artikel.map((a) => a.produktId);
   return ids.length > 0 && ids.length <= WARENKORB_MAX && new Set(ids).size === ids.length;
+}
+
+// Nur wenn der Termin ohnehin erst nach der Genehmigung kommt — wer selbst
+// zahlt, wählt direkt einen Termin.
+function notfallZulaessig(session: OnboardingSession, event: OnboardingEvent): boolean {
+  if (event.type !== 'NOTFALL_ANGEFRAGT' || !terminNachGenehmigung(session)) return false;
+  return event.notfall === null || istNotfallAnfrage(event.notfall);
 }
 
 function hatPositionen(session: OnboardingSession): boolean {
@@ -305,7 +325,8 @@ export const TRANSITIONS: TransitionRule<OnboardingStatus, OnboardingEvent, Onbo
   { from: 'CHECKOUT', event: 'REZEPT_BEARBEITEN', to: 'DATENPRUEFUNG', guard: kassenPositionAusEvent },
   { from: 'CHECKOUT', event: 'POSITION_OHNE_REZEPT', to: 'CHECKOUT', guard: ohneRezeptMoeglich },
   { from: 'CHECKOUT_FEHLGESCHLAGEN', event: 'POSITION_OHNE_REZEPT', to: 'CHECKOUT', guard: ohneRezeptMoeglich },
-  { from: 'CHECKOUT', event: 'TERMIN_WAEHLEN', to: 'TERMINPLANUNG', guard: hatPositionen },
+  { from: 'CHECKOUT', event: 'TERMIN_WAEHLEN', to: 'TERMINPLANUNG', guard: (s) => hatPositionen(s) && !terminNachGenehmigung(s) },
+  { from: 'CHECKOUT', event: 'NOTFALL_ANGEFRAGT', to: 'CHECKOUT', guard: notfallZulaessig },
   { from: 'TERMINPLANUNG', event: 'TERMIN_VORSCHLAEGE_BERECHNET', to: 'TERMINPLANUNG' },
   { from: 'TERMINPLANUNG', event: 'TERMIN_AUSGEWAEHLT', to: 'CHECKOUT' },
   { from: 'TERMINPLANUNG', event: 'ZURUECK', to: 'CHECKOUT' },
@@ -488,6 +509,8 @@ function applyEventData(session: OnboardingSession, event: OnboardingEvent): Onb
       return { ...session, terminVorschläge: event.vorschläge };
     case 'TERMIN_AUSGEWAEHLT':
       return { ...session, selectedAppointment: event.termin };
+    case 'NOTFALL_ANGEFRAGT':
+      return { ...session, notfall: event.notfall };
     case 'KONTAKT_ERFASST':
       return {
         ...session,
@@ -543,6 +566,7 @@ export function erstelleLeereSession(id: string): OnboardingSession {
     aktivePositionId: null,
     terminVorschläge: [],
     selectedAppointment: null,
+    notfall: null,
     customerContact: { email: null, telefon: null, telefonVerifiziert: false },
     versorgungId: null,
   };

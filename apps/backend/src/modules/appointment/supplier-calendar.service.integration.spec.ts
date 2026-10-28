@@ -21,6 +21,8 @@ import { OrdersRepository } from '../supply-order/orders.repository';
 import { SuppliesRepository } from '../supply-order/supplies.repository';
 import { SupplyOrderService } from '../supply-order/supply-order.service';
 import { TimelineEventsRepository } from '../supply-order/timeline-events.repository';
+import { UrgentDeliveryRequestsRepository } from '../supply-order/urgent-delivery-requests.repository';
+import type { NotificationsService } from '../notification/notifications.service';
 import { AppointmentsRepository } from './appointments.repository';
 import { SupplierCalendarService } from './supplier-calendar.service';
 
@@ -34,6 +36,8 @@ describe('SupplierCalendarService (integration)', () => {
   let appointments: AppointmentsRepository;
   let supplyOrder: SupplyOrderService;
   let onboardingSessions: OnboardingSessionsRepository;
+
+  const notifications = { notifyCustomer: jest.fn() } as unknown as NotificationsService;
 
   beforeAll(() => {
     pool = createPool(process.env.DATABASE_URL!);
@@ -49,6 +53,8 @@ describe('SupplierCalendarService (integration)', () => {
       new TimelineEventsRepository(db),
       new OpenActionsRepository(db),
       new AuditService(new AccessLogsRepository(db), new AuditEntriesRepository(db)),
+      new UrgentDeliveryRequestsRepository(db),
+      notifications,
     );
   });
 

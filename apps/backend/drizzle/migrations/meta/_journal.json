@@ -169,6 +169,13 @@
       "when": 1793195179917,
       "tag": "0023_rezept_patientenadresse",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793200908131,
+      "tag": "0024_versorgungsprozess",
+      "breakpoints": true
     }
   ]
 }

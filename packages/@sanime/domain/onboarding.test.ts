@@ -4,6 +4,7 @@ import {
   erstelleLeereSession,
   istAbschlussfaehig,
   positionenOhneRezept,
+  terminNachGenehmigung,
   transition,
   WARENKORB_MAX,
   zahlungBeimCheckoutFaellig,
@@ -300,9 +301,10 @@ describe('onboarding FSM — Kassenartikel ohne Rezept', () => {
     const session = schritte(
       leistungsuebersicht(),
       warenkorb(HIMI_PRODUKT_2),
+      { type: 'POSITION_OHNE_REZEPT', produktId: HIMI_PRODUKT_2.id, ohneRezept: true },
+      // Ohne Rezept gekauft = keine Genehmigung abzuwarten → Termin sofort.
       { type: 'TERMIN_WAEHLEN' },
       { type: 'TERMIN_AUSGEWAEHLT', termin: TERMIN },
-      { type: 'POSITION_OHNE_REZEPT', produktId: HIMI_PRODUKT_2.id, ohneRezept: true },
     );
     expect(positionenOhneRezept(session)).toEqual([]);
     expect(betragBeimCheckoutEuro(session)).toBe(149);
@@ -378,7 +380,8 @@ describe('onboarding FSM — dauerhafte Einwilligung', () => {
 describe('Checkout-Abschluss', () => {
   function imCheckout(...produkte: Produkt[]): OnboardingSession {
     return {
-      ...schritte(leistungsuebersicht(), warenkorb(...produkte), { type: 'TERMIN_WAEHLEN' }, { type: 'TERMIN_AUSGEWAEHLT', termin: TERMIN }),
+      ...schritte(leistungsuebersicht(), warenkorb(...produkte)),
+      selectedAppointment: produkte.some((p) => p.hilfsmittelNr) ? null : TERMIN,
       customerContact: { email: null, telefon: '+491511234567', telefonVerifiziert: true },
     };
   }
@@ -400,6 +403,26 @@ describe('Checkout-Abschluss', () => {
 
   it('ist ohne Termin nicht abschlussfähig', () => {
     expect(istAbschlussfaehig({ ...imCheckout(SELBSTZAHLER_PRODUKT), selectedAppointment: null })).toBe(false);
+  });
+
+  it('verschiebt den Termin bei Kassenartikeln auf die Zeit nach der Genehmigung', () => {
+    const session = mitRezepten(imCheckout(HIMI_PRODUKT, SELBSTZAHLER_PRODUKT));
+    expect(terminNachGenehmigung(session)).toBe(true);
+    expect(session.selectedAppointment).toBeNull();
+    expect(istAbschlussfaehig(session)).toBe(true);
+    expect(transition(session, { type: 'TERMIN_WAEHLEN' }).ok).toBe(false);
+  });
+
+  it('nimmt eine Notfallanfrage nur an, wenn der Termin nach der Genehmigung kommt', () => {
+    const notfall = { grund: 'KRANKENHAUSENTLASSUNG', erreichbarkeit: 'VORMITTAG' } as const;
+    const kasse = transition(mitRezepten(imCheckout(HIMI_PRODUKT)), { type: 'NOTFALL_ANGEFRAGT', notfall });
+    expect(kasse.ok && kasse.session.notfall).toEqual(notfall);
+    if (!kasse.ok) return;
+    const zurueckgezogen = transition(kasse.session, { type: 'NOTFALL_ANGEFRAGT', notfall: null });
+    expect(zurueckgezogen.ok && zurueckgezogen.session.notfall).toBeNull();
+    expect(transition(imCheckout(SELBSTZAHLER_PRODUKT), { type: 'NOTFALL_ANGEFRAGT', notfall }).ok).toBe(false);
+    const ungueltig = { grund: 'IRGENDWAS', erreichbarkeit: 'VORMITTAG' } as unknown as typeof notfall;
+    expect(transition(mitRezepten(imCheckout(HIMI_PRODUKT)), { type: 'NOTFALL_ANGEFRAGT', notfall: ungueltig }).ok).toBe(false);
   });
 
   it('berechnet die Zahlung nur aus den Selbstzahler-Artikeln', () => {

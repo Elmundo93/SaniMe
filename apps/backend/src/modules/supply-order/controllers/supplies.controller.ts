@@ -1,4 +1,5 @@
-import { Controller, Get, Param, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, UseGuards, UseInterceptors } from '@nestjs/common';
+import { istNotfallAnfrage } from '@sanime/domain';
 import { AccessLogInterceptor } from '../../../common/audit/access-log.interceptor';
 import { AuditRead } from '../../../common/audit/audit-read.decorator';
 import { CurrentPrincipal, resolveOwnerFilter, type CurrentPrincipalInfo } from '../../auth/decorators/current-principal.decorator';
@@ -23,5 +24,13 @@ export class SuppliesController {
   @AuditRead('supply')
   getById(@Param('id') id: string, @CurrentPrincipal() principal: CurrentPrincipalInfo | null) {
     return this.supplyOrder.getSupply(DEFAULT_TENANT_CONTEXT, id, resolveOwnerFilter(principal));
+  }
+
+  @Post(':id/notfall')
+  async notfall(@Param('id') id: string, @Body() body: unknown, @CurrentPrincipal() principal: CurrentPrincipalInfo | null) {
+    if (!istNotfallAnfrage(body)) throw new BadRequestException('Bitte wähle einen Grund und wann wir dich erreichen.');
+    const { grund, erreichbarkeit, telefon } = body;
+    await this.supplyOrder.notfallAnfragen(DEFAULT_TENANT_CONTEXT, id, { grund, erreichbarkeit, telefon }, resolveOwnerFilter(principal));
+    return { ok: true };
   }
 }

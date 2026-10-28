@@ -32,6 +32,19 @@ describe('SupplyWorkflow', () => {
     expect((events[4] as any).type).toBe('Submitted');
   });
 
+  it('waits for the insurer only after the application was actually sent', () => {
+    const submitted: SupplyContext = { id: 'supply-a', status: 'submitted' };
+    const { context } = apply(submitted, [{ type: 'AntragVersendet' }, { type: 'InsuranceApproved' }]);
+    expect(context.status).toBe('approved');
+  });
+
+  it('releases a self-pay supply without an insurer decision', () => {
+    const submitted: SupplyContext = { id: 'supply-s', status: 'submitted' };
+    expect(apply(submitted, [{ type: 'OhneGenehmigungFreigegeben' }]).context.status).toBe('approved');
+    const result = SupplyWorkflow.transition({ id: 'x', status: 'insurance_review' }, { type: 'OhneGenehmigungFreigegeben' });
+    expect(result.ok).toBe(false);
+  });
+
   it('drives the full happy path from submitted through archived', () => {
     const submitted: SupplyContext = { id: 'supply-2', status: 'submitted' };
     const { context } = apply(submitted, [

@@ -6,6 +6,8 @@ import {
   findeKrankheitsbild,
   istAbschlussfaehig,
   istKassenartikel,
+  istNotfallAnfrage,
+  terminNachGenehmigung,
   telefonVerifiziert,
   transition,
   zahlungBeimCheckoutFaellig,
@@ -330,6 +332,8 @@ export class OnboardingService {
 
     const rows = await this.positions.listForSession(tenant, row.id);
     const supplyIds: string[] = [];
+    const eingereichteIds: string[] = [];
+    const versorgungen: { supplyId: string; orderId: string }[] = [];
     for (const position of rows) {
       const product = await this.catalog.getProduct(tenant, position.productId);
       const primaryOffer = product.offers[0];
@@ -337,7 +341,7 @@ export class OnboardingService {
       // Rezept, keine Krankenkasse — und der bezahlte Preis als Eigenanteil.
       const eingereicht = !!product.hilfsmittelnummer && !position.withoutPrescription;
       const rezept = domainSession.positionen.find((p) => p.produkt.id === position.productId)?.rezept ?? null;
-      const { supplyId } = await this.supplyOrder.createFromOnboarding(
+      const { supplyId, orderId } = await this.supplyOrder.createFromOnboarding(
         tenant,
         {
           onboardingSessionId: row.id,
@@ -353,10 +357,38 @@ export class OnboardingService {
           customerCopaySnapshotCents: eingereicht ? (primaryOffer?.customerCopayCents ?? 0) : selbstGezahltCents(product, position.withoutPrescription),
           deliveryTimeLabelSnapshot: primaryOffer ? `${primaryOffer.deliveryTimeDays} Werktage` : 'unbekannt',
           deliveryAddressId: addressId,
+          ohneGenehmigung: !eingereicht,
         },
         { type: 'customer', id: customerId },
       );
       supplyIds.push(supplyId);
+      if (eingereicht) eingereichteIds.push(supplyId);
+      versorgungen.push({ supplyId, orderId });
+    }
+
+    // Reine Selbstzahler-Bestellung: der an der Kasse gewählte Termin wird
+    // jetzt gebucht. Mit Kassenartikeln wählt der Kunde ihn erst nach der
+    // Genehmigung (terminNachGenehmigung) — dann gilt eine Notfallanfrage.
+    const termin = domainSession.selectedAppointment;
+    const lieferant = (await this.catalog.getProduct(tenant, rows[0].productId)).offers[0]?.supplierId;
+    if (!terminNachGenehmigung(domainSession) && termin && lieferant) {
+      for (const v of versorgungen) {
+        await this.appointments.bookForCustomer(tenant, {
+          orderId: v.orderId,
+          supplierId: lieferant,
+          scheduledStart: termin.beginn,
+          scheduledEnd: termin.ende,
+          addressId,
+        });
+      }
+    }
+    if (domainSession.notfall && eingereichteIds[0]) {
+      await this.supplyOrder.notfallAnfragen(
+        tenant,
+        eingereichteIds[0],
+        { ...domainSession.notfall, telefon: domainSession.notfall.telefon || domainSession.customerContact.telefon || undefined },
+        null,
+      );
     }
 
     await this.sessions.update(tenant, row.id, {
@@ -554,6 +586,9 @@ export class OnboardingService {
       case 'TERMIN_AUSGEWAEHLT':
         await this.sessions.update(tenant, row.id, { selectedAppointmentJson: event.termin });
         return;
+      case 'NOTFALL_ANGEFRAGT':
+        await this.sessions.update(tenant, row.id, { notfallJson: event.notfall });
+        return;
       case 'KONTAKT_ERFASST':
         await this.sessions.update(tenant, row.id, { contactEmail: event.email, contactPhone: event.telefon });
         return;
@@ -616,6 +651,7 @@ export class OnboardingService {
       aktivePositionId: row.activePositionProductId ?? null,
       terminVorschläge: Array.isArray(row.appointmentSlotsJson) ? (row.appointmentSlotsJson as OnboardingSession['terminVorschläge']) : [],
       selectedAppointment: (row.selectedAppointmentJson as OnboardingSession['selectedAppointment']) ?? null,
+      notfall: istNotfallAnfrage(row.notfallJson) ? row.notfallJson : null,
       customerContact: {
         email: row.contactEmail,
         telefon: row.contactPhone,

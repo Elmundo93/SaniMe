@@ -41,6 +41,11 @@ export const supplies = pgTable('supplies', {
   customerCopaySnapshotCents: integer('customer_copay_snapshot_cents').notNull().default(0),
   deliveryTimeLabelSnapshot: text('delivery_time_label_snapshot').notNull(),
   status: text('status').notNull().default('draft'),
+  // Antrag an die Krankenkasse verschickt (AntragVersendet) bzw. von ihr
+  // entschieden (InsuranceApproved/-Rejected) — die App rechnet daraus die
+  // gesetzliche Antwortfrist und zeigt die Daten an.
+  insuranceSubmittedAt: timestamp('insurance_submitted_at', { withTimezone: true }),
+  insuranceDecidedAt: timestamp('insurance_decided_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -99,7 +104,11 @@ export const openActions = pgTable('open_actions', {
     .references(() => supplies.id),
   title: text('title').notNull(),
   description: text('description').notNull(),
-  actionType: text('action_type').notNull(), // 'kamera' | 'formular' | 'info' — matches client's OffeneAktion.typ
+  actionType: text('action_type').notNull(), // 'kamera' | 'formular' | 'info' | 'termin' — matches client's OffeneAktion.typ
+  // 'intern' = Aufgabe unseres Teams (Admin-Eingang), 'kunde' = etwas, das der
+  // Kunde selbst erledigen kann. Nur 'kunde' erscheint in der App — vorher
+  // sahen Kunden „Krankenkasse kontaktieren“ als *ihre* offene Aufgabe.
+  audience: text('audience').notNull().default('intern'),
   resolvedAt: timestamp('resolved_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -111,3 +120,20 @@ export type NewOrder = typeof orders.$inferInsert;
 export type OrderStatusEvent = typeof orderStatusEvents.$inferSelect;
 export type TimelineEventRow = typeof timelineEvents.$inferSelect;
 export type OpenActionRow = typeof openActions.$inferSelect;
+
+// Notfalllieferung: der Kunde braucht die Versorgung früher, als Genehmigung
+// und regulärer Termin es erlauben. Nie automatisch zugesagt — unser Team ruft
+// an (offene Aufgabe 'intern'). reason/availability sind die Schlüssel aus
+// @sanime/domain's NOTFALL_GRUENDE/ERREICHBARKEITEN, kein Freitext.
+export const urgentDeliveryRequests = pgTable('urgent_delivery_requests', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  supplyId: uuid('supply_id')
+    .notNull()
+    .references(() => supplies.id),
+  reason: text('reason').notNull(),
+  availability: text('availability').notNull(),
+  phone: text('phone'),
+  openActionId: uuid('open_action_id').references(() => openActions.id),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

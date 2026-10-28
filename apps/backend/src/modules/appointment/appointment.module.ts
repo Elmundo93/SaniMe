@@ -5,6 +5,7 @@ import { CustomerModule } from '../customer/customer.module';
 import { NotificationModule } from '../notification/notification.module';
 import { SupplyOrderModule } from '../supply-order/supply-order.module';
 import { AppointmentsController } from './controllers/appointments.controller';
+import { SupplyAppointmentsController } from './controllers/supply-appointments.controller';
 import { AppointmentsRepository } from './appointments.repository';
 import { AppointmentsService } from './appointments.service';
 import { AppointmentReminderJobHandler } from './jobs/appointment-reminder.job-handler';
@@ -12,7 +13,7 @@ import { SupplierCalendarService } from './supplier-calendar.service';
 
 @Module({
   imports: [AuthModule, CatalogModule, CustomerModule, NotificationModule, SupplyOrderModule],
-  controllers: [AppointmentsController],
+  controllers: [AppointmentsController, SupplyAppointmentsController],
   providers: [AppointmentsRepository, SupplierCalendarService, AppointmentsService, AppointmentReminderJobHandler],
   exports: [AppointmentsService],
 })
