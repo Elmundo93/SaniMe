@@ -9,6 +9,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "de.sanime.app",
+      "appleTeamId": "75BV3ZL3A5",
       "infoPlist": {
         "NSCameraUsageDescription": "SaniMe benötigt die Kamera, um Ihr Rezept und Ihre Krankenkassenkarte zu fotografieren.",
         "NSPhotoLibraryUsageDescription": "SaniMe benötigt Zugriff auf Ihre Fotos, um Dokumente hochzuladen.",
