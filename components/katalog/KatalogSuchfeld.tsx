@@ -118,7 +118,9 @@ export function KatalogSuchfeld({
               size={52}
               accessibilityLabel="Per Sprache suchen"
             />
-            <Text style={styles.micLabel} importantForAccessibility="no">
+            {/* Nur Beschriftung unter dem Symbol — begrenzt mitwachsen, sonst
+                drückt sie das Suchfeld bei großer Schrift auf wenige Zeichen. */}
+            <Text style={styles.micLabel} importantForAccessibility="no" accessibilityElementsHidden maxFontSizeMultiplier={1.3}>
               {sprache.status === 'hoert_zu' ? 'Stopp' : 'Sprechen'}
             </Text>
           </View>

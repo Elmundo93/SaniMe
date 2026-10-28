@@ -35,6 +35,9 @@ export function Button({
     <TouchableOpacity
       activeOpacity={0.8}
       disabled={isDisabled}
+      // Ohne Rolle sagte VoiceOver bei keinem Button „Taste“ an.
+      accessibilityRole="button"
+      accessibilityLabel={label}
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       onPressIn={(e) => {
         setPressed(true);

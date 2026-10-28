@@ -18,7 +18,12 @@ export function ScreenHeader({ title, onBack, backSize = 44, right }: ScreenHead
   return (
     <View style={styles.header}>
       {onBack ? <BackButton onPress={onBack} size={backSize} /> : <View style={{ width: backSize }} />}
-      <Text style={styles.headerTitel} numberOfLines={1}>{title}</Text>
+      {/* Wie die iOS-Navigationsleiste: nur begrenzt mitwachsen — der volle
+          Titel steht ohnehin im Inhalt, und eine riesige Zeile ließe nur
+          „Leichtg…“ übrig. */}
+      <Text style={styles.headerTitel} numberOfLines={1} maxFontSizeMultiplier={1.4} accessibilityRole="header">
+        {title}
+      </Text>
       {right ?? <View style={{ width: backSize }} />}
     </View>
   );

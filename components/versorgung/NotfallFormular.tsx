@@ -91,7 +91,9 @@ function Auswahl<K extends string>({
 }) {
   return (
     <View accessibilityRole="radiogroup" accessibilityLabel={titel}>
-      <Text style={styles.titel}>{titel}</Text>
+      <Text style={styles.titel} accessibilityRole="header">
+        {titel}
+      </Text>
       <GlassCard padding={4} radius={D.radius.md}>
         {(Object.keys(optionen) as K[]).map((k, i) => {
           const aktiv = wert === k;

@@ -38,7 +38,11 @@ export function FormField({
 }: FormFieldProps) {
   return (
     <View style={styles.feld}>
-      <Text style={styles.label}>{label}</Text>
+      {/* Sichtbare Beschriftung — für VoiceOver trägt das Feld selbst das
+          Label, sonst wird es doppelt angesagt. */}
+      <Text style={styles.label} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        {label}
+      </Text>
       <TextInput
         style={[styles.input, !!error && styles.inputError]}
         value={value}
@@ -56,7 +60,11 @@ export function FormField({
         accessibilityLabel={label}
         accessibilityHint={accessibilityHint}
       />
-      {!!error && <Text style={styles.errorText}>{error}</Text>}
+      {!!error && (
+        <Text style={styles.errorText} accessibilityLiveRegion="polite" accessibilityRole="alert">
+          {error}
+        </Text>
+      )}
     </View>
   );
 }

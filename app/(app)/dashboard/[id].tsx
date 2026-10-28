@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -47,10 +48,13 @@ function getStepStatus(currentStatus: string, stepKey: string): StepStatus {
 }
 
 function InfoZeile({ label, wert }: { label: string; wert: string }) {
+  // Bei großer Schrift untereinander statt nebeneinander — sonst bleibt je
+  // Spalte nur ein Wort pro Zeile.
+  const gross = useWindowDimensions().fontScale >= 1.35;
   return (
-    <View style={styles.infoZeile}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoWert} numberOfLines={2}>{wert}</Text>
+    <View style={[styles.infoZeile, gross && styles.infoZeileGross]} accessible accessibilityLabel={`${label}: ${wert}`}>
+      <Text style={[styles.infoLabel, gross && { flex: 0 }]}>{label}</Text>
+      <Text style={[styles.infoWert, gross && styles.infoWertGross]}>{wert}</Text>
     </View>
   );
 }
@@ -88,12 +92,18 @@ export default function VersorgungsdetailScreen() {
           {/* Status Hero */}
           <Animated.View entering={einblenden(80)}>
             <GlassCard padding={22} radius={D.radius.xl}>
-              <Text style={styles.statusChipLabel}>AKTUELLER STATUS</Text>
+              <Text style={styles.statusChipLabel} maxFontSizeMultiplier={1.8}>AKTUELLER STATUS</Text>
               <View style={styles.statusRow}>
                 <StatusBadge status={versorgung.status} />
               </View>
-              <Text style={styles.produktTitel} numberOfLines={2}>{versorgung.produkt}</Text>
-              {!!versorgung.hilfsmittelNr && <Text style={styles.himiNr}>HiMi-Nr. {versorgung.hilfsmittelNr}</Text>}
+              {/* Schon groß gesetzt — begrenzt mitwachsen, damit „Wie geht es
+                  weiter?“ bei größter Schrift nicht aus dem Blick rutscht. */}
+              <Text style={styles.produktTitel} maxFontSizeMultiplier={1.5}>{versorgung.produkt}</Text>
+              {!!versorgung.hilfsmittelNr && (
+                <Text style={styles.himiNr} maxFontSizeMultiplier={1.5} accessibilityLabel={`Hilfsmittelnummer ${versorgung.hilfsmittelNr}`}>
+                  HiMi-Nr. {versorgung.hilfsmittelNr}
+                </Text>
+              )}
             </GlassCard>
           </Animated.View>
 
@@ -101,8 +111,8 @@ export default function VersorgungsdetailScreen() {
           {weiter && (
             <Animated.View entering={einblenden(120)}>
               <GlassCard padding={20} radius={D.radius.lg} style={weiter.aktion ? styles.aktionCard : undefined}>
-                <Text style={styles.sectionTitel}>Wie geht es weiter?</Text>
-                <Text style={styles.weiterTitel} accessibilityRole="header">{weiter.titel}</Text>
+                <Text style={styles.sectionTitel} accessibilityRole="header">Wie geht es weiter?</Text>
+                <Text style={styles.weiterTitel} maxFontSizeMultiplier={1.6}>{weiter.titel}</Text>
                 <Text style={styles.weiterText}>{weiter.text}</Text>
                 {weiter.aktion === 'termin' && (
                   <Button
@@ -138,7 +148,7 @@ export default function VersorgungsdetailScreen() {
           {!isAbgeschlossen && (
             <Animated.View entering={einblenden(160)}>
               <GlassCard padding={22} radius={D.radius.lg}>
-                <Text style={styles.sectionTitel}>Fortschritt</Text>
+                <Text style={styles.sectionTitel} accessibilityRole="header">Fortschritt</Text>
                 <View style={styles.steps}>
                   {schritte.map((step, i) => (
                     <ProcessStep
@@ -157,7 +167,7 @@ export default function VersorgungsdetailScreen() {
           {/* Details */}
           <Animated.View entering={einblenden(260)}>
             <GlassCard padding={20} radius={D.radius.lg}>
-              <Text style={styles.sectionTitel}>Details</Text>
+              <Text style={styles.sectionTitel} accessibilityRole="header">Details</Text>
               {!!versorgung.arzt && <InfoZeile label="Arzt" wert={versorgung.arzt} />}
               {!versorgung.selbstzahler && <InfoZeile label="Krankenkasse" wert={versorgung.krankenkasse} />}
               {versorgung.termin && <InfoZeile label="Liefertermin" wert={terminText(versorgung.termin)} />}
@@ -185,7 +195,7 @@ export default function VersorgungsdetailScreen() {
           {/* Verlauf */}
           <Animated.View entering={einblenden(320)}>
             <GlassCard padding={20} radius={D.radius.lg}>
-              <Text style={styles.sectionTitel}>Verlauf</Text>
+              <Text style={styles.sectionTitel} accessibilityRole="header">Verlauf</Text>
               <StatusTimeline events={versorgung.timeline} />
             </GlassCard>
           </Animated.View>
@@ -242,6 +252,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
     paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: 'rgba(63,139,255,0.08)', gap: 12,
   },
+  infoZeileGross: { flexDirection: 'column', alignItems: 'flex-start', gap: 2 },
+  infoWertGross: { textAlign: 'left', flex: 0 },
   infoLabel: { fontSize: D.font.sm, color: D.color.inkSecondary, flex: 1 },
   infoWert: { fontSize: D.font.sm, fontWeight: D.font.semibold, color: D.color.ink, flex: 1.5, textAlign: 'right' },
   hilfeSection: { alignItems: 'center', paddingVertical: 8, gap: 12 },

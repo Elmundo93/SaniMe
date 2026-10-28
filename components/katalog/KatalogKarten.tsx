@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, useWindowDimensions } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { Feather } from '@expo/vector-icons';
 import { D, typography } from '@sanime/design-system';
@@ -20,6 +20,9 @@ interface KatalogKarteProps {
 // Gemeinsame Zeilenkarte für Kategorien, Bedarfe und Krankheitsbilder — ganze
 // Karte tappbar, minHeight statt fester Höhe (Dynamic Type), Ziel 48 pt.
 export function KatalogKarte({ icon, titel, untertitel, onPress, index = 0, accessibilityHint }: KatalogKarteProps) {
+  // Große Schrift: Symbol weglassen, damit der Text die ganze Breite hat —
+  // sonst brechen Produktnamen mitten im Wort um.
+  const grosseSchrift = useWindowDimensions().fontScale >= 1.35;
   return (
     <Animated.View entering={einblenden(60 + Math.min(index, 8) * 40)}>
       <TouchableOpacity
@@ -31,13 +34,15 @@ export function KatalogKarte({ icon, titel, untertitel, onPress, index = 0, acce
       >
         <GlassCard padding={14} radius={D.radius.lg}>
           <View style={styles.zeile}>
-            {icon && (
+            {icon && !grosseSchrift && (
               <View style={styles.icon}>
                 <Feather name={icon as FeatherName} size={22} color={D.color.accent} />
               </View>
             )}
             <View style={styles.text}>
-              <Text style={styles.titel}>{titel}</Text>
+              <Text style={styles.titel} maxFontSizeMultiplier={2}>
+                {titel}
+              </Text>
               {!!untertitel && <Text style={styles.untertitel}>{untertitel}</Text>}
             </View>
             <Feather name="chevron-right" size={20} color={D.color.inkTertiary} />
@@ -51,7 +56,7 @@ export function KatalogKarte({ icon, titel, untertitel, onPress, index = 0, acce
 export function AbschnittTitel({ titel, aktion }: { titel: string; aktion?: { label: string; onPress: () => void } }) {
   return (
     <View style={styles.abschnitt}>
-      <Text style={styles.abschnittTitel} accessibilityRole="header">
+      <Text style={styles.abschnittTitel} accessibilityRole="header" maxFontSizeMultiplier={1.6}>
         {titel}
       </Text>
       {aktion && (

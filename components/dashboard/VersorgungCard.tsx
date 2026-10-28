@@ -1,10 +1,11 @@
 import React from 'react';
-import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
+import { TouchableOpacity, View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { GlassCard } from '../ui/GlassCard';
 import { StatusBadge } from '../ui/StatusBadge';
 import { berechneFortschritt, naechsterSchritt } from '../../lib/versorgungProgress';
 import { D } from '@sanime/design-system';
+import { StatusLabel } from '../../constants/labels';
 import type { Versorgung } from '../../types';
 
 interface VersorgungCardProps {
@@ -24,21 +25,35 @@ function formatDatum(isoString: string): string {
 export function VersorgungCard({ versorgung, onPress }: VersorgungCardProps) {
   const fortschritt = berechneFortschritt(versorgung.status);
   const naechster = naechsterSchritt(versorgung.status);
+  // Große Schrift (Dynamic Type): Status unter den Namen, sonst bleibt für
+  // den Produktnamen neben dem Etikett kaum ein Buchstabe Platz.
+  const grosseSchrift = useWindowDimensions().fontScale >= 1.35;
+  const aufgaben = versorgung.offeneAktionen.length;
+  // VoiceOver liest die Karte als ein Element — also alles Wesentliche hinein.
+  const a11yLabel = [
+    versorgung.produkt,
+    `Status: ${StatusLabel[versorgung.status]}`,
+    naechster ? `Nächster Schritt: ${naechster}` : null,
+    aufgaben > 0 ? `${aufgaben} ${aufgaben === 1 ? 'offene Aufgabe' : 'offene Aufgaben'}` : null,
+  ]
+    .filter(Boolean)
+    .join('. ');
 
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel={`${versorgung.produkt} — Details anzeigen`}>
+    <TouchableOpacity onPress={onPress} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel={a11yLabel} accessibilityHint="Zeigt die Details">
       <GlassCard style={styles.card} padding={18} radius={D.radius.lg}>
         <View style={styles.topRow}>
           <View style={styles.iconWrap}>
             <Feather name="package" size={18} color={D.color.accent} />
           </View>
           <View style={styles.headerText}>
-            <Text style={styles.produkt} numberOfLines={1}>{versorgung.produkt}</Text>
+            <Text style={styles.produkt} numberOfLines={grosseSchrift ? 3 : 1}>{versorgung.produkt}</Text>
             {versorgung.hersteller && (
-              <Text style={styles.hersteller} numberOfLines={1}>{versorgung.hersteller}</Text>
+              <Text style={styles.hersteller} numberOfLines={grosseSchrift ? 2 : 1}>{versorgung.hersteller}</Text>
             )}
+            {grosseSchrift && <StatusBadge status={versorgung.status} klein />}
           </View>
-          <StatusBadge status={versorgung.status} klein />
+          {!grosseSchrift && <StatusBadge status={versorgung.status} klein />}
         </View>
 
         <View style={styles.progressTrack}>
@@ -100,6 +115,7 @@ const styles = StyleSheet.create({
   headerText: {
     flex: 1,
     gap: 2,
+    alignItems: 'flex-start',
   },
   produkt: {
     fontSize: D.font.md,
