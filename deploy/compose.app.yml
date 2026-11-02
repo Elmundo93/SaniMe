@@ -1,0 +1,24 @@
+# Ein Backend je Umgebung — dieselbe Datei für DEV und PROD:
+#   docker compose -p sanime-<umgebung> -f compose.app.yml --env-file /opt/sanime/env/<umgebung>.release …
+# Bequemer auf dem Server: /opt/sanime/deploy/server/app.sh <umgebung> <compose-befehl>
+# <umgebung>.release (UMGEBUNG, IMAGE_TAG) schreibt deploy/deploy.sh,
+# <umgebung>.env (Geheimnisse) schreibt server/umgebung-anlegen.sh.
+
+services:
+  backend:
+    image: sanime-backend:${IMAGE_TAG}
+    restart: unless-stopped
+    env_file: /opt/sanime/env/${UMGEBUNG}.env
+    environment:
+      TRUST_PROXY: '1'
+      NODE_OPTIONS: --max-old-space-size=320
+    networks:
+      sanime:
+        aliases:
+          - backend-${UMGEBUNG}
+    mem_limit: 448m
+
+networks:
+  sanime:
+    external: true
+    name: sanime

@@ -60,6 +60,12 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true, rawBody: true });
   app.useLogger(app.get(StructuredLoggerService));
   app.enableShutdownHooks();
+  // Hinter einem Reverse Proxy (Server: Caddy) wäre req.ip sonst die
+  // Proxy-Adresse — die Einwilligungen speichern aber die IP des Kunden.
+  // TRUST_PROXY = Anzahl vertrauter Proxy-Hops (Server: 1), lokal leer.
+  if (process.env.TRUST_PROXY) {
+    app.set('trust proxy', Number(process.env.TRUST_PROXY));
+  }
   configureApp(app);
   // Gebaute Admin-App unter /admin/ (siehe admin-app.ts) — nur hier, nicht in
   // configureApp: die e2e-Tests brauchen keinen Build.

@@ -1,0 +1,3 @@
+# Von deploy/deploy.sh infra nach /etc/cron.d/sanime-backup kopiert.
+SHELL=/bin/bash
+30 3 * * * root /opt/sanime/deploy/server/backup.sh >> /var/log/sanime-backup.log 2>&1

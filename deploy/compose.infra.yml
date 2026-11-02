@@ -1,0 +1,65 @@
+# Gemeinsame Infrastruktur für DEV und PROD auf einem Server:
+# Caddy (HTTPS, einziger Dienst mit offenen Ports), Postgres (je Umgebung
+# eigene Datenbank + Rolle), Garage (S3-kompatibel, je Umgebung eigener
+# Bucket + Schlüssel). MinIO veröffentlicht seit Ende 2025 keine Images mehr.
+#
+# Start/Update: deploy/deploy.sh infra
+name: sanime-infra
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      DOMAIN_PROD: ${DOMAIN_PROD}
+      DOMAIN_DEV: ${DOMAIN_DEV}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [sanime]
+    mem_limit: 128m
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [sanime]
+    mem_limit: 384m
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  garage:
+    image: dxflrs/garage:v2.4.1
+    restart: unless-stopped
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN}
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    networks: [sanime]
+    mem_limit: 128m
+
+networks:
+  sanime:
+    name: sanime
+
+volumes:
+  caddy-data:
+  caddy-config:
+  postgres-data:
+  garage-meta:
+  garage-data:
