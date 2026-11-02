@@ -37,7 +37,7 @@ import { useOtpVerification } from '../../hooks/useOtpVerification';
 import { useRezeptVersorgung } from '../../hooks/useRezeptVersorgung';
 import { useAuthStore } from '../../store/authStore';
 import { createPaymentIntent, devZahlungSimulieren } from '../../lib/api/onboarding';
-import { resolveStripePublishableKey, stillePruefungAktiv } from '../../lib/api/config';
+import { resolveAppleMerchantId, resolveStripePublishableKey, stillePruefungAktiv } from '../../lib/api/config';
 import { einwilligungStillePruefung } from '../../lib/stillePruefung';
 import { zeigeDispatchFehler } from '../../lib/onboardingNav';
 import { pushNachBestellungAnbieten } from '../../lib/push';
@@ -291,6 +291,9 @@ export default function CheckoutScreen() {
       const { error: initError } = await initPaymentSheet({
         merchantDisplayName: 'SaniMe',
         paymentIntentClientSecret: clientSecret,
+        // Apple Pay zeigt den Betrag des PaymentIntents — keine eigenen
+        // Posten, damit Anzeige und belasteter Server-Betrag nie abweichen.
+        ...(resolveAppleMerchantId() ? { applePay: { merchantCountryCode: 'DE' } } : {}),
       });
       if (initError) {
         setZahlungLäuft(false);

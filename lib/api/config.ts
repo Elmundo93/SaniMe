@@ -46,6 +46,12 @@ export function resolveStripePublishableKey(): string | null {
   return fromExtra ?? fromEnv ?? null;
 }
 
+// Apple-Pay-Merchant-ID (app.config.ts). Ohne sie bietet die PaymentSheet
+// nur Karte an — kein Fehler.
+export function resolveAppleMerchantId(): string | undefined {
+  return (Constants.expoConfig?.extra?.appleMerchantId as string | undefined) || undefined;
+}
+
 // Stille Telefonbestätigung über das Mobilfunknetz (Telekom Verify). Muss zum
 // Backend passen (TELEKOM_VERIFY_STILLE_PRUEFUNG): nur dann zeigt die Kasse
 // die in Deutschland vorgeschriebene Einwilligung.

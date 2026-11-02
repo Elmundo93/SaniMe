@@ -6,7 +6,7 @@ import { StripeProvider } from '@stripe/stripe-react-native';
 import { useAuthStore } from '../store/authStore';
 import { schluesselbundNachNeuinstallationLeeren } from '../lib/secureStorage';
 import { useOnboardingStore } from '../store/onboardingStore';
-import { resolveStripePublishableKey } from '../lib/api/config';
+import { resolveAppleMerchantId, resolveStripePublishableKey } from '../lib/api/config';
 import { pushTokenAuffrischen, usePushNavigation } from '../lib/push';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -45,7 +45,7 @@ export default function RootLayout() {
   if (authIsLoading || onboardingIsLoading) return null;
 
   return (
-    <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY}>
+    <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY} merchantIdentifier={resolveAppleMerchantId()}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
           <Stack.Screen name="index" />
