@@ -41,7 +41,12 @@
           "enableGooglePay": false
         }
       ],
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "SaniMe nutzt Face ID, um deine gespeicherten Gesundheitsdaten zu schützen."
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -62,8 +67,11 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiUrl": "http://localhost:3000/api/v1",
-      "stillePruefung": false
-    }
+      "stillePruefung": false,
+      "eas": {
+        "projectId": "eb8524f0-c19e-47e1-822d-6ed01227859f"
+      }
+    },
+    "owner": "elmundo93"
   }
 }

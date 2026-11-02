@@ -6,7 +6,7 @@ export function resolveApiBaseUrl(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_URL;
   const url = fromExtra ?? fromEnv;
   if (!url) {
-    throw new Error('API-Basis-URL fehlt — app.json "extra.apiUrl" oder EXPO_PUBLIC_API_URL setzen');
+    throw new Error('API-Basis-URL fehlt — app.config.ts setzt extra.apiUrl je SANIME_UMGEBUNG (oder EXPO_PUBLIC_API_URL setzen)');
   }
   return mitDevHost(url);
 }
