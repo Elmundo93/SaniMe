@@ -6,16 +6,19 @@
 # passiert vor dem Deploy (npm run backend:typecheck), im Container würde sie
 # nur Startzeit und Speicher kosten.
 
+# Nur Lockfile + package.json aller vorhandenen Workspaces (npm ci prüft sie
+# gegen das Lockfile; welche es gibt, hängt vom Commit ab). Die deps-Schicht
+# bleibt gecacht, solange sich diese Dateien nicht ändern.
+FROM node:24-bookworm-slim AS manifeste
+WORKDIR /src
+COPY . .
+RUN mkdir /out && cp package.json package-lock.json /out/ \
+ && for m in apps/*/package.json packages/@sanime/*/package.json; do \
+      mkdir -p "/out/$(dirname "$m")" && cp "$m" "/out/$m"; done
+
 FROM node:24-bookworm-slim AS deps
 WORKDIR /app
-# Nur die package.json-Dateien — die Abhängigkeitsschicht bleibt gecacht,
-# solange sich Lockfile und Manifeste nicht ändern.
-COPY package.json package-lock.json ./
-COPY apps/backend/package.json apps/backend/
-COPY apps/admin/package.json apps/admin/
-COPY apps/video/package.json apps/video/
-COPY packages/@sanime/domain/package.json packages/@sanime/domain/
-COPY packages/@sanime/design-system/package.json packages/@sanime/design-system/
+COPY --from=manifeste /out ./
 # Nur Backend und Admin, nicht die Expo-App an der Wurzel. --legacy-peer-deps:
 # design-system nennt react-native als Peer — das braucht hier niemand.
 RUN npm ci --workspace @sanime/backend --workspace @sanime/admin \
